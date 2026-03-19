@@ -30,9 +30,13 @@ This command implements the complete cli-anything methodology to build a product
 - If `<software-path-or-repo>` is a GitHub URL, clone it to a local working directory
 - Verify the local path exists and contains source code
 - Derive the software name from the directory name (e.g., `/home/user/gimp` -> `gimp`)
+- **Binary detection:** If the path points to a compiled application bundle (e.g., `.app`, `.exe`, `.AppImage`) rather than a source code directory, abort with a clear error message: *"CLI-Anything requires source code, not a compiled application. Please provide the path to the software's source code repository or a GitHub URL."*
 
-### Phase 1: Codebase Analysis
-- Analyzes the local source code
+### Phase 1: Codebase Analysis (Token-Aware)
+- Analyzes the local source code **with token budget management** (see HARNESS.md Phase 1 guidelines)
+- **Before reading files:** scan the directory tree and build a file manifest with sizes. Prioritize small, high-signal files (README, CLI entry points, API headers, core modules). Skip files > 100KB individually.
+- **Exclude from analysis:** binary files (`.o`, `.so`, `.dylib`, `.exe`, `.dll`, `.wasm`, `.pyc`, `.class`), build artifacts (`build/`, `dist/`, `__pycache__/`, `node_modules/`, `.git/`, `target/`), generated files, media assets, and test fixtures.
+- **Token budget:** Keep total file content read under ~50,000 tokens. If the codebase is large, read only the most architecturally relevant files (entry points, public API surfaces, CLI modules, plugin interfaces). Summarize directories instead of reading every file.
 - Analyzes the backend engine and data model
 - Maps GUI actions to API calls
 - Identifies existing CLI tools
