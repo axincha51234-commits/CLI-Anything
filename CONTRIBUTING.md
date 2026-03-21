@@ -25,21 +25,7 @@ Feature contributions improve existing harnesses or the plugin framework. Exampl
 - Follow existing code patterns and conventions in the target harness.
 - Include tests for any new functionality.
 
-This also includes orchestration work in `codex-head/`, such as task planning,
-adapter policy, routing, state storage, and GitHub control-plane workflows.
-
-### C) Codex Head Orchestrator
-
-`codex-head/` is a separate Node.js 22+ TypeScript app that acts as the
-head-brain orchestrator for Claude Code, Codex CLI, Gemini CLI, and
-Antigravity workers.
-
-- Keep `TaskSpec`, `WorkerResult`, routing rules, workflow payloads, and docs in sync.
-- Preserve the rule that workers are spawned only through typed adapter contracts.
-- Update tests when changing queue states, retry behavior, artifact lineage, or GitHub callbacks.
-- If you touch `.github/workflows/codex-head*.yml`, make sure the emitted JSON still matches the current `WorkerResult` contract.
-
-### D) Bug Fixes
+### C) Bug Fixes
 
 Bug fixes resolve incorrect behavior in existing harnesses or the plugin.
 
@@ -94,21 +80,11 @@ pip install -e .
 python3 -m pytest cli_anything/<software>/tests/ -v
 ```
 
-`codex-head/` is a separate Node.js + TypeScript control-plane app:
-
-```bash
-cd codex-head
-npm install
-npm test
-npm run health
-```
-
 ### Requirements
 
 - Python 3.10+
 - Click 8.0+
 - pytest 7.0+
-- Node.js 22+ for `codex-head/`
 
 ## Code Style
 
@@ -140,24 +116,13 @@ python3 -m pytest cli_anything/<software>/tests/test_full_e2e.py -v
 python3 -m pytest cli_anything/<software>/tests/ -v
 ```
 
-For `codex-head` changes:
-
-```bash
-cd codex-head
-npm install
-npm test
-npm run smoke
-npm run health
-```
-
 ## Submitting a Pull Request
 
 1. Fork the repository and create a feature branch from `main`.
 2. Make your changes following the guidelines above.
 3. Ensure all tests pass for any harnesses you modified.
-4. If you modified `codex-head/`, run `npm test` there and update related docs/workflows in the same PR when contracts or commands changed.
-5. Push your branch and open a Pull Request against `main`.
-6. Fill out the PR template completely.
+4. Push your branch and open a Pull Request against `main`.
+5. Fill out the PR template completely.
 
 ## Questions?
 

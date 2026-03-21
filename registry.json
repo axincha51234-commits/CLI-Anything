@@ -240,6 +240,20 @@
       "category": "communication",
       "contributor": "zhangxilong-43",
       "contributor_url": "https://github.com/zhangxilong-43"
+    },
+    {
+      "name": "novita",
+      "display_name": "Novita",
+      "version": "1.0.0",
+      "description": "Access AI models via Novita's OpenAI-compatible API (DeepSeek, GLM, MiniMax)",
+      "requires": "NOVITA_API_KEY",
+      "homepage": "https://novita.ai",
+      "install_cmd": "pip install git+https://github.com/HKUDS/CLI-Anything.git#subdirectory=novita/agent-harness",
+      "entry_point": "cli-anything-novita",
+      "skill_md": "novita/agent-harness/cli_anything/novita/skills/SKILL.md",
+      "category": "ai",
+      "contributor": "Alex-wuhu",
+      "contributor_url": "https://github.com/Alex-wuhu"
     }
   ]
 }

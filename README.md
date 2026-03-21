@@ -1,7 +1,7 @@
 <h1 align="center"><img src="assets/icon.png" alt="" width="64" style="vertical-align: middle;">&nbsp; CLI-Anything: Making ALL Software Agent-Native</h1>
 
 <p align="center">
-  <strong>Today's Software Serves HumansðŸ‘¨â€ðŸ’». Tomorrow's Users will be AgentsðŸ¤–.<br>
+  <strong>Today's Software Serves Humans👨‍💻. Tomorrow's Users will be Agents🤖.<br>
 CLI-Anything: Bridging the Gap Between AI Agents and the World's Software</strong><br>
 </p>
 
@@ -14,8 +14,8 @@ CLI-Anything: Bridging the Gap Between AI Agents and the World's Software</stron
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/python-â‰¥3.10-blue?logo=python&logoColor=white" alt="Python">
-  <img src="https://img.shields.io/badge/click-â‰¥8.0-green" alt="Click">
+  <img src="https://img.shields.io/badge/python-≥3.10-blue?logo=python&logoColor=white" alt="Python">
+  <img src="https://img.shields.io/badge/click-≥8.0-green" alt="Click">
   <img src="https://img.shields.io/badge/pytest-100%25_pass-brightgreen" alt="Pytest">
   <img src="https://img.shields.io/badge/coverage-unit_%2B_e2e-orange" alt="Coverage">
   <img src="https://img.shields.io/badge/output-JSON_%2B_Human-blueviolet" alt="Output">
@@ -23,9 +23,9 @@ CLI-Anything: Bridging the Gap Between AI Agents and the World's Software</stron
 <a href="https://github.com/HKUDS/.github/blob/main/profile/README.md"><img src="https://img.shields.io/badge/WeChat-Group-C5EAB4?style=flat&logo=wechat&logoColor=white" alt="WeChat"></a>
 </p>
 
-**One Command Line**: Make any software agent-ready for OpenClaw, nanobot, Cursor, Claude Code, etc.&nbsp;&nbsp;[**ä¸­æ–‡æ–‡æ¡£**](README_CN.md) | [**æ—¥æœ¬èªžãƒ‰ã‚­ãƒ¥ãƒ¡ãƒ³ãƒˆ**](README_JA.md)
+**One Command Line**: Make any software agent-ready for OpenClaw, nanobot, Cursor, Claude Code, etc.&nbsp;&nbsp;[**中文文档**](README_CN.md) | [**日本語ドキュメント**](README_JA.md)
 
-**ðŸŒ [CLI-Hub](https://hkuds.github.io/CLI-Anything/hub/)**: Browse & install all community CLIs in one place. Have a CLI for a new software? [Open a PR](https://github.com/HKUDS/CLI-Anything/blob/main/CONTRIBUTING.md) â€” the hub updates instantly.
+**🌐 [CLI-Hub](https://hkuds.github.io/CLI-Anything/hub/)**: Browse & install all community CLIs in one place. Have a CLI for a new software? [Open a PR](https://github.com/HKUDS/CLI-Anything/blob/main/CONTRIBUTING.md) — the hub updates instantly.
 
 <p align="center">
   <img src="assets/cli-typing.gif" alt="CLI-Anything typing demo" width="800">
@@ -37,48 +37,48 @@ CLI-Anything: Bridging the Gap Between AI Agents and the World's Software</stron
 
 ---
 
-## ðŸ“° News
+## 📰 News
 
 > Thanks to all invaluable efforts from the community! More updates continuously on the way everyday..
 
-- **2026-03-17** ðŸŒ Launched the **[CLI-Hub](https://hkuds.github.io/CLI-Anything/hub/)** â€” a central registry where you can browse, search, and install any CLI with a single `pip` command. Contributors can add new CLIs or update existing ones by simply opening a PR with a `registry.json` entry. The hub updates automatically on merge.
+- **2026-03-17** 🌐 Launched the **[CLI-Hub](https://hkuds.github.io/CLI-Anything/hub/)** — a central registry where you can browse, search, and install any CLI with a single `pip` command. Contributors can add new CLIs or update existing ones by simply opening a PR with a `registry.json` entry. The hub updates automatically on merge.
 
-- **2026-03-16** ðŸ¤– Added **SKILL.md generation** (Phase 6.5) â€” every generated CLI now ships with an AI-discoverable skill definition inside the Python package. ReplSkin auto-detects the skill file after `pip install`, and the REPL banner displays the absolute path for agents. Includes `skill_generator.py`, Jinja2 template, `package_data` in all setup.py files, and 51 new tests.
+- **2026-03-16** 🤖 Added **SKILL.md generation** (Phase 6.5) — every generated CLI now ships with an AI-discoverable skill definition inside the Python package. ReplSkin auto-detects the skill file after `pip install`, and the REPL banner displays the absolute path for agents. Includes `skill_generator.py`, Jinja2 template, `package_data` in all setup.py files, and 51 new tests.
 
-- **2026-03-15** ðŸ¾ Support for **OpenClaw** from the community! Merged Windows `cygpath` guard to ensure CLI-Anything works reliably in Windows bash environments. Community contributions continue to strengthen cross-platform support.
+- **2026-03-15** 🐾 Support for **OpenClaw** from the community! Merged Windows `cygpath` guard to ensure CLI-Anything works reliably in Windows bash environments. Community contributions continue to strengthen cross-platform support.
 
-- **2026-03-14** ðŸ”’ Fixed a GIMP Script-Fu path injection vulnerability and added **Japanese README** translation. OpenCode version requirements documented alongside several Windows compatibility improvements.
+- **2026-03-14** 🔒 Fixed a GIMP Script-Fu path injection vulnerability and added **Japanese README** translation. OpenCode version requirements documented alongside several Windows compatibility improvements.
 
 <details>
 <summary>Earlier news</summary>
 
-- **2026-03-13** ðŸ”Œ **Qodercli** plugin officially merged as a community contribution with dedicated setup scripts. Codex skill gained a Windows install script, and placeholder URLs were cleaned up across the project.
+- **2026-03-13** 🔌 **Qodercli** plugin officially merged as a community contribution with dedicated setup scripts. Codex skill gained a Windows install script, and placeholder URLs were cleaned up across the project.
 
-- **2026-03-12** ðŸ“¦ **Codex skill** integration landed, bringing CLI-Anything to yet another AI coding platform. Qodercli support was also introduced, and documentation was updated with limitations and experimental labels.
+- **2026-03-12** 📦 **Codex skill** integration landed, bringing CLI-Anything to yet another AI coding platform. Qodercli support was also introduced, and documentation was updated with limitations and experimental labels.
 
-- **2026-03-11** ðŸ“ž **Zoom** video conferencing harness added as the 11th supported application. Multiple community fixes shipped for Shotcut auto-save, LibreOffice Windows/macOS backend, and OpenCode support.
+- **2026-03-11** 📞 **Zoom** video conferencing harness added as the 11th supported application. Multiple community fixes shipped for Shotcut auto-save, LibreOffice Windows/macOS backend, and OpenCode support.
 
 </details>
 
 ---
 
-## ðŸ¤” Why CLI?
+## 🤔 Why CLI?
 
 CLI is the universal interface for both humans and AI agents:
 
-â€¢ **Structured & Composable** - Text commands match LLM format and chain for complex workflows
+• **Structured & Composable** - Text commands match LLM format and chain for complex workflows
 
-â€¢ **Lightweight & Universal** - Minimal overhead, works across all systems without dependencies
+• **Lightweight & Universal** - Minimal overhead, works across all systems without dependencies
 
-â€¢ **Self-Describing** - --help flags provide automatic documentation agents can discover
+• **Self-Describing** - --help flags provide automatic documentation agents can discover
 
-â€¢ **Proven Success** - Claude Code runs thousands of real workflows through CLI daily
+• **Proven Success** - Claude Code runs thousands of real workflows through CLI daily
 
-â€¢ **Agent-First Design** - Structured JSON output eliminates parsing complexity
+• **Agent-First Design** - Structured JSON output eliminates parsing complexity
 
-â€¢ **Deterministic & Reliable** - Consistent results enable predictable agent behavior
+• **Deterministic & Reliable** - Consistent results enable predictable agent behavior
 
-## ðŸš€ Quick Start
+## 🚀 Quick Start
 
 ### Prerequisites
 
@@ -89,7 +89,7 @@ CLI is the universal interface for both humans and AI agents:
 ### Pick Your Platform
 
 <details open>
-<summary><h4 id="-claude-code">âš¡ Claude Code</h4></summary>
+<summary><h4 id="-claude-code">⚡ Claude Code</h4></summary>
 
 **Step 1: Add the Marketplace**
 
@@ -123,27 +123,27 @@ That's it. The plugin is now available in your Claude Code session.
 ```
 
 This runs the full pipeline:
-1. ðŸ” **Analyze** â€” Scans source code, maps GUI actions to APIs
-2. ðŸ“ **Design** â€” Architects command groups, state model, output formats
-3. ðŸ”¨ **Implement** â€” Builds Click CLI with REPL, JSON output, undo/redo
-4. ðŸ“‹ **Plan Tests** â€” Creates TEST.md with unit + E2E test plans
-5. ðŸ§ª **Write Tests** â€” Implements comprehensive test suite
-6. ðŸ“ **Document** â€” Updates TEST.md with results
-7. ðŸ“¦ **Publish** â€” Creates `setup.py`, installs to PATH
+1. 🔍 **Analyze** — Scans source code, maps GUI actions to APIs
+2. 📐 **Design** — Architects command groups, state model, output formats
+3. 🔨 **Implement** — Builds Click CLI with REPL, JSON output, undo/redo
+4. 📋 **Plan Tests** — Creates TEST.md with unit + E2E test plans
+5. 🧪 **Write Tests** — Implements comprehensive test suite
+6. 📝 **Document** — Updates TEST.md with results
+7. 📦 **Publish** — Creates `setup.py`, installs to PATH
 
 **Step 4 (Optional): Refine and Improve the CLI**
 
 After the initial build, you can iteratively refine the CLI to expand coverage and add missing capabilities:
 
 ```bash
-# Broad refinement â€” agent analyzes gaps across all capabilities
+# Broad refinement — agent analyzes gaps across all capabilities
 /cli-anything:refine ./gimp
 
-# Focused refinement â€” target a specific functionality area
+# Focused refinement — target a specific functionality area
 /cli-anything:refine ./gimp "I want more CLIs on image batch processing and filters"
 ```
 
-The refine command performs gap analysis between the software's full capabilities and current CLI coverage, then implements new commands, tests, and documentation for the identified gaps. You can run it multiple times to steadily expand coverage â€” each run is incremental and non-destructive.
+The refine command performs gap analysis between the software's full capabilities and current CLI coverage, then implements new commands, tests, and documentation for the identified gaps. You can run it multiple times to steadily expand coverage — each run is incremental and non-destructive.
 
 <details>
 <summary><strong>Alternative: Manual Installation</strong></summary>
@@ -166,7 +166,7 @@ cp -r CLI-Anything/cli-anything-plugin ~/.claude/plugins/cli-anything
 </details>
 
 <details>
-<summary><h4 id="-opencode">âš¡ OpenCode (Experimental)</h4></summary>
+<summary><h4 id="-opencode">⚡ OpenCode (Experimental)</h4></summary>
 
 **Step 1: Install the Commands**
 
@@ -206,17 +206,17 @@ The command runs as a subtask and follows the same 7-phase methodology as Claude
 **Step 3 (Optional): Refine and Improve the CLI**
 
 ```bash
-# Broad refinement â€” agent analyzes gaps across all capabilities
+# Broad refinement — agent analyzes gaps across all capabilities
 /cli-anything-refine ./gimp
 
-# Focused refinement â€” target a specific functionality area
+# Focused refinement — target a specific functionality area
 /cli-anything-refine ./gimp "batch processing and filters"
 ```
 
 </details>
 
 <details>
-<summary><h4 id="-goose">âš¡ Goose (Desktop / CLI) <sup><code>Experimental</code></sup> <sup><code>Community</code></sup></h4></summary>
+<summary><h4 id="-goose">⚡ Goose (Desktop / CLI) <sup><code>Experimental</code></sup> <sup><code>Community</code></sup></h4></summary>
 
 **Step 1: Install Goose**
 
@@ -240,7 +240,7 @@ Once Goose is configured, start a session and use the same CLI-Anything commands
 
 <details>
 
-<summary><h4 id="-qodercli">âš¡ Qodercli <sup><code>Community</code></sup></h4></summary>
+<summary><h4 id="-qodercli">⚡ Qodercli <sup><code>Community</code></sup></h4></summary>
 
 **Step 1: Register the Plugin**
 
@@ -262,7 +262,7 @@ This registers the cli-anything plugin in `~/.qoder.json`. Start a new Qodercli 
 
 <details>
 
-<summary><h4 id="-openclaw">âš¡ OpenClaw <sup><code>Community</code></sup></h4></summary>
+<summary><h4 id="-openclaw">⚡ OpenClaw <sup><code>Community</code></sup></h4></summary>
 
 **Step 1: Install the Skill**
 
@@ -289,7 +289,7 @@ The skill follows the same 7-phase methodology as Claude Code and OpenCode.
 
 <details>
 
-<summary><h4 id="-codex">âš¡ Codex <sup><code>Experimental</code></sup> <sup><code>Community</code></sup></h4></summary>
+<summary><h4 id="-codex">⚡ Codex <sup><code>Experimental</code></sup> <sup><code>Community</code></sup></h4></summary>
 
 **Step 1: Install the Skill**
 
@@ -328,15 +328,14 @@ OpenCode commands, while keeping the generated Python harness format unchanged.
 </details>
 
 <details>
-<summary><h4 id="-more-platforms-coming-soon">ðŸ”® More Platforms (Coming Soon)</h4></summary>
+<summary><h4 id="-more-platforms-coming-soon">🔮 More Platforms (Coming Soon)</h4></summary>
 
 CLI-Anything is designed to be platform-agnostic. Support for more AI coding agents is planned:
 
-- **Codex** â€” available via the bundled skill in `codex-skill/`
-- **Codex Head** â€” experimental Node.js orchestrator in `codex-head/` that keeps Codex App as planner and reviewer over Claude Code, Codex CLI, Gemini CLI, and Antigravity workers
-- **Cursor** â€” coming soon
-- **Windsurf** â€” coming soon
-- **Your favorite tool** â€” contributions welcome! See the `opencode-commands/` directory for a reference implementation.
+- **Codex** — available via the bundled skill in `codex-skill/`
+- **Cursor** — coming soon
+- **Windsurf** — coming soon
+- **Your favorite tool** — contributions welcome! See the `opencode-commands/` directory for a reference implementation.
 
 </details>
 
@@ -357,35 +356,35 @@ cli-anything-gimp --json layer add -n "Background" --type solid --color "#1a1a2e
 cli-anything-gimp
 ```
 
-Each installed CLI ships with a [`SKILL.md`](#-skillmd-generation) inside the Python package (`cli_anything/<software>/skills/SKILL.md`). The REPL banner automatically displays the absolute path to this file so AI agents know exactly where to read the skill definition. No extra configuration needed â€” `pip install` makes the skill discoverable.
+Each installed CLI ships with a [`SKILL.md`](#-skillmd-generation) inside the Python package (`cli_anything/<software>/skills/SKILL.md`). The REPL banner automatically displays the absolute path to this file so AI agents know exactly where to read the skill definition. No extra configuration needed — `pip install` makes the skill discoverable.
 
 ---
 
-## ðŸ’¡ CLI-Anything's Vision: Building Agent-Native Software
+## 💡 CLI-Anything's Vision: Building Agent-Native Software
 
-â€¢ ðŸŒ **Universal Access** - Every software becomes instantly agent-controllable through structured CLI.
+• 🌐 **Universal Access** - Every software becomes instantly agent-controllable through structured CLI.
 
-â€¢ ðŸ”— **Seamless Integration** - Agents control any application without APIs, GUI, rebuilding or complex wrappers.
+• 🔗 **Seamless Integration** - Agents control any application without APIs, GUI, rebuilding or complex wrappers.
 
-â€¢ ðŸš€ **Future-Ready Ecosystem** - Transform human-designed software into agent-native tools with one command.
+• 🚀 **Future-Ready Ecosystem** - Transform human-designed software into agent-native tools with one command.
 
 ---
 
-## ðŸ”§ When to Use CLI-Anything
+## 🔧 When to Use CLI-Anything
 
 | Category | How to be Agent-native | Notable Examples |
 |----------|----------------------|----------|
-| **ðŸ“‚ GitHub Repositories** | Transform any open-source project into agent-controllable tools through automatic CLI generation | VSCodium, WordPress, Calibre, Zotero, Joplin, Logseq, Penpot, Super Productivity |
-| **ðŸ¤– AI/ML Platforms** | Automate model training, inference pipelines, and hyperparameter tuning through structured commands | Stable Diffusion WebUI, ComfyUI, Ollama, InvokeAI, Text-generation-webui, Open WebUI, Fooocus, Kohya_ss, AnythingLLM, SillyTavern |
-| **ðŸ“Š Data & Analytics** | Enable programmatic data processing, visualization, and statistical analysis workflows | JupyterLab, Apache Superset, Metabase, Redash, DBeaver, KNIME, Orange, OpenSearch Dashboards, Lightdash |
-| **ðŸ’» Development Tools** | Streamline code editing, building, testing, and deployment processes via command interfaces | Jenkins, Gitea, Hoppscotch, Portainer, pgAdmin, SonarQube, ArgoCD, OpenLens, Insomnia, Beekeeper Studio |
-| **ðŸŽ¨ Creative & Media** | Control content creation, editing, and rendering workflows programmatically | Blender, GIMP, OBS Studio, Audacity, Krita, Kdenlive, Shotcut, Inkscape, Darktable, LMMS, Ardour |
-| **ðŸ”¬ Scientific Computing** | Automate research workflows, simulations, and complex calculations | ImageJ, FreeCAD, QGIS, ParaView, Gephi, LibreCAD, Stellarium, KiCad, JASP, Jamovi |
-| **ðŸ¢ Enterprise & Office** | Convert business applications and productivity tools into agent-accessible systems | NextCloud, GitLab, Grafana, Mattermost, LibreOffice, AppFlowy, NocoDB, Odoo (Community), Plane, ERPNext |
-| **ðŸ“ž Communication & Collaboration** | Automate meeting scheduling, participant management, recording retrieval, and reporting through structured CLI | Zoom, Jitsi Meet, BigBlueButton, Mattermost |
-| **ðŸ“ Diagramming & Visualization** | Create and manipulate diagrams, flowcharts, architecture diagrams, and visual documentation programmatically | Draw.io (diagrams.net), Mermaid, PlantUML, Excalidraw, yEd |
-| **ðŸŒ Network & Infrastructure** | Manage network services, DNS, ad-blocking, and infrastructure through structured CLI commands | AdGuardHome |
-| **âœ¨ AI Content Generation** | Generate professional deliverables (slides, docs, diagrams, websites, research reports) through AI-powered cloud APIs | [AnyGen](https://www.anygen.io), Gamma, Beautiful.ai, Tome |
+| **📂 GitHub Repositories** | Transform any open-source project into agent-controllable tools through automatic CLI generation | VSCodium, WordPress, Calibre, Zotero, Joplin, Logseq, Penpot, Super Productivity |
+| **🤖 AI/ML Platforms** | Automate model training, inference pipelines, and hyperparameter tuning through structured commands | Stable Diffusion WebUI, ComfyUI, Ollama, InvokeAI, Text-generation-webui, Open WebUI, Fooocus, Kohya_ss, AnythingLLM, SillyTavern |
+| **📊 Data & Analytics** | Enable programmatic data processing, visualization, and statistical analysis workflows | JupyterLab, Apache Superset, Metabase, Redash, DBeaver, KNIME, Orange, OpenSearch Dashboards, Lightdash |
+| **💻 Development Tools** | Streamline code editing, building, testing, and deployment processes via command interfaces | Jenkins, Gitea, Hoppscotch, Portainer, pgAdmin, SonarQube, ArgoCD, OpenLens, Insomnia, Beekeeper Studio |
+| **🎨 Creative & Media** | Control content creation, editing, and rendering workflows programmatically | Blender, GIMP, OBS Studio, Audacity, Krita, Kdenlive, Shotcut, Inkscape, Darktable, LMMS, Ardour |
+| **🔬 Scientific Computing** | Automate research workflows, simulations, and complex calculations | ImageJ, FreeCAD, QGIS, ParaView, Gephi, LibreCAD, Stellarium, KiCad, JASP, Jamovi |
+| **🏢 Enterprise & Office** | Convert business applications and productivity tools into agent-accessible systems | NextCloud, GitLab, Grafana, Mattermost, LibreOffice, AppFlowy, NocoDB, Odoo (Community), Plane, ERPNext |
+| **📞 Communication & Collaboration** | Automate meeting scheduling, participant management, recording retrieval, and reporting through structured CLI | Zoom, Jitsi Meet, BigBlueButton, Mattermost |
+| **📐 Diagramming & Visualization** | Create and manipulate diagrams, flowcharts, architecture diagrams, and visual documentation programmatically | Draw.io (diagrams.net), Mermaid, PlantUML, Excalidraw, yEd |
+| **🌐 Network & Infrastructure** | Manage network services, DNS, ad-blocking, and infrastructure through structured CLI commands | AdGuardHome |
+| **✨ AI Content Generation** | Generate professional deliverables (slides, docs, diagrams, websites, research reports) through AI-powered cloud APIs | [AnyGen](https://www.anygen.io), Gamma, Beautiful.ai, Tome |
 
 ---
 
@@ -398,37 +397,37 @@ AI agents are great at reasoning but terrible at using real professional softwar
 
 | **Current Pain Point** | **CLI-Anything's Fix** |
 |----------|----------------------|
-| ðŸ¤– "AI can't use real tools" | Direct integration with actual software backends (Blender, LibreOffice, FFmpeg) â€” full professional capabilities, zero compromises |
-| ðŸ’¸ "UI automation breaks constantly" | No screenshots, no clicking, no RPA fragility. Pure command-line reliability with structured interfaces |
-| ðŸ“Š "Agents need structured data" | Built-in JSON output for seamless agent consumption + human-readable formats for debugging |
-| ðŸ”§ "Custom integrations are expensive" | One Claude plugin auto-generates CLIs for ANY codebase through proven 7-phase pipeline |
-| âš¡ "Prototype vs Production gap" | 1,839+ tests with real software validation. Battle-tested across 16 major applications |
+| 🤖 "AI can't use real tools" | Direct integration with actual software backends (Blender, LibreOffice, FFmpeg) — full professional capabilities, zero compromises |
+| 💸 "UI automation breaks constantly" | No screenshots, no clicking, no RPA fragility. Pure command-line reliability with structured interfaces |
+| 📊 "Agents need structured data" | Built-in JSON output for seamless agent consumption + human-readable formats for debugging |
+| 🔧 "Custom integrations are expensive" | One Claude plugin auto-generates CLIs for ANY codebase through proven 7-phase pipeline |
+| ⚡ "Prototype vs Production gap" | 1,839+ tests with real software validation. Battle-tested across 16 major applications |
 
 ---
 
-## ðŸŽ¯ What Can You Do with CLI-Anything?
+## 🎯 What Can You Do with CLI-Anything?
 
 <table>
 <tr>
 <td width="33%">
 
-### ðŸ› ï¸ Let Agents Take Your Workflows
+### 🛠️ Let Agents Take Your Workflows
 
-Professional or everyday â€” just throw the codebase at `/cli-anything`. GIMP, Blender, Shotcut for creative work. LibreOffice, OBS Studio for daily tasks. Don't have the source? Find an open-source alternative and throw *that* in. You'll instantly get a full CLI your agents can use.
-
-</td>
-<td width="33%">
-
-### ðŸ”— Unify Scattered APIs into One CLI
-
-Tired of juggling fragmented web service APIs? Feed the docs or SDK manuscripts to `/cli-anything` and your agents get a **powerful, stateful CLI** that wraps those individual endpoints into coherent command groups. One tool instead of dozens of raw API calls â€” stronger capabilities while saving tokens.
+Professional or everyday — just throw the codebase at `/cli-anything`. GIMP, Blender, Shotcut for creative work. LibreOffice, OBS Studio for daily tasks. Don't have the source? Find an open-source alternative and throw *that* in. You'll instantly get a full CLI your agents can use.
 
 </td>
 <td width="33%">
 
-### ðŸš€ Replace or Supercharge GUI Agents
+### 🔗 Unify Scattered APIs into One CLI
 
-CLI-Anything can flat-out **replace GUI-based agent approaches** â€” no more screenshots, no brittle pixel-clicking. But here's the fun part: once you `/cli-anything` a GUI software, you can **synthesize agent tasks, evaluators, and benchmarks** entirely via code and terminal â€” fully automated, iteratively refinable, massively more efficient.
+Tired of juggling fragmented web service APIs? Feed the docs or SDK manuscripts to `/cli-anything` and your agents get a **powerful, stateful CLI** that wraps those individual endpoints into coherent command groups. One tool instead of dozens of raw API calls — stronger capabilities while saving tokens.
+
+</td>
+<td width="33%">
+
+### 🚀 Replace or Supercharge GUI Agents
+
+CLI-Anything can flat-out **replace GUI-based agent approaches** — no more screenshots, no brittle pixel-clicking. But here's the fun part: once you `/cli-anything` a GUI software, you can **synthesize agent tasks, evaluators, and benchmarks** entirely via code and terminal — fully automated, iteratively refinable, massively more efficient.
 
 </td>
 </tr>
@@ -436,19 +435,19 @@ CLI-Anything can flat-out **replace GUI-based agent approaches** â€” no mor
 
 ---
 
-## âœ¨ âš™ï¸ How CLI-Anything Works
+## ✨ ⚙️ How CLI-Anything Works
 
 <table>
 <tr>
 <td width="50%">
 
-### ðŸ—ï¸ Fully Automated 7-Phase Pipeline
-From codebase analysis to PyPI publishing â€” the plugin handles architecture design, implementation, test planning, test writing, and documentation completely automatically.
+### 🏗️ Fully Automated 7-Phase Pipeline
+From codebase analysis to PyPI publishing — the plugin handles architecture design, implementation, test planning, test writing, and documentation completely automatically.
 
 </td>
 <td width="50%">
 
-### ðŸŽ¯ Authentic Software Integration
+### 🎯 Authentic Software Integration
 Direct calls to real applications for actual rendering. LibreOffice generates PDFs, Blender renders 3D scenes, Audacity processes audio via sox. **Zero compromises**, **Zero toy implementations**.
 
 </td>
@@ -456,13 +455,13 @@ Direct calls to real applications for actual rendering. LibreOffice generates PD
 <tr>
 <td width="50%">
 
-### ðŸ” Smart Session Management
+### 🔁 Smart Session Management
 Persistent project state with undo/redo capabilities, plus unified REPL interface (ReplSkin) that delivers consistent interactive experience across all CLIs.
 
 </td>
 <td width="50%">
 
-### ðŸ“¦ Zero-Config Installation
+### 📦 Zero-Config Installation
 Simple pip install -e . puts cli-anything-<software> directly on PATH. Agents discover tools via standard which commands. No setup, no wrappers.
 
 </td>
@@ -470,20 +469,20 @@ Simple pip install -e . puts cli-anything-<software> directly on PATH. Agents di
 <tr>
 <td width="50%">
 
-### ðŸ§ª Production-Grade Testing
+### 🧪 Production-Grade Testing
 Multi-layered validation: unit tests with synthetic data, end-to-end tests with real files and software, plus CLI subprocess verification of installed commands.
 
 </td>
 <td width="50%">
 
-### ðŸ Clean Package Architecture
-All CLIs organized under cli_anything.* namespace â€” conflict-free, pip-installable, with consistent naming: cli-anything-gimp, cli-anything-blender, etc.
+### 🐍 Clean Package Architecture
+All CLIs organized under cli_anything.* namespace — conflict-free, pip-installable, with consistent naming: cli-anything-gimp, cli-anything-blender, etc.
 
 </td>
 </tr>
 </table>
 
-### ðŸ¤– SKILL.md Generation
+### 🤖 SKILL.md Generation
 
 Each generated CLI includes a `SKILL.md` file inside the Python package at `cli_anything/<software>/skills/SKILL.md`. This self-contained skill definition enables AI agents to discover and use the CLI through Claude Code's skill system or other agent frameworks.
 
@@ -493,23 +492,23 @@ Each generated CLI includes a `SKILL.md` file inside the Python package at `cli_
 - **Usage examples** for common workflows
 - **Agent-specific guidance** for JSON output, error handling, and programmatic use
 
-SKILL.md files are auto-generated during Phase 6.5 of the pipeline using `skill_generator.py`, which extracts metadata directly from the CLI's Click decorators, setup.py, and README. Because the file lives inside the package, it is installed alongside the CLI via `pip install` and auto-detected by the REPL banner â€” agents can read the absolute path displayed at startup.
+SKILL.md files are auto-generated during Phase 6.5 of the pipeline using `skill_generator.py`, which extracts metadata directly from the CLI's Click decorators, setup.py, and README. Because the file lives inside the package, it is installed alongside the CLI via `pip install` and auto-detected by the REPL banner — agents can read the absolute path displayed at startup.
 
 ---
 
-## ðŸŽ¬ Demonstrations
+## 🎬 Demonstrations
 
-### ðŸŽ¯ General-Purpose
-CLI-Anything works on any software with a codebase â€” no domain restrictions or architectural limitations.
+### 🎯 General-Purpose
+CLI-Anything works on any software with a codebase — no domain restrictions or architectural limitations.
 
-### ðŸ­ Professional-Grade Testing
+### 🏭 Professional-Grade Testing
 Tested across 16 diverse, complex applications spanning creative, productivity, communication, diagramming, AI image generation, AI content generation, network ad blocking, and local LLM inference domains previously inaccessible to AI agents.
 
-### ðŸŽ¨ Diverse Domain Coverage
+### 🎨 Diverse Domain Coverage
 From creative workflows (image editing, 3D modeling, vector graphics) to production tools (audio, office, live streaming, video editing).
 
-### âœ… Full CLI Generation
-Each application received complete, production-ready CLI interfaces â€” not demos, but comprehensive tool access preserving full capabilities.
+### ✅ Full CLI Generation
+Each application received complete, production-ready CLI interfaces — not demos, but comprehensive tool access preserving full capabilities.
 
 <table>
 <tr>
@@ -520,245 +519,244 @@ Each application received complete, production-ready CLI interfaces â€” not
 <th align="center">Tests</th>
 </tr>
 <tr>
-<td align="center"><strong>ðŸŽ¨ GIMP</strong></td>
+<td align="center"><strong>🎨 GIMP</strong></td>
 <td>Image Editing</td>
 <td><code>cli-anything-gimp</code></td>
 <td>Pillow + GEGL/Script-Fu</td>
-<td align="center">âœ… 107</td>
+<td align="center">✅ 107</td>
 </tr>
 <tr>
-<td align="center"><strong>ðŸ§Š Blender</strong></td>
+<td align="center"><strong>🧊 Blender</strong></td>
 <td>3D Modeling & Rendering</td>
 <td><code>cli-anything-blender</code></td>
 <td>bpy (Python scripting)</td>
-<td align="center">âœ… 208</td>
+<td align="center">✅ 208</td>
 </tr>
 <tr>
-<td align="center"><strong>âœï¸ Inkscape</strong></td>
+<td align="center"><strong>✏️ Inkscape</strong></td>
 <td>Vector Graphics</td>
 <td><code>cli-anything-inkscape</code></td>
 <td>Direct SVG/XML manipulation</td>
-<td align="center">âœ… 202</td>
+<td align="center">✅ 202</td>
 </tr>
 <tr>
-<td align="center"><strong>ðŸŽµ Audacity</strong></td>
+<td align="center"><strong>🎵 Audacity</strong></td>
 <td>Audio Production</td>
 <td><code>cli-anything-audacity</code></td>
 <td>Python wave + sox</td>
-<td align="center">âœ… 161</td>
+<td align="center">✅ 161</td>
 </tr>
 <tr>
-<td align="center"><strong>ðŸ“„ LibreOffice</strong></td>
+<td align="center"><strong>📄 LibreOffice</strong></td>
 <td>Office Suite (Writer, Calc, Impress)</td>
 <td><code>cli-anything-libreoffice</code></td>
 <td>ODF generation + headless LO</td>
-<td align="center">âœ… 158</td>
+<td align="center">✅ 158</td>
 </tr>
 <tr>
-<td align="center"><strong>ðŸ“ <a href="mubu/agent-harness/">Mubu</a></strong></td>
+<td align="center"><strong>📝 <a href="mubu/agent-harness/">Mubu</a></strong></td>
 <td>Knowledge Management &amp; Outlining</td>
 <td><code>cli-anything-mubu</code></td>
 <td>Local Mubu data + sync logs</td>
-<td align="center">âœ… 96</td>
+<td align="center">✅ 96</td>
 </tr>
 <tr>
-<td align="center"><strong>ðŸ“¹ OBS Studio</strong></td>
+<td align="center"><strong>📹 OBS Studio</strong></td>
 <td>Live Streaming & Recording</td>
 <td><code>cli-anything-obs-studio</code></td>
 <td>JSON scene + obs-websocket</td>
-<td align="center">âœ… 153</td>
+<td align="center">✅ 153</td>
 </tr>
 <tr>
-<td align="center"><strong>ðŸŽžï¸ Kdenlive</strong></td>
+<td align="center"><strong>🎞️ Kdenlive</strong></td>
 <td>Video Editing</td>
 <td><code>cli-anything-kdenlive</code></td>
 <td>MLT XML + melt renderer</td>
-<td align="center">âœ… 155</td>
+<td align="center">✅ 155</td>
 </tr>
 <tr>
-<td align="center"><strong>ðŸŽ¬ Shotcut</strong></td>
+<td align="center"><strong>🎬 Shotcut</strong></td>
 <td>Video Editing</td>
 <td><code>cli-anything-shotcut</code></td>
 <td>Direct MLT XML + melt</td>
-<td align="center">âœ… 154</td>
+<td align="center">✅ 154</td>
 </tr>
 <tr>
-<td align="center"><strong>ðŸ“ž Zoom</strong></td>
+<td align="center"><strong>📞 Zoom</strong></td>
 <td>Video Conferencing</td>
 <td><code>cli-anything-zoom</code></td>
 <td>Zoom REST API (OAuth2)</td>
-<td align="center">âœ… 22</td>
+<td align="center">✅ 22</td>
 </tr>
 <tr>
-<td align="center"><strong>ðŸ“ Draw.io</strong></td>
+<td align="center"><strong>📐 Draw.io</strong></td>
 <td>Diagramming</td>
 <td><code>cli-anything-drawio</code></td>
 <td>mxGraph XML + draw.io CLI</td>
-<td align="center">âœ… 138</td>
+<td align="center">✅ 138</td>
 </tr>
 <tr>
-<td align="center"><strong>ðŸ§œ Mermaid Live Editor</strong></td>
+<td align="center"><strong>🧜 Mermaid Live Editor</strong></td>
 <td>Diagramming</td>
 <td><code>cli-anything-mermaid</code></td>
 <td>Mermaid state + mermaid.ink renderer</td>
-<td align="center">âœ… 10</td>
+<td align="center">✅ 10</td>
 </tr>
 <tr>
-<td align="center"><strong>âœ¨ AnyGen</strong></td>
+<td align="center"><strong>✨ AnyGen</strong></td>
 <td>AI Content Generation</td>
 <td><code>cli-anything-anygen</code></td>
 <td>AnyGen REST API (anygen.io)</td>
-<td align="center">âœ… 50</td>
+<td align="center">✅ 50</td>
 </tr>
 <tr>
-<td align="center"><strong>ðŸ§  NotebookLM</strong></td>
+<td align="center"><strong>🧠 NotebookLM</strong></td>
 <td>AI Research Assistant</td>
 <td><code>cli-anything-notebooklm</code></td>
 <td>NotebookLM CLI wrapper (experimental)</td>
-<td align="center">âœ… 21</td>
+<td align="center">✅ 21</td>
 </tr>
 <tr>
-<td align="center"><strong>ðŸ–¼ï¸ ComfyUI</strong></td>
+<td align="center"><strong>🖼️ ComfyUI</strong></td>
 <td>AI Image Generation</td>
 <td><code>cli-anything-comfyui</code></td>
 <td>ComfyUI REST API</td>
-<td align="center">âœ… 70</td>
+<td align="center">✅ 70</td>
 </tr>
 <tr>
-<td align="center"><strong>ðŸ›¡ï¸ AdGuard Home</strong></td>
+<td align="center"><strong>🛡️ AdGuard Home</strong></td>
 <td>Network-wide Ad Blocking</td>
 <td><code>cli-anything-adguardhome</code></td>
 <td>AdGuard Home REST API</td>
-<td align="center">âœ… 36</td>
+<td align="center">✅ 36</td>
 </tr>
 <tr>
-<td align="center"><strong>ðŸ¦™ Ollama</strong></td>
+<td align="center"><strong>🦙 Ollama</strong></td>
 <td>Local LLM Inference</td>
 <td><code>cli-anything-ollama</code></td>
 <td>Ollama REST API</td>
-<td align="center">âœ… 98</td>
+<td align="center">✅ 98</td>
 </tr>
 <tr>
 <td align="center" colspan="4"><strong>Total</strong></td>
-<td align="center"><strong>âœ… 1,839</strong></td>
+<td align="center"><strong>✅ 1,839</strong></td>
 </tr>
 </table>
 
-> **100% pass rate** across all 1,839 tests â€” 1,355 unit tests + 484 end-to-end tests.
+> **100% pass rate** across all 1,839 tests — 1,355 unit tests + 484 end-to-end tests.
 
 ---
 
-## ðŸ“Š Test Results
+## 📊 Test Results
 
 Each CLI harness undergoes rigorous multi-layered testing to ensure production reliability:
 
 | Layer | What it tests | Example |
 |-------|---------------|---------|
-| **Unit tests** | Every core function in isolation with synthetic data | `test_core.py` â€” project creation, layer ops, filter params |
+| **Unit tests** | Every core function in isolation with synthetic data | `test_core.py` — project creation, layer ops, filter params |
 | **E2E tests (native)** | Project file generation pipeline | Valid ODF ZIP structure, correct MLT XML, SVG well-formedness |
-| **E2E tests (true backend)** | Real software invocation + output verification | LibreOffice â†’ PDF with `%PDF-` magic bytes, Blender â†’ rendered PNG |
-| **CLI subprocess tests** | Installed command via `subprocess.run` | `cli-anything-gimp --json project new` â†’ valid JSON output |
+| **E2E tests (true backend)** | Real software invocation + output verification | LibreOffice → PDF with `%PDF-` magic bytes, Blender → rendered PNG |
+| **CLI subprocess tests** | Installed command via `subprocess.run` | `cli-anything-gimp --json project new` → valid JSON output |
 
 ```
 ================================ Test Summary ================================
-gimp          107 passed  âœ…   (64 unit + 43 e2e)
-blender       208 passed  âœ…   (150 unit + 58 e2e)
-inkscape      202 passed  âœ…   (148 unit + 54 e2e)
-audacity      161 passed  âœ…   (107 unit + 54 e2e)
-libreoffice   158 passed  âœ…   (89 unit + 69 e2e)
-mubu           96 passed  âœ…   (85 unit + 11 e2e)
-obs-studio    153 passed  âœ…   (116 unit + 37 e2e)
-kdenlive      155 passed  âœ…   (111 unit + 44 e2e)
-shotcut       154 passed  âœ…   (110 unit + 44 e2e)
-zoom           22 passed  âœ…   (22 unit + 0 e2e)
-drawio        138 passed  âœ…   (116 unit + 22 e2e)
-mermaid        10 passed  âœ…   (5 unit + 5 e2e)
-anygen         50 passed  âœ…   (40 unit + 10 e2e)
-notebooklm     21 passed  âœ…   (21 unit + 0 e2e)
-comfyui        70 passed  âœ…   (60 unit + 10 e2e)
-adguardhome    36 passed  âœ…   (24 unit + 12 e2e)
-ollama         98 passed  âœ…   (87 unit + 11 e2e)
-â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-TOTAL        1,839 passed  âœ…   100% pass rate
+gimp          107 passed  ✅   (64 unit + 43 e2e)
+blender       208 passed  ✅   (150 unit + 58 e2e)
+inkscape      202 passed  ✅   (148 unit + 54 e2e)
+audacity      161 passed  ✅   (107 unit + 54 e2e)
+libreoffice   158 passed  ✅   (89 unit + 69 e2e)
+mubu           96 passed  ✅   (85 unit + 11 e2e)
+obs-studio    153 passed  ✅   (116 unit + 37 e2e)
+kdenlive      155 passed  ✅   (111 unit + 44 e2e)
+shotcut       154 passed  ✅   (110 unit + 44 e2e)
+zoom           22 passed  ✅   (22 unit + 0 e2e)
+drawio        138 passed  ✅   (116 unit + 22 e2e)
+mermaid        10 passed  ✅   (5 unit + 5 e2e)
+anygen         50 passed  ✅   (40 unit + 10 e2e)
+notebooklm     21 passed  ✅   (21 unit + 0 e2e)
+comfyui        70 passed  ✅   (60 unit + 10 e2e)
+adguardhome    36 passed  ✅   (24 unit + 12 e2e)
+ollama         98 passed  ✅   (87 unit + 11 e2e)
+──────────────────────────────────────────────────────────────────────────────
+TOTAL        1,839 passed  ✅   100% pass rate
 ```
 
 ---
 
-## ðŸ—ï¸ CLI-Anything's Architecture
+## 🏗️ CLI-Anything's Architecture
 
 <p align="center">
   <img src="assets/architecture.png" alt="CLI-Anything Architecture" width="750">
 </p>
 
-### ðŸŽ¯ Core Design Principles
+### 🎯 Core Design Principles
 
-1. **Authentic Software Integration** â€” The CLI generates valid project files (ODF, MLT XML, SVG) and delegates to real applications for rendering. **We build structured interfaces TO software, not replacements**.
+1. **Authentic Software Integration** — The CLI generates valid project files (ODF, MLT XML, SVG) and delegates to real applications for rendering. **We build structured interfaces TO software, not replacements**.
 
-2. **Flexible Interaction Models** â€” Every CLI operates in dual modes: stateful REPL for interactive agent sessions + subcommand interface for scripting/pipelines. **Run bare command â†’ enter REPL mode**.
+2. **Flexible Interaction Models** — Every CLI operates in dual modes: stateful REPL for interactive agent sessions + subcommand interface for scripting/pipelines. **Run bare command → enter REPL mode**.
 
-3. **Consistent User Experience** â€” All generated CLIs share unified REPL interface (repl_skin.py) with branded banners, styled prompts, command history, progress indicators, and standardized formatting.
+3. **Consistent User Experience** — All generated CLIs share unified REPL interface (repl_skin.py) with branded banners, styled prompts, command history, progress indicators, and standardized formatting.
 
-4. **Agent-Native Design** â€” Built-in --json flag on every command delivers structured data for machine consumption, while human-readable tables serve interactive use. **Agents discover capabilities via standard --help and which commands**.
+4. **Agent-Native Design** — Built-in --json flag on every command delivers structured data for machine consumption, while human-readable tables serve interactive use. **Agents discover capabilities via standard --help and which commands**.
 
-5. **Zero Compromise Dependencies** â€” Real software is a hard requirement â€” no fallbacks, no graceful degradation. **Tests fail (not skip) when backends are missing, ensuring authentic functionality**.
+5. **Zero Compromise Dependencies** — Real software is a hard requirement — no fallbacks, no graceful degradation. **Tests fail (not skip) when backends are missing, ensuring authentic functionality**.
 
 ---
 
-## ðŸ“‚ Project Structure
+## 📂 Project Structure
 
 ```
 cli-anything/
-â”œâ”€â”€ ðŸ“„ README.md                          # You are here
-â”œâ”€â”€ ðŸ“ assets/                            # Images and media
-â”‚   â”œâ”€â”€ icon.png                          # Project icon
-â”‚   â””â”€â”€ teaser.png                        # Teaser figure
-â”‚
-â”œâ”€â”€ ðŸ”Œ cli-anything-plugin/               # The Claude Code plugin
-â”‚   â”œâ”€â”€ HARNESS.md                        # Methodology SOP (source of truth)
-â”‚   â”œâ”€â”€ README.md                         # Plugin documentation
-â”‚   â”œâ”€â”€ QUICKSTART.md                     # 5-minute getting started
-â”‚   â”œâ”€â”€ PUBLISHING.md                     # Distribution guide
-â”‚   â”œâ”€â”€ repl_skin.py                      # Unified REPL interface
-â”‚   â”œâ”€â”€ commands/                         # Plugin command definitions
-â”‚   â”‚   â”œâ”€â”€ cli-anything.md               # Main build command
-â”‚   â”‚   â”œâ”€â”€ refine.md                     # Expand existing harness coverage
-â”‚   â”‚   â”œâ”€â”€ test.md                       # Test runner
-â”‚   â”‚   â””â”€â”€ validate.md                   # Standards validation
-â”‚   â””â”€â”€ scripts/
-â”‚       â””â”€â”€ setup-cli-anything.sh         # Setup script
-â”‚
-â”œâ”€â”€ ðŸ¤– codex-skill/                      # Codex skill entry point
-â”œâ”€â”€ ðŸ§  codex-head/                       # Node.js/TypeScript orchestrator with SQLite queue + artifact store
-â”œâ”€â”€ ðŸŽ¨ gimp/agent-harness/               # GIMP CLI (107 tests)
-â”œâ”€â”€ ðŸ§Š blender/agent-harness/            # Blender CLI (208 tests)
-â”œâ”€â”€ âœï¸ inkscape/agent-harness/            # Inkscape CLI (202 tests)
-â”œâ”€â”€ ðŸŽµ audacity/agent-harness/           # Audacity CLI (161 tests)
-â”œâ”€â”€ ðŸ“„ libreoffice/agent-harness/        # LibreOffice CLI (158 tests)
-â”œâ”€â”€ ðŸ“ mubu/agent-harness/               # Mubu CLI (96 tests)
-â”œâ”€â”€ ðŸ“¹ obs-studio/agent-harness/         # OBS Studio CLI (153 tests)
-â”œâ”€â”€ ðŸŽžï¸ kdenlive/agent-harness/           # Kdenlive CLI (155 tests)
-â”œâ”€â”€ ðŸŽ¬ shotcut/agent-harness/            # Shotcut CLI (154 tests)
-â”œâ”€â”€ ðŸ“ž zoom/agent-harness/               # Zoom CLI (22 tests)
-â”œâ”€â”€ ðŸ“ drawio/agent-harness/             # Draw.io CLI (138 tests)
-â”œâ”€â”€ ðŸ§œ mermaid/agent-harness/            # Mermaid Live Editor CLI (10 tests)
-â”œâ”€â”€ âœ¨ anygen/agent-harness/             # AnyGen CLI (50 tests)
-â”œâ”€â”€ ðŸ–¼ï¸ comfyui/agent-harness/            # ComfyUI CLI (70 tests)
-â”œâ”€â”€ ðŸ§  notebooklm/agent-harness/         # NotebookLM CLI (experimental, 21 tests)
-â”œâ”€â”€ ðŸ–¼ï¸ comfyui/agent-harness/            # ComfyUI CLI (70 tests)
-â”œâ”€â”€ ðŸ›¡ï¸ adguardhome/agent-harness/       # AdGuard Home CLI (36 tests)
-â””â”€â”€ ðŸ¦™ ollama/agent-harness/             # Ollama CLI (98 tests)
+├── 📄 README.md                          # You are here
+├── 📁 assets/                            # Images and media
+│   ├── icon.png                          # Project icon
+│   └── teaser.png                        # Teaser figure
+│
+├── 🔌 cli-anything-plugin/               # The Claude Code plugin
+│   ├── HARNESS.md                        # Methodology SOP (source of truth)
+│   ├── README.md                         # Plugin documentation
+│   ├── QUICKSTART.md                     # 5-minute getting started
+│   ├── PUBLISHING.md                     # Distribution guide
+│   ├── repl_skin.py                      # Unified REPL interface
+│   ├── commands/                         # Plugin command definitions
+│   │   ├── cli-anything.md               # Main build command
+│   │   ├── refine.md                     # Expand existing harness coverage
+│   │   ├── test.md                       # Test runner
+│   │   └── validate.md                   # Standards validation
+│   └── scripts/
+│       └── setup-cli-anything.sh         # Setup script
+│
+├── 🤖 codex-skill/                      # Codex skill entry point
+├── 🎨 gimp/agent-harness/               # GIMP CLI (107 tests)
+├── 🧊 blender/agent-harness/            # Blender CLI (208 tests)
+├── ✏️ inkscape/agent-harness/            # Inkscape CLI (202 tests)
+├── 🎵 audacity/agent-harness/           # Audacity CLI (161 tests)
+├── 📄 libreoffice/agent-harness/        # LibreOffice CLI (158 tests)
+├── 📝 mubu/agent-harness/               # Mubu CLI (96 tests)
+├── 📹 obs-studio/agent-harness/         # OBS Studio CLI (153 tests)
+├── 🎞️ kdenlive/agent-harness/           # Kdenlive CLI (155 tests)
+├── 🎬 shotcut/agent-harness/            # Shotcut CLI (154 tests)
+├── 📞 zoom/agent-harness/               # Zoom CLI (22 tests)
+├── 📐 drawio/agent-harness/             # Draw.io CLI (138 tests)
+├── 🧜 mermaid/agent-harness/            # Mermaid Live Editor CLI (10 tests)
+├── ✨ anygen/agent-harness/             # AnyGen CLI (50 tests)
+├── 🖼️ comfyui/agent-harness/            # ComfyUI CLI (70 tests)
+├── 🧠 notebooklm/agent-harness/         # NotebookLM CLI (experimental, 21 tests)
+├── 🖼️ comfyui/agent-harness/            # ComfyUI CLI (70 tests)
+├── 🛡️ adguardhome/agent-harness/       # AdGuard Home CLI (36 tests)
+└── 🦙 ollama/agent-harness/             # Ollama CLI (98 tests)
 ```
 
 Each `agent-harness/` contains an installable Python package under `cli_anything.<software>/` with Click CLI, core modules, utils (including `repl_skin.py` and backend wrapper), and comprehensive tests.
 
 ---
 
-## ðŸŽ¯ Plugin Commands
+## 🎯 Plugin Commands
 
 | Command | Description |
 |---------|-------------|
-| `/cli-anything <software-path-or-repo>` | Build complete CLI harness â€” all 7 phases |
-| `/cli-anything:refine <software-path> [focus]` | Refine an existing harness â€” expand coverage with gap analysis |
+| `/cli-anything <software-path-or-repo>` | Build complete CLI harness — all 7 phases |
+| `/cli-anything:refine <software-path> [focus]` | Refine an existing harness — expand coverage with gap analysis |
 | `/cli-anything:test <software-path-or-repo>` | Run tests and update TEST.md with results |
 | `/cli-anything:validate <software-path-or-repo>` | Validate against HARNESS.md standards |
 
@@ -771,7 +769,7 @@ Each `agent-harness/` contains an installable Python package under `cli_anything
 # Build from a GitHub repo
 /cli-anything https://github.com/blender/blender
 
-# Refine an existing harness â€” broad gap analysis
+# Refine an existing harness — broad gap analysis
 /cli-anything:refine /home/user/gimp
 
 # Refine with a specific focus area
@@ -786,25 +784,25 @@ Each `agent-harness/` contains an installable Python package under `cli_anything
 
 ---
 
-## ðŸŽ® Demo: Using a Generated CLI
+## 🎮 Demo: Using a Generated CLI
 
 Here's what an agent can do with `cli-anything-libreoffice`:
 
 ```bash
 # Create a new Writer document
 $ cli-anything-libreoffice document new -o report.json --type writer
-âœ“ Created Writer document: report.json
+✓ Created Writer document: report.json
 
 # Add content
 $ cli-anything-libreoffice --project report.json writer add-heading -t "Q1 Report" --level 1
-âœ“ Added heading: "Q1 Report"
+✓ Added heading: "Q1 Report"
 
 $ cli-anything-libreoffice --project report.json writer add-table --rows 4 --cols 3
-âœ“ Added 4Ã—3 table
+✓ Added 4×3 table
 
 # Export to real PDF via LibreOffice headless
 $ cli-anything-libreoffice --project report.json export render output.pdf -p pdf --overwrite
-âœ“ Exported: output.pdf (42,831 bytes) via libreoffice-headless
+✓ Exported: output.pdf (42,831 bytes) via libreoffice-headless
 
 # JSON mode for agent consumption
 $ cli-anything-libreoffice --json document info --project report.json
@@ -821,27 +819,27 @@ $ cli-anything-libreoffice --json document info --project report.json
 
 ```
 $ cli-anything-blender
-â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—
-â•‘       cli-anything-blender v1.0.0       â•‘
-â•‘     Blender CLI for AI Agents           â•‘
-â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+╔══════════════════════════════════════════╗
+║       cli-anything-blender v1.0.0       ║
+║     Blender CLI for AI Agents           ║
+╚══════════════════════════════════════════╝
 
 blender> scene new --name ProductShot
-âœ“ Created scene: ProductShot
+✓ Created scene: ProductShot
 
 blender[ProductShot]> object add-mesh --type cube --location 0 0 1
-âœ“ Added mesh: Cube at (0, 0, 1)
+✓ Added mesh: Cube at (0, 0, 1)
 
 blender[ProductShot]*> render execute --output render.png --engine CYCLES
-âœ“ Rendered: render.png (1920Ã—1080, 2.3 MB) via blender --background
+✓ Rendered: render.png (1920×1080, 2.3 MB) via blender --background
 
 blender[ProductShot]> exit
-Goodbye! ðŸ‘‹
+Goodbye! 👋
 ```
 
 ---
 
-## ðŸ“– The Standard Playbook: HARNESS.md
+## 📖 The Standard Playbook: HARNESS.md
 
 HARNESS.md is our definitive SOP for making any software agent-accessible via automated CLI generation.
 
@@ -853,17 +851,17 @@ The playbook distills key insights from successfully building all 16 diverse, pr
 
 | Lesson | Description |
 |--------|-------------|
-| **Use the real software** | The CLI MUST call the actual application for rendering. No Pillow replacements for GIMP, no custom renderers for Blender. Generate valid project files â†’ invoke the real backend. |
-| **The Rendering Gap** | GUI apps apply effects at render time. If your CLI manipulates project files but uses a naive export tool, effects get silently dropped. Solution: native renderer â†’ filter translation â†’ render script. |
-| **Filter Translation** | When mapping effects between formats (MLT â†’ ffmpeg), watch for duplicate filter merging, interleaved stream ordering, parameter space differences, and unmappable effects. |
-| **Timecode Precision** | Non-integer frame rates (29.97fps) cause cumulative rounding. Use `round()` not `int()`, integer arithmetic for display, and Â±1 frame tolerance in tests. |
+| **Use the real software** | The CLI MUST call the actual application for rendering. No Pillow replacements for GIMP, no custom renderers for Blender. Generate valid project files → invoke the real backend. |
+| **The Rendering Gap** | GUI apps apply effects at render time. If your CLI manipulates project files but uses a naive export tool, effects get silently dropped. Solution: native renderer → filter translation → render script. |
+| **Filter Translation** | When mapping effects between formats (MLT → ffmpeg), watch for duplicate filter merging, interleaved stream ordering, parameter space differences, and unmappable effects. |
+| **Timecode Precision** | Non-integer frame rates (29.97fps) cause cumulative rounding. Use `round()` not `int()`, integer arithmetic for display, and ±1 frame tolerance in tests. |
 | **Output Verification** | Never trust that export worked because it exited 0. Verify: magic bytes, ZIP/OOXML structure, pixel analysis, audio RMS levels, duration checks. |
 
 > See the full methodology: [`cli-anything-plugin/HARNESS.md`](cli-anything-plugin/HARNESS.md)
 
 ---
 
-## ðŸ“¦ Installation & Usage
+## 📦 Installation & Usage
 
 ### For Plugin Users (Claude Code)
 
@@ -905,21 +903,20 @@ CLI_ANYTHING_FORCE_INSTALLED=1 python3 -m pytest cli_anything/<software>/tests/ 
 
 ---
 
-## ðŸ¤ Contributing
+## 🤝 Contributing
 
 We welcome contributions! CLI-Anything is designed to be extensible:
 
-- **New software targets** â€” Use the plugin to generate a CLI for any software with a codebase, then submit your harness via [`cli-anything-plugin/PUBLISHING.md`](cli-anything-plugin/PUBLISHING.md).
-- **Methodology improvements** â€” PRs to `HARNESS.md` that encode new lessons learned
-- **Plugin enhancements** â€” New commands, phase improvements, better validation
-- **Codex Head improvements** â€” orchestration, worker adapters, queue state, artifact lineage, and GitHub workflow integration in `codex-head/`
-- **Test coverage** â€” More E2E scenarios, edge cases, workflow tests
+- **New software targets** — Use the plugin to generate a CLI for any software with a codebase, then submit your harness via [`cli-anything-plugin/PUBLISHING.md`](cli-anything-plugin/PUBLISHING.md).
+- **Methodology improvements** — PRs to `HARNESS.md` that encode new lessons learned
+- **Plugin enhancements** — New commands, phase improvements, better validation
+- **Test coverage** — More E2E scenarios, edge cases, workflow tests
 
 ### Limitations
 
-- **Requires strong foundation models** â€” CLI-Anything relies on frontier-class models (e.g., Claude Opus 4.6, Claude Sonnet 4.6, GPT-5.4) for reliable harness generation. Weaker or smaller models may produce incomplete or incorrect CLIs that require significant manual correction.
-- **Relies on available source code** â€” The 7-phase pipeline analyzes and generates from source code. When the target software only provides compiled binaries that require decompilation, harness quality and coverage will degrade substantially.
-- **May require iterative refinement** â€” A single `/cli-anything` run may not fully cover all capabilities. Running `/refine` one or more times is often needed to push the CLI's performance and coverage to production quality.
+- **Requires strong foundation models** — CLI-Anything relies on frontier-class models (e.g., Claude Opus 4.6, Claude Sonnet 4.6, GPT-5.4) for reliable harness generation. Weaker or smaller models may produce incomplete or incorrect CLIs that require significant manual correction.
+- **Relies on available source code** — The 7-phase pipeline analyzes and generates from source code. When the target software only provides compiled binaries that require decompilation, harness quality and coverage will degrade substantially.
+- **May require iterative refinement** — A single `/cli-anything` run may not fully cover all capabilities. Running `/refine` one or more times is often needed to push the CLI's performance and coverage to production quality.
 
 ### Roadmap
 
@@ -932,25 +929,24 @@ We welcome contributions! CLI-Anything is designed to be extensible:
 
 ---
 
-## ðŸ“– Documentation
+## 📖 Documentation
 
 | Document | Description |
 |----------|-------------|
-| [`cli-anything-plugin/HARNESS.md`](cli-anything-plugin/HARNESS.md) | The methodology SOP â€” single source of truth |
-| [`cli-anything-plugin/README.md`](cli-anything-plugin/README.md) | Plugin documentation â€” commands, options, phases |
+| [`cli-anything-plugin/HARNESS.md`](cli-anything-plugin/HARNESS.md) | The methodology SOP — single source of truth |
+| [`cli-anything-plugin/README.md`](cli-anything-plugin/README.md) | Plugin documentation — commands, options, phases |
 | [`cli-anything-plugin/QUICKSTART.md`](cli-anything-plugin/QUICKSTART.md) | 5-minute getting started guide |
 | [`cli-anything-plugin/PUBLISHING.md`](cli-anything-plugin/PUBLISHING.md) | Distribution and publishing guide |
-| [`codex-head/docs/README.md`](codex-head/docs/README.md) | Codex Head internal-beta docs pack - local-first orchestration, contracts, operations, adapters, and opt-in GitHub handoff |
 
 Each generated harness also includes:
-- `<SOFTWARE>.md` â€” Architecture SOP specific to that application
-- `tests/TEST.md` â€” Test plan and results documentation
+- `<SOFTWARE>.md` — Architecture SOP specific to that application
+- `tests/TEST.md` — Test plan and results documentation
 
 ---
 
-## â­ Star History
+## ⭐ Star History
 
-If CLI-Anything helps make your software Agent-native, give us a star! â­
+If CLI-Anything helps make your software Agent-native, give us a star! ⭐
 
 <div align="center">
   <a href="https://star-history.com/#HKUDS/CLI-Anything&Date">
@@ -964,15 +960,15 @@ If CLI-Anything helps make your software Agent-native, give us a star! â­
 
 ---
 
-## ðŸ“„ License
+## 📄 License
 
-MIT License â€” free to use, modify, and distribute.
+MIT License — free to use, modify, and distribute.
 
 ---
 
 <div align="center">
 
-**CLI-Anything** â€” *Make any software with a codebase Agent-native.*
+**CLI-Anything** — *Make any software with a codebase Agent-native.*
 
 <sub>A methodology for the age of AI agents | 16 professional software demos | 1,839 passing tests</sub>
 
@@ -983,6 +979,6 @@ MIT License â€” free to use, modify, and distribute.
 </div>
 
 <p align="center">
-  <em> Thanks for visiting âœ¨ CLI-Anything!</em><br><br>
+  <em> Thanks for visiting ✨ CLI-Anything!</em><br><br>
   <img src="https://visitor-badge.laobi.icu/badge?page_id=HKUDS.CLI-Anything&style=for-the-badge&color=00d4ff" alt="Views">
 </p>

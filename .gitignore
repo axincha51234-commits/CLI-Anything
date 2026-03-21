@@ -2,7 +2,6 @@
 # Only track:
 #   - cli-anything-plugin/**
 #   - codex-skill/**
-#   - codex-head/**
 #   - */agent-harness/**  (under each software dir)
 #   - .gitignore
 # Everything else is ignored.
@@ -15,6 +14,7 @@
 !.gitignore
 !/README.md
 !/CONTRIBUTING.md
+!/SECURITY.md
 !/assets/
 !/.claude-plugin/
 !/.github/
@@ -22,11 +22,8 @@
 # Step 3: Allow cli-anything-plugin, codex-skill, and skill_generation tests
 !/cli-anything-plugin/
 !/codex-skill/
-!/codex-head/
 !/skill_generation/
 !/openclaw-skill/
-!/codex-head/
-!/codex-head/**
 
 # Step 4: Allow each software dir (top level only)
 !/gimp/
@@ -43,6 +40,7 @@
 !/drawio/
 !/mermaid/
 !/adguardhome/
+!/novita/
 !/ollama/
 
 # Step 5: Inside each software dir, ignore everything (including dotfiles)
@@ -92,6 +90,7 @@
 !/drawio/agent-harness/
 !/mermaid/agent-harness/
 !/adguardhome/agent-harness/
+!/novita/agent-harness/
 !/ollama/agent-harness/
 
 # Step 7: Ignore build artifacts within allowed dirs
@@ -108,9 +107,6 @@
 **/*.xcf
 **/*.mlt
 **/*.drawio
-codex-head/runtime/
-codex-head/node_modules/
-codex-head/dist/
 
 # Step 8: But allow assets images
 !/assets/*.png

@@ -8,12 +8,11 @@ Fixes #<!-- issue number -->
 
 <!-- Check the one that applies: -->
 
-- [ ] **New Software CLI** - adds a CLI harness for a new application
-- [ ] **New Feature** - adds new functionality to an existing harness or the plugin
-- [ ] **Codex Head / Orchestration** - updates `codex-head/`, worker adapters, or GitHub control-plane flows
-- [ ] **Bug Fix** - fixes incorrect behavior
-- [ ] **Documentation** - updates docs only
-- [ ] **Other** - please describe:
+- [ ] **New Software CLI** — adds a CLI harness for a new application
+- [ ] **New Feature** — adds new functionality to an existing harness or the plugin
+- [ ] **Bug Fix** — fixes incorrect behavior
+- [ ] **Documentation** — updates docs only
+- [ ] **Other** — please describe:
 
 ---
 
@@ -35,18 +34,8 @@ Fixes #<!-- issue number -->
 
 - [ ] All unit tests pass: `python3 -m pytest cli_anything/<software>/tests/test_core.py -v`
 - [ ] All E2E tests pass: `python3 -m pytest cli_anything/<software>/tests/test_full_e2e.py -v`
-- [ ] No test regressions - no previously passing tests were removed or weakened
+- [ ] No test regressions — no previously passing tests were removed or weakened
 - [ ] `registry.json` entry is updated if version, description, or requirements changed
-
-### For Codex Head / Orchestration Changes
-
-<!-- If this PR touches codex-head or its GitHub workflows, check the items below. -->
-
-- [ ] `cd codex-head && npm test`
-- [ ] `cd codex-head && npm run smoke`
-- [ ] `cd codex-head && npm run health`
-- [ ] Typed contracts, workflow payloads, and callback artifacts remain in sync
-- [ ] Relevant docs or workflow files were updated if CLI commands or schemas changed
 
 ### General Checklist
 
@@ -57,8 +46,8 @@ Fixes #<!-- issue number -->
 
 ## Test Results
 
-<!-- Paste the output of the relevant test commands for the affected area. -->
+<!-- Paste the output of `pytest -v` for the affected harness(es). -->
 
-```text
+```
 <paste test output here>
 ```
