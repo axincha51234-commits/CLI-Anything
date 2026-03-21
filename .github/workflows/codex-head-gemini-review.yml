@@ -1,0 +1,160 @@
+name: codex-head-gemini-review
+run-name: codex-head task ${{ inputs.task_id }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      task_id:
+        description: "codex-head task id"
+        required: true
+        type: string
+      target_repository:
+        description: "target GitHub repository"
+        required: true
+        type: string
+      base_branch:
+        description: "base branch for diff review"
+        required: true
+        type: string
+      work_branch:
+        description: "work branch for review context"
+        required: true
+        type: string
+      execution_target:
+        description: "primary worker target"
+        required: true
+        type: string
+      review_policy:
+        description: "review policy"
+        required: true
+        type: string
+      expected_output:
+        description: "expected output summary"
+        required: true
+        type: string
+      prior_result_status:
+        description: "status returned by the primary worker"
+        required: true
+        type: string
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    defaults:
+      run:
+        working-directory: codex-head
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.inputs.target_repository }}
+          ref: ${{ github.event.inputs.work_branch }}
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: codex-head/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build review diff
+        shell: bash
+        run: |
+          mkdir -p runtime
+          git fetch origin "${{ github.event.inputs.base_branch }}" --depth=1
+          git diff "origin/${{ github.event.inputs.base_branch }}...HEAD" > runtime/review.diff
+
+      - name: Run Gemini review
+        id: gemini_review
+        if: ${{ secrets.GEMINI_API_KEY != '' }}
+        continue-on-error: true
+        uses: google-github-actions/run-gemini-cli@v0.1.21
+        with:
+          gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
+          prompt: |
+            You are the Gemini review worker under Codex Head.
+            Review the git diff in codex-head/runtime/review.diff for repository ${{ github.event.inputs.target_repository }}.
+            Base branch: ${{ github.event.inputs.base_branch }}
+            Work branch: ${{ github.event.inputs.work_branch }}
+            Primary execution target: ${{ github.event.inputs.execution_target }}
+            Prior worker status: ${{ github.event.inputs.prior_result_status }}
+            Review policy: ${{ github.event.inputs.review_policy }}
+            Expected output: ${{ github.event.inputs.expected_output }}
+
+            Return JSON only, with no code fences and no extra text:
+            {
+              "review_verdict": "approved|changes_requested|commented",
+              "summary": "short summary",
+              "review_notes": ["note 1", "note 2"]
+            }
+
+            Do not modify files, do not create commits, and do not post GitHub comments.
+          upload_artifacts: false
+
+      - name: Write callback artifact
+        shell: bash
+        env:
+          TASK_ID: ${{ github.event.inputs.task_id }}
+          TARGET_REPOSITORY: ${{ github.event.inputs.target_repository }}
+          BASE_BRANCH: ${{ github.event.inputs.base_branch }}
+          WORK_BRANCH: ${{ github.event.inputs.work_branch }}
+          EXECUTION_TARGET: ${{ github.event.inputs.execution_target }}
+          PRIOR_RESULT_STATUS: ${{ github.event.inputs.prior_result_status }}
+          EXPECTED_OUTPUT: ${{ github.event.inputs.expected_output }}
+          GEMINI_SUMMARY: ${{ steps.gemini_review.outputs.summary }}
+          GEMINI_OUTCOME: ${{ steps.gemini_review.outcome }}
+          GEMINI_CONFIGURED: ${{ secrets.GEMINI_API_KEY != '' }}
+        run: |
+          mkdir -p runtime/artifacts/${TASK_ID}
+          node - <<'NODE'
+          const fs = require("node:fs");
+          const path = require("node:path");
+          const {
+            buildFallbackGeminiReview,
+            buildGitHubReviewCallback,
+            normalizeGeminiReviewSummary
+          } = require("./dist/src/github/reviewCallback.js");
+
+          const taskId = process.env.TASK_ID;
+          const callbackPath = path.join("runtime", "artifacts", taskId, "github-callback.json");
+          const configured = process.env.GEMINI_CONFIGURED === "true";
+          const outcome = process.env.GEMINI_OUTCOME || "";
+          const rawSummary = process.env.GEMINI_SUMMARY || "";
+
+          let review;
+          if (!configured) {
+            review = buildFallbackGeminiReview("Gemini review skipped because workflow auth was not configured.");
+          } else if (outcome !== "success") {
+            review = buildFallbackGeminiReview(`Gemini review failed or was skipped with outcome: ${outcome || "unknown"}.`);
+          } else {
+            review = normalizeGeminiReviewSummary(
+              rawSummary,
+              "Gemini review returned invalid structured output."
+            );
+          }
+
+          const callback = buildGitHubReviewCallback(taskId, callbackPath, review, [
+            "Review callback captured from GitHub workflow.",
+            `Target repository was ${process.env.TARGET_REPOSITORY}.`,
+            `Base branch was ${process.env.BASE_BRANCH}.`,
+            `Work branch was ${process.env.WORK_BRANCH}.`,
+            `Primary execution target was ${process.env.EXECUTION_TARGET}.`,
+            `Prior worker status was ${process.env.PRIOR_RESULT_STATUS}.`,
+            `Expected output was ${process.env.EXPECTED_OUTPUT}.`
+          ]);
+          fs.writeFileSync(callbackPath, JSON.stringify(callback, null, 2), "utf8");
+          NODE
+
+      - name: Upload callback artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: codex-head-github-callback-${{ github.event.inputs.task_id }}
+          path: codex-head/runtime/artifacts/${{ github.event.inputs.task_id }}/github-callback.json

@@ -1,0 +1,41 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "rootDir": ".",
+    "outDir": "dist",
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "lib": ["ES2022"],
+    "types": ["node"]
+  },
+  "include": [
+    "src/config.ts",
+    "src/contracts.ts",
+    "src/schema.ts",
+    "src/index.ts",
+    "src/retry.ts",
+    "src/orchestrator.ts",
+    "src/adapter-registry/**/*.ts",
+    "src/artifacts/fileArtifactStore.ts",
+    "src/github/controlPlane.ts",
+    "src/planner/index.ts",
+    "src/router/index.ts",
+    "src/state-store/**/*.ts",
+    "tests/**/*.ts"
+  ],
+  "exclude": [
+    "dist",
+    "node_modules",
+    "src/adapters/**",
+    "src/orchestrator/**",
+    "src/planner/codexPlanner.ts",
+    "src/router/taskRouter.ts",
+    "src/policies/**",
+    "src/utils/**",
+    "test/**"
+  ]
+}

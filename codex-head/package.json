@@ -1,0 +1,21 @@
+{
+  "name": "codex-head",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Head-brain orchestrator for CLI-Anything that governs Claude Code, Codex CLI, Gemini CLI, and Antigravity workers.",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test dist/tests/*.test.js",
+    "start": "node dist/src/index.js",
+    "health": "npm run build && node dist/src/index.js health",
+    "smoke": "npm run build && node --test dist/tests/smoke.test.js"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.0",
+    "typescript": "^5.9.3"
+  }
+}

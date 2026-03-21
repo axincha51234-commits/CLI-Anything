@@ -1,0 +1,9 @@
+{
+  "github": {
+    "enabled": true,
+    "repository": "axincha51234-commits/CLI-Anything",
+    "dispatch_mode": "gh_cli",
+    "workflow": "codex-head-worker.yml",
+    "review_workflow": "codex-head-gemini-review.yml"
+  }
+}

@@ -1,0 +1,132 @@
+# ============================================================
+# Only track:
+#   - cli-anything-plugin/**
+#   - codex-skill/**
+#   - codex-head/**
+#   - */agent-harness/**  (under each software dir)
+#   - .gitignore
+# Everything else is ignored.
+# ============================================================
+
+# Step 1: Ignore everything at the root
+/*
+
+# Step 2: Allow .gitignore, README, assets, and marketplace
+!.gitignore
+!/README.md
+!/CONTRIBUTING.md
+!/assets/
+!/.claude-plugin/
+!/.github/
+
+# Step 3: Allow cli-anything-plugin, codex-skill, and skill_generation tests
+!/cli-anything-plugin/
+!/codex-skill/
+!/codex-head/
+!/skill_generation/
+!/openclaw-skill/
+!/codex-head/
+!/codex-head/**
+
+# Step 4: Allow each software dir (top level only)
+!/gimp/
+!/blender/
+!/inkscape/
+!/audacity/
+!/libreoffice/
+!/mubu/
+!/obs-studio/
+!/kdenlive/
+!/shotcut/
+!/anygen/
+!/zoom/
+!/drawio/
+!/mermaid/
+!/adguardhome/
+!/ollama/
+
+# Step 5: Inside each software dir, ignore everything (including dotfiles)
+/gimp/*
+/gimp/.*
+/blender/*
+/blender/.*
+/inkscape/*
+/inkscape/.*
+/audacity/*
+/audacity/.*
+/libreoffice/*
+/libreoffice/.*
+/mubu/*
+/mubu/.*
+/obs-studio/*
+/obs-studio/.*
+/kdenlive/*
+/kdenlive/.*
+/shotcut/*
+/shotcut/.*
+/anygen/*
+/anygen/.*
+/zoom/*
+/zoom/.*
+/drawio/*
+/drawio/.*
+/mermaid/*
+/mermaid/.*
+/adguardhome/*
+/adguardhome/.*
+/ollama/*
+/ollama/.*
+
+# Step 6: ...except agent-harness/
+!/gimp/agent-harness/
+!/blender/agent-harness/
+!/inkscape/agent-harness/
+!/audacity/agent-harness/
+!/libreoffice/agent-harness/
+!/mubu/agent-harness/
+!/obs-studio/agent-harness/
+!/kdenlive/agent-harness/
+!/shotcut/agent-harness/
+!/anygen/agent-harness/
+!/zoom/agent-harness/
+!/drawio/agent-harness/
+!/mermaid/agent-harness/
+!/adguardhome/agent-harness/
+!/ollama/agent-harness/
+
+# Step 7: Ignore build artifacts within allowed dirs
+**/__pycache__/
+**/*.egg-info/
+**/*.pyc
+**/dist/
+**/build/
+**/.pytest_cache/
+**/*.egg
+**/*.mp4
+**/*.wav
+**/*.blend
+**/*.xcf
+**/*.mlt
+**/*.drawio
+codex-head/runtime/
+codex-head/node_modules/
+codex-head/dist/
+
+# Step 8: But allow assets images
+!/assets/*.png
+!/assets/*.jpg
+
+assets/gen_typing_gif.py
+!README_CN.md
+!opencode-commands/
+!/qoder-plugin/
+
+# Step 10: Allow CLI Hub registry and frontend
+!/registry.json
+!/docs/
+/docs/*
+!/docs/hub/
+!/notebooklm/
+/notebooklm/*
+/notebooklm/.*
+!/notebooklm/agent-harness/

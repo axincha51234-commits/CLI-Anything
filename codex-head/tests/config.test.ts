@@ -1,0 +1,91 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
+
+import { createDefaultConfig, loadConfig, updateGitHubConfig } from "../src/config";
+import { createTempDir } from "./helpers";
+
+test("loadConfig accepts camelCase external config keys", () => {
+  const root = createTempDir("codex-head-config-");
+  const configPath = join(root, "workers.local.json");
+  writeFileSync(configPath, JSON.stringify({
+    featureFlags: {
+      antigravity: true
+    },
+    commandTemplates: {
+      "codex-cli": {
+        local: {
+          name: "codex-task",
+          executable: "codex",
+          args: ["exec", "{{task_goal}}"]
+        }
+      }
+    }
+  }, null, 2), "utf8");
+
+  const config = loadConfig(root, configPath);
+  assert.equal(config.feature_flags.antigravity, true);
+  assert.equal(config.command_templates["codex-cli"].local?.name, "codex-task");
+});
+
+test("createDefaultConfig provides safe local execution templates", () => {
+  const root = createTempDir("codex-head-default-config-");
+  const config = createDefaultConfig(root);
+
+  assert.equal(config.github.enabled, false);
+  assert.deepEqual(config.command_templates["claude-code"].local?.args, [
+    "-p",
+    "--permission-mode",
+    "plan",
+    "--output-format",
+    "text",
+    "{{task_prompt}}"
+  ]);
+  assert.deepEqual(config.command_templates["codex-cli"].local?.args, [
+    "exec",
+    "--skip-git-repo-check",
+    "-s",
+    "read-only",
+    "--color",
+    "never",
+    "{{task_prompt}}"
+  ]);
+  assert.deepEqual(config.command_templates["gemini-cli"].local?.args, [
+    "-p",
+    "{{task_prompt}}",
+    "--approval-mode",
+    "plan",
+    "--output-format",
+    "text"
+  ]);
+});
+
+test("createDefaultConfig uses GITHUB_REPOSITORY when available", () => {
+  const previous = process.env.GITHUB_REPOSITORY;
+  process.env.GITHUB_REPOSITORY = "axincha51234-commits/codex-head-test";
+
+  try {
+    const root = createTempDir("codex-head-default-config-repo-");
+    const config = createDefaultConfig(root);
+    assert.equal(config.github.repository, "axincha51234-commits/codex-head-test");
+  } finally {
+    if (previous === undefined) {
+      delete process.env.GITHUB_REPOSITORY;
+    } else {
+      process.env.GITHUB_REPOSITORY = previous;
+    }
+  }
+});
+
+test("updateGitHubConfig writes a repository override to workers.local.json", () => {
+  const root = createTempDir("codex-head-update-github-config-");
+  const result = updateGitHubConfig(root, {
+    repository: "axincha51234-commits/codex-head-test",
+    dispatch_mode: "gh_cli"
+  });
+
+  const config = loadConfig(root, result.path);
+  assert.equal(config.github.repository, "axincha51234-commits/codex-head-test");
+  assert.equal(config.github.dispatch_mode, "gh_cli");
+});

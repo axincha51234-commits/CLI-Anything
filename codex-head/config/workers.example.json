@@ -1,0 +1,66 @@
+{
+  "feature_flags": {
+    "antigravity": false
+  },
+  "command_templates": {
+    "claude-code": {
+      "enabled": true,
+      "binary": "claude",
+      "health": {
+        "name": "claude-version",
+        "executable": "claude",
+        "args": ["--version"]
+      },
+      "local": {
+        "name": "claude-task",
+        "executable": "claude",
+        "args": ["-p", "--permission-mode", "plan", "--output-format", "text", "{{task_prompt}}"]
+      }
+    },
+    "codex-cli": {
+      "enabled": true,
+      "binary": "codex",
+      "health": {
+        "name": "codex-version",
+        "executable": "codex",
+        "args": ["--version"]
+      },
+      "local": {
+        "name": "codex-task",
+        "executable": "codex",
+        "args": ["exec", "--skip-git-repo-check", "-s", "read-only", "--color", "never", "{{task_prompt}}"]
+      }
+    },
+    "gemini-cli": {
+      "enabled": true,
+      "binary": "gemini",
+      "health": {
+        "name": "gemini-version",
+        "executable": "gemini",
+        "args": ["--version"]
+      },
+      "local": {
+        "name": "gemini-task",
+        "executable": "gemini",
+        "args": ["-p", "{{task_prompt}}", "--approval-mode", "plan", "--output-format", "text"]
+      }
+    },
+    "antigravity": {
+      "enabled": false,
+      "binary": "antigravity",
+      "health": {
+        "name": "antigravity-version",
+        "executable": "antigravity",
+        "args": ["--version"]
+      }
+    }
+  },
+  "github": {
+    "enabled": false,
+    "repository": "OWNER/REPO",
+    "workflow": "codex-head-worker.yml",
+    "review_workflow": "codex-head-gemini-review.yml",
+    "dispatch_mode": "artifacts_only",
+    "cli_binary": "gh"
+  }
+}
