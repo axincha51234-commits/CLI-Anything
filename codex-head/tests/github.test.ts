@@ -866,6 +866,257 @@ test("GitHubControlPlane can auto-recycle a stale self-hosted queued stall when 
   }
 });
 
+test("GitHubControlPlane escalates clearly when a run stays queued after auto-recycle", async () => {
+  const root = createTempDir("codex-head-github-auto-recycle-escalate-");
+  const config = createTestConfig(root);
+  config.github.repository = "example/repo";
+  config.github.auto_recycle_stale_runner = true;
+  const previousMachineConfig = process.env.CODEX_HEAD_MACHINE_CONFIG;
+  delete process.env.CODEX_HEAD_MACHINE_CONFIG;
+
+  try {
+    const recycleScriptPath = resolve(root, "scripts", "recycle-self-hosted-runner.ps1");
+    mkdirSync(resolve(root, "scripts"), { recursive: true });
+    writeFileSync(recycleScriptPath, "Write-Host 'recycle runner'\n", "utf8");
+
+    const artifactStore = new FileArtifactStore(config.artifacts_dir);
+    let recycled = false;
+    let recycleCalls = 0;
+    const github = new GitHubControlPlane(config, artifactStore, {
+      platform: "win32",
+      findBinary: (bin) => {
+        if (bin === "gh") {
+          return "C:/Program Files/GitHub CLI/gh.exe";
+        }
+        if (bin === "powershell.exe") {
+          return "C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe";
+        }
+        return null;
+      },
+      runCli: (args) => {
+        if (args[0] === "auth") {
+          return {
+            ok: true,
+            exitCode: 0,
+            stdout: "Logged in to github.com",
+            stderr: "",
+            durationMs: 1,
+            timedOut: false
+          };
+        }
+        if (args[0] === "api" && args[1] === "repos/example/repo/actions/variables/CODEX_HEAD_RUNS_ON_JSON") {
+          return {
+            ok: true,
+            exitCode: 0,
+            stdout: JSON.stringify({
+              name: "CODEX_HEAD_RUNS_ON_JSON",
+              value: "[\"self-hosted\",\"Windows\",\"codex-head\"]"
+            }),
+            stderr: "",
+            durationMs: 1,
+            timedOut: false
+          };
+        }
+        if (args[0] === "api" && args[1] === "repos/example/repo/actions/runners") {
+          return {
+            ok: true,
+            exitCode: 0,
+            stdout: JSON.stringify({
+              runners: [
+                {
+                  id: 21,
+                  name: "DESKTOP-F7V83BO-codex-head",
+                  os: "Windows",
+                  status: "online",
+                  busy: false,
+                  labels: [
+                    { name: "self-hosted" },
+                    { name: "Windows" },
+                    { name: "X64" },
+                    { name: "codex-head" }
+                  ]
+                }
+              ]
+            }),
+            stderr: "",
+            durationMs: 1,
+            timedOut: false
+          };
+        }
+        if (args[0] === "run" && args[1] === "view") {
+          return {
+            ok: true,
+            exitCode: 0,
+            stdout: JSON.stringify({
+              databaseId: 993,
+              status: "queued",
+              conclusion: null,
+              url: "https://github.com/example/repo/actions/runs/993",
+              workflowName: "codex-head-worker.yml",
+              updatedAt: new Date().toISOString(),
+              jobs: [
+                {
+                  name: "worker",
+                  status: "queued",
+                  conclusion: null,
+                  labels: ["self-hosted", "Windows", "codex-head"]
+                }
+              ]
+            }),
+            stderr: "",
+            durationMs: 1,
+            timedOut: false
+          };
+        }
+        throw new Error(`Unexpected gh args: ${args.join(" ")}`);
+      },
+      runProcess: (_command, _args) => {
+        recycleCalls += 1;
+        recycled = true;
+        return {
+          ok: true,
+          exitCode: 0,
+          stdout: "Runner recycled successfully.",
+          stderr: "",
+          durationMs: 1,
+          timedOut: false
+        };
+      }
+    });
+
+    await assert.rejects(
+      () => github.waitForRunCompletion("task-auto-recycle-still-queued", 993, 220, 25),
+      /manual intervention is now required|github-queue-recycle\.json/i
+    );
+    assert.equal(recycleCalls, 1);
+    assert.equal(recycled, true);
+  } finally {
+    if (previousMachineConfig === undefined) {
+      delete process.env.CODEX_HEAD_MACHINE_CONFIG;
+    } else {
+      process.env.CODEX_HEAD_MACHINE_CONFIG = previousMachineConfig;
+    }
+  }
+});
+
+test("GitHubControlPlane carries manual-intervention guidance into callback sync after auto-recycle", () => {
+  const root = createTempDir("codex-head-github-download-escalate-");
+  const config = createTestConfig(root);
+  config.github.repository = "example/repo";
+  const previousMachineConfig = process.env.CODEX_HEAD_MACHINE_CONFIG;
+  delete process.env.CODEX_HEAD_MACHINE_CONFIG;
+
+  try {
+    const artifactStore = new FileArtifactStore(config.artifacts_dir);
+    artifactStore.writeJson("task-escalated-download", "github-queue-recycle.json", {
+      ok: true,
+      skipped: false
+    });
+
+    const github = new GitHubControlPlane(config, artifactStore, {
+      findBinary: () => "C:/Program Files/GitHub CLI/gh.exe",
+      runCli: (args) => {
+        if (args[0] === "auth") {
+          return {
+            ok: true,
+            exitCode: 0,
+            stdout: "Logged in to github.com",
+            stderr: "",
+            durationMs: 1,
+            timedOut: false
+          };
+        }
+        if (args[0] === "api" && args[1] === "repos/example/repo/actions/variables/CODEX_HEAD_RUNS_ON_JSON") {
+          return {
+            ok: true,
+            exitCode: 0,
+            stdout: JSON.stringify({
+              name: "CODEX_HEAD_RUNS_ON_JSON",
+              value: "[\"self-hosted\",\"Windows\",\"codex-head\"]"
+            }),
+            stderr: "",
+            durationMs: 1,
+            timedOut: false
+          };
+        }
+        if (args[0] === "api" && args[1] === "repos/example/repo/actions/runners") {
+          return {
+            ok: true,
+            exitCode: 0,
+            stdout: JSON.stringify({
+              runners: [
+                {
+                  id: 21,
+                  name: "DESKTOP-F7V83BO-codex-head",
+                  os: "Windows",
+                  status: "online",
+                  busy: false,
+                  labels: [
+                    { name: "self-hosted" },
+                    { name: "Windows" },
+                    { name: "X64" },
+                    { name: "codex-head" }
+                  ]
+                }
+              ]
+            }),
+            stderr: "",
+            durationMs: 1,
+            timedOut: false
+          };
+        }
+        if (args[0] === "run" && args[1] === "view") {
+          return {
+            ok: true,
+            exitCode: 0,
+            stdout: JSON.stringify({
+              databaseId: 994,
+              status: "queued",
+              conclusion: null,
+              url: "https://github.com/example/repo/actions/runs/994",
+              workflowName: "codex-head-worker.yml",
+              updatedAt: new Date().toISOString(),
+              jobs: [
+                {
+                  name: "worker",
+                  status: "queued",
+                  conclusion: null,
+                  labels: ["self-hosted", "Windows", "codex-head"]
+                }
+              ]
+            }),
+            stderr: "",
+            durationMs: 1,
+            timedOut: false
+          };
+        }
+        if (args[0] === "run" && args[1] === "download") {
+          return {
+            ok: false,
+            exitCode: 1,
+            stdout: "",
+            stderr: "artifact not found",
+            durationMs: 1,
+            timedOut: false
+          };
+        }
+        throw new Error(`Unexpected gh args: ${args.join(" ")}`);
+      }
+    });
+
+    assert.throws(
+      () => github.downloadCallbackArtifact("task-escalated-download", { run_id: 994 }),
+      /manual intervention is now required|github-queue-recycle\.json/i
+    );
+  } finally {
+    if (previousMachineConfig === undefined) {
+      delete process.env.CODEX_HEAD_MACHINE_CONFIG;
+    } else {
+      process.env.CODEX_HEAD_MACHINE_CONFIG = previousMachineConfig;
+    }
+  }
+});
+
 test("GitHub workflow file exists", () => {
   const workflowPath = resolve(process.cwd(), "../.github/workflows/codex-head-worker.yml");
   assert.equal(existsSync(workflowPath), true);

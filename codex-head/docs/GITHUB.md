@@ -144,6 +144,9 @@ stale broker session, set `"github": { "auto_recycle_stale_runner": true }` in
 `config/workers.machine.json` on the runner host. This remains opt-in and only
 applies to the self-hosted "queued even though the runner looks online and
 idle" case.
+If the run is still queued after that automatic recycle succeeds, `codex-head`
+now escalates the error to a manual-intervention-required state and references
+the saved `github-queue-recycle.json` receipt.
 
 For `run-goal`, that opt-in can be satisfied automatically for the current run
 when the conditions above are already true.

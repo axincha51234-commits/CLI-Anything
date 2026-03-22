@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 
@@ -921,6 +921,7 @@ export class GitHubControlPlane {
     const deadline = Date.now() + Math.max(1, timeoutMs);
     let monitoredSince = Date.now();
     let recycleAttempted = false;
+    let recycleSucceeded = false;
     const queueDiagnosisThresholdMs = Math.min(60_000, Math.max(intervalMs * 3, Math.floor(timeoutMs / 3)));
     let lastState: GitHubRunState | null = null;
     let lastQueueDiagnosis: GitHubQueueDiagnosis | null = null;
@@ -933,6 +934,7 @@ export class GitHubControlPlane {
             const recycleReceipt = this.attemptQueuedStallRecovery(taskId, runId, lastQueueDiagnosis);
             recycleAttempted = true;
             if (recycleReceipt.ok) {
+              recycleSucceeded = true;
               monitoredSince = Date.now();
               lastQueueDiagnosis = null;
               continue;
@@ -946,6 +948,7 @@ export class GitHubControlPlane {
           throw new Error(
             `GitHub run ${runId} appears stuck in queued state for task ${taskId}: ${lastQueueDiagnosis.reason}`
             + this.renderQueueDiagnosisHint(taskId, lastQueueDiagnosis)
+            + (recycleSucceeded ? this.renderQueueEscalationHint(taskId) : "")
           );
         }
       }
@@ -965,6 +968,7 @@ export class GitHubControlPlane {
       `Timed out waiting for GitHub callback for task ${taskId} after ${Math.ceil(timeoutMs / 1000)}s`
       + (lastState ? ` (last status: ${lastState.status})` : "")
       + (lastQueueDiagnosis ? ` (${lastQueueDiagnosis.reason})${this.renderQueueDiagnosisHint(taskId, lastQueueDiagnosis)}` : "")
+      + (recycleSucceeded ? this.renderQueueEscalationHint(taskId) : "")
     );
   }
 
@@ -1026,6 +1030,7 @@ export class GitHubControlPlane {
       throw new Error(
         `GitHub callback download failed: ${detail}`
         + (queueDiagnosis ? this.renderQueueDiagnosisHint(taskId, queueDiagnosis) : "")
+        + (this.hasSuccessfulQueueRecycle(taskId) ? this.renderQueueEscalationHint(taskId) : "")
       );
     }
 
@@ -1246,6 +1251,24 @@ export class GitHubControlPlane {
 
   private renderQueueRecoveryHint(taskId: string, receipt: Pick<GitHubQueueRecoveryReceipt, "detail">): string {
     return ` Automatic recycle attempt failed: ${receipt.detail} See ${join(this.artifactStore.getTaskDir(taskId), "github-queue-recycle.json")}.`;
+  }
+
+  private hasSuccessfulQueueRecycle(taskId: string): boolean {
+    const recyclePath = join(this.artifactStore.getTaskDir(taskId), "github-queue-recycle.json");
+    if (!existsSync(recyclePath)) {
+      return false;
+    }
+
+    try {
+      const parsed = JSON.parse(readFileSync(recyclePath, "utf8")) as { ok?: boolean };
+      return parsed.ok === true;
+    } catch {
+      return false;
+    }
+  }
+
+  private renderQueueEscalationHint(taskId: string): string {
+    return ` Automatic stale-runner recovery was already attempted and manual intervention is now required. See ${join(this.artifactStore.getTaskDir(taskId), "github-queue-recycle.json")}.`;
   }
 
   private selectWorkflow(task: TaskSpec): string {

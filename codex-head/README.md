@@ -159,6 +159,9 @@ currently local-ready and exposes the matching cooldown reason.
 - Self-hosted queue-stall handling now writes `github-queue-diagnosis.json`,
   and an opt-in `github.auto_recycle_stale_runner` flag can automatically call
   the Windows recycle helper for stale broker sessions.
+- If that automatic recycle still cannot clear the queue, later callback errors
+  now escalate explicitly to "manual intervention required" with a saved
+  recycle receipt.
 - Local worker defaults do not verify upstream CLI authentication in advance,
   so automatic fallback still fails if every candidate worker is unusable at
   runtime.

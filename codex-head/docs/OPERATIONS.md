@@ -359,6 +359,9 @@ Set that in `config/workers.machine.json` on the Windows runner host. The
 automatic recycle path only runs for the specific "runner looks online and idle
 but the job is still queued" case, and it writes `github-queue-recycle.json`
 beside the diagnosis artifact.
+If the run is still queued after that automatic recycle succeeds, later wait or
+sync failures now escalate explicitly to "manual intervention required" and
+point back to the recycle receipt.
 
 ### `missing_binary`
 
