@@ -140,6 +140,39 @@ interface GitHubRunnerApiEntry {
   labels?: Array<{ name?: string }>;
 }
 
+interface GitHubRunViewJob {
+  name?: string;
+  status?: string;
+  conclusion?: string | null;
+  labels?: string[] | Array<{ name?: string }>;
+}
+
+interface GitHubRunViewResponse extends Partial<GitHubRunListEntry> {
+  jobs?: GitHubRunViewJob[];
+}
+
+interface GitHubQueueDiagnosis {
+  task_id: string;
+  run_id: number;
+  run_url: string | null;
+  workflow_name: string;
+  status: string;
+  queued_for_ms: number;
+  self_hosted_targeted: boolean;
+  runs_on_labels: string[];
+  matching_runners: GitHubRuntimeStatus["matching_runners"];
+  queued_jobs: Array<{
+    name: string;
+    status: string;
+    conclusion: string | null;
+    labels: string[];
+  }>;
+  runner_lookup_detail: string | null;
+  likely_stalled: boolean;
+  reason: string;
+  suggested_action: string | null;
+}
+
 function parseRunsOnLabels(rawValue: string | null): string[] {
   if (!rawValue) {
     return [];
@@ -166,6 +199,17 @@ function parseJsonOrNull<T>(raw: string): T | null {
   } catch {
     return null;
   }
+}
+
+function normalizeLabelCollection(value: GitHubRunViewJob["labels"]): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((entry) => typeof entry === "string" ? entry : entry?.name ?? "")
+    .map((label) => label.trim())
+    .filter(Boolean);
 }
 
 function sleep(ms: number): Promise<void> {
@@ -786,7 +830,10 @@ export class GitHubControlPlane {
     }
 
     const deadline = Date.now() + Math.max(1, timeoutMs);
+    const startedAt = Date.now();
+    const queueDiagnosisThresholdMs = Math.min(60_000, Math.max(intervalMs * 3, Math.floor(timeoutMs / 3)));
     let lastState: GitHubRunState | null = null;
+    let lastQueueDiagnosis: GitHubQueueDiagnosis | null = null;
     while (Date.now() <= deadline) {
       const args = [
         "run",
@@ -820,6 +867,15 @@ export class GitHubControlPlane {
         conclusion: parsed.conclusion ?? null,
         updated_at: Date.parse(parsed.updatedAt ?? "") || Date.now()
       };
+      if (lastState.status === "queued" && Date.now() - startedAt >= queueDiagnosisThresholdMs) {
+        lastQueueDiagnosis = this.diagnoseQueuedRun(taskId, runId, lastState, Date.now() - startedAt);
+        if (lastQueueDiagnosis.likely_stalled) {
+          throw new Error(
+            `GitHub run ${runId} appears stuck in queued state for task ${taskId}: ${lastQueueDiagnosis.reason}`
+            + (lastQueueDiagnosis.suggested_action ? ` ${lastQueueDiagnosis.suggested_action}` : "")
+          );
+        }
+      }
       if (lastState.status === "completed") {
         return lastState;
       }
@@ -827,9 +883,15 @@ export class GitHubControlPlane {
       await sleep(Math.max(1, intervalMs));
     }
 
+    if (lastState?.status === "queued") {
+      lastQueueDiagnosis = lastQueueDiagnosis
+        ?? this.diagnoseQueuedRun(taskId, runId, lastState, Date.now() - startedAt);
+    }
+
     throw new Error(
       `Timed out waiting for GitHub callback for task ${taskId} after ${Math.ceil(timeoutMs / 1000)}s`
       + (lastState ? ` (last status: ${lastState.status})` : "")
+      + (lastQueueDiagnosis ? ` (${lastQueueDiagnosis.reason})` : "")
     );
   }
 
@@ -912,6 +974,90 @@ export class GitHubControlPlane {
   buildCompletionEnvelope(result: Pick<WorkerResult, "task_id"> | string): string {
     const taskId = typeof result === "string" ? result : result.task_id;
     return join(this.artifactStore.getTaskDir(taskId), "github-callback.json");
+  }
+
+  private diagnoseQueuedRun(
+    taskId: string,
+    runId: number,
+    runState: GitHubRunState,
+    queuedForMs: number
+  ): GitHubQueueDiagnosis {
+    const runtime = this.inspectRuntime();
+    let runView: GitHubRunViewResponse | null = null;
+
+    if (runtime.enabled && runtime.gh_cli_available && runtime.gh_authenticated && this.config.github.repository !== "OWNER/REPO") {
+      const args = [
+        "run",
+        "view",
+        String(runId),
+        "--repo",
+        this.config.github.repository,
+        "--json",
+        "databaseId,status,conclusion,url,workflowName,updatedAt,jobs"
+      ];
+      const result = this.runCli(args);
+      if (result.ok) {
+        runView = parseJsonOrNull<GitHubRunViewResponse>(result.stdout || "");
+      }
+    }
+
+    const queuedJobs = (runView?.jobs ?? [])
+      .filter((job) => (job.status ?? "").trim().toLowerCase() === "queued")
+      .map((job) => ({
+        name: String(job.name ?? "unknown"),
+        status: String(job.status ?? "unknown"),
+        conclusion: job.conclusion ?? null,
+        labels: normalizeLabelCollection(job.labels)
+      }));
+
+    const recycleScript = join(this.config.app_root, "scripts", "recycle-self-hosted-runner.ps1");
+    const matchingRunners = runtime.matching_runners;
+    const allOffline = matchingRunners.length > 0 && matchingRunners.every((runner) => runner.status.toLowerCase() !== "online");
+    const allBusy = matchingRunners.length > 0 && matchingRunners.every((runner) => runner.busy);
+
+    let likelyStalled = false;
+    let reason = "GitHub run is still queued.";
+
+    if (!runtime.self_hosted_targeted) {
+      reason = "GitHub run is queued, but the configured workflow does not currently target self-hosted labels.";
+    } else if (runtime.runner_lookup_detail) {
+      likelyStalled = true;
+      reason = `GitHub self-hosted runner lookup was inconclusive: ${runtime.runner_lookup_detail}`;
+    } else if (matchingRunners.length === 0) {
+      likelyStalled = true;
+      reason = `No self-hosted runner currently matches labels ${runtime.runs_on_labels.join(", ")}.`;
+    } else if (allOffline) {
+      likelyStalled = true;
+      reason = "Matching self-hosted runners are currently offline.";
+    } else if (allBusy) {
+      likelyStalled = true;
+      reason = "Matching self-hosted runners are all busy.";
+    } else {
+      likelyStalled = true;
+      reason = "The run is still queued even though a matching self-hosted runner appears online and idle; a stale broker session is likely.";
+    }
+
+    const diagnosis: GitHubQueueDiagnosis = {
+      task_id: taskId,
+      run_id: runId,
+      run_url: runView?.url ?? runState.run_url,
+      workflow_name: runView?.workflowName ?? runState.workflow_name,
+      status: runView?.status ?? runState.status,
+      queued_for_ms: queuedForMs,
+      self_hosted_targeted: runtime.self_hosted_targeted,
+      runs_on_labels: runtime.runs_on_labels,
+      matching_runners: matchingRunners,
+      queued_jobs: queuedJobs,
+      runner_lookup_detail: runtime.runner_lookup_detail,
+      likely_stalled: likelyStalled,
+      reason,
+      suggested_action: likelyStalled && existsSync(recycleScript)
+        ? `Consider running ${recycleScript} before retrying the GitHub wait path.`
+        : null
+    };
+
+    this.artifactStore.writeJson(taskId, "github-queue-diagnosis.json", diagnosis);
+    return diagnosis;
   }
 
   private selectWorkflow(task: TaskSpec): string {

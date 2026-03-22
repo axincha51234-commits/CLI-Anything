@@ -337,6 +337,11 @@ includes:
 - whether `workers.machine.json` is visible through the current machine overlay
 - the usual local worker readiness and cooldown state
 
+If a GitHub run stays `queued` against a self-hosted label set for too long,
+`codex-head` now writes `github-queue-diagnosis.json` into the task artifact
+directory and raises a more specific error when it looks like no matching
+runner is available or a stale broker session is blocking pickup.
+
 ### `missing_binary`
 
 - Cause: `npm run health` can find no installed binary for the worker.

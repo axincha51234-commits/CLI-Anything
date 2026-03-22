@@ -493,6 +493,120 @@ test("GitHubControlPlane resolves and waits for a workflow run by task id", asyn
   assert.equal(completed.conclusion, "success");
 });
 
+test("GitHubControlPlane diagnoses a queued self-hosted stall with a concrete message", async () => {
+  const root = createTempDir("codex-head-github-queued-stall-");
+  const config = createTestConfig(root);
+  config.github.repository = "example/repo";
+  const previousMachineConfig = process.env.CODEX_HEAD_MACHINE_CONFIG;
+  delete process.env.CODEX_HEAD_MACHINE_CONFIG;
+
+  try {
+    const artifactStore = new FileArtifactStore(config.artifacts_dir);
+    const github = new GitHubControlPlane(config, artifactStore, {
+      findBinary: () => "C:/Program Files/GitHub CLI/gh.exe",
+      runCli: (args) => {
+        if (args[0] === "auth") {
+          return {
+            ok: true,
+            exitCode: 0,
+            stdout: "Logged in to github.com",
+            stderr: "",
+            durationMs: 1,
+            timedOut: false
+          };
+        }
+        if (args[0] === "api" && args[1] === "repos/example/repo/actions/variables/CODEX_HEAD_RUNS_ON_JSON") {
+          return {
+            ok: true,
+            exitCode: 0,
+            stdout: JSON.stringify({
+              name: "CODEX_HEAD_RUNS_ON_JSON",
+              value: "[\"self-hosted\",\"Windows\",\"codex-head\"]"
+            }),
+            stderr: "",
+            durationMs: 1,
+            timedOut: false
+          };
+        }
+        if (args[0] === "api" && args[1] === "repos/example/repo/actions/runners") {
+          return {
+            ok: true,
+            exitCode: 0,
+            stdout: JSON.stringify({
+              runners: [
+                {
+                  id: 21,
+                  name: "DESKTOP-F7V83BO-codex-head",
+                  os: "Windows",
+                  status: "online",
+                  busy: false,
+                  labels: [
+                    { name: "self-hosted" },
+                    { name: "Windows" },
+                    { name: "X64" },
+                    { name: "codex-head" }
+                  ]
+                }
+              ]
+            }),
+            stderr: "",
+            durationMs: 1,
+            timedOut: false
+          };
+        }
+        if (args[0] === "run" && args[1] === "view") {
+          return {
+            ok: true,
+            exitCode: 0,
+            stdout: JSON.stringify({
+              databaseId: 987,
+              status: "queued",
+              conclusion: null,
+              url: "https://github.com/example/repo/actions/runs/987",
+              workflowName: "codex-head-worker.yml",
+              updatedAt: new Date().toISOString(),
+              jobs: [
+                {
+                  name: "worker",
+                  status: "queued",
+                  conclusion: null,
+                  labels: ["self-hosted", "Windows", "codex-head"]
+                }
+              ]
+            }),
+            stderr: "",
+            durationMs: 1,
+            timedOut: false
+          };
+        }
+        throw new Error(`Unexpected gh args: ${args.join(" ")}`);
+      }
+    });
+
+    await assert.rejects(
+      () => github.waitForRunCompletion("task-queued", 987, 200, 25),
+      /stuck in queued state|stale broker session/i
+    );
+
+    const diagnosisPath = resolve(config.artifacts_dir, "task-queued", "github-queue-diagnosis.json");
+    assert.equal(existsSync(diagnosisPath), true);
+    const diagnosis = JSON.parse(readFileSync(diagnosisPath, "utf8")) as {
+      likely_stalled: boolean;
+      queued_jobs: Array<{ name: string }>;
+      matching_runners: Array<{ name: string }>;
+    };
+    assert.equal(diagnosis.likely_stalled, true);
+    assert.equal(diagnosis.queued_jobs[0]?.name, "worker");
+    assert.equal(diagnosis.matching_runners[0]?.name, "DESKTOP-F7V83BO-codex-head");
+  } finally {
+    if (previousMachineConfig === undefined) {
+      delete process.env.CODEX_HEAD_MACHINE_CONFIG;
+    } else {
+      process.env.CODEX_HEAD_MACHINE_CONFIG = previousMachineConfig;
+    }
+  }
+});
+
 test("GitHub workflow file exists", () => {
   const workflowPath = resolve(process.cwd(), "../.github/workflows/codex-head-worker.yml");
   assert.equal(existsSync(workflowPath), true);
