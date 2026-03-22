@@ -259,6 +259,8 @@ Current behavior:
 - runs remote review through one of:
   `REVIEW_API_URL` + `REVIEW_API_KEY` for an OpenAI-compatible endpoint,
   `OPENAI_API_KEY` for direct OpenAI usage, or `GEMINI_API_KEY` for Gemini
+- on the OpenAI-compatible path, tries `/v1/responses` first and falls back to
+  `/v1/chat/completions`
 - writes `runtime/artifacts/<task-id>/github-callback.json`
 - uploads that callback as a workflow artifact
 

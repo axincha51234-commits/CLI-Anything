@@ -1,7 +1,13 @@
 {
+  "command_templates": {
+    "claude-code": {
+      "enabled": false
+    }
+  },
   "github": {
     "enabled": true,
     "repository": "axincha51234-commits/CLI-Anything",
+    "execution_preference": "local_preferred",
     "dispatch_mode": "gh_cli",
     "workflow": "codex-head-worker.yml",
     "review_workflow": "codex-head-gemini-review.yml"

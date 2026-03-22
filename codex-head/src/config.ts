@@ -101,6 +101,10 @@ export function resolveConfigPath(appRoot: string, configPath?: string): string 
     ?? path.join(appRoot, "config", "workers.local.json");
 }
 
+export function resolveMachineConfigPath(appRoot: string): string {
+  return path.join(appRoot, "config", "workers.machine.json");
+}
+
 function readExternalConfig(finalPath: string): ExternalConfig {
   if (!fs.existsSync(finalPath)) {
     return {};
@@ -258,13 +262,23 @@ function normalizeExternalConfig(parsed: ExternalConfig): Partial<CodexHeadConfi
 
 export function loadConfig(appRoot: string, configPath?: string): CodexHeadConfig {
   const base = createDefaultConfig(appRoot);
-  const finalPath = resolveConfigPath(appRoot, configPath);
-  if (!fs.existsSync(finalPath)) {
-    return base;
-  }
+  const explicitConfigPath = configPath ?? process.env.CODEX_HEAD_CONFIG;
+  const configPaths = explicitConfigPath
+    ? [resolveConfigPath(appRoot, configPath)]
+    : [
+        resolveConfigPath(appRoot, configPath),
+        resolveMachineConfigPath(appRoot)
+      ];
 
-  const parsed = readExternalConfig(finalPath);
-  return mergeConfig(base, normalizeExternalConfig(parsed));
+  let merged = base;
+  for (const currentPath of configPaths) {
+    if (!fs.existsSync(currentPath)) {
+      continue;
+    }
+    const parsed = readExternalConfig(currentPath);
+    merged = mergeConfig(merged, normalizeExternalConfig(parsed));
+  }
+  return merged;
 }
 
 export function updateGitHubConfig(

@@ -166,42 +166,115 @@ jobs:
             diff
           ].join("\n");
 
-          async function main() {
-            const response = await fetch(`${baseUrl}/chat/completions`, {
-              method: "POST",
-              headers: {
-                "Authorization": `Bearer ${apiKey}`,
-                "Content-Type": "application/json"
-              },
-              body: JSON.stringify({
-                model,
-                temperature: 0.1,
-                messages: [
-                  { role: "system", content: system },
-                  { role: "user", content: user }
-                ]
-              })
-            });
-
-            const bodyText = await response.text();
-            if (!response.ok) {
-              throw new Error(`OpenAI-compatible review request failed (${response.status}): ${bodyText.slice(0, 2000)}`);
+          function extractResponsesText(parsed) {
+            if (typeof parsed?.output_text === "string" && parsed.output_text.trim()) {
+              return parsed.output_text.trim();
             }
+            const items = Array.isArray(parsed?.output) ? parsed.output : [];
+            const text = items
+              .flatMap((item) => Array.isArray(item?.content) ? item.content : [])
+              .filter((item) => item?.type === "output_text" && typeof item?.text === "string")
+              .map((item) => item.text.trim())
+              .filter(Boolean)
+              .join("\n")
+              .trim();
+            return text;
+          }
 
-            const parsed = JSON.parse(bodyText);
+          function extractChatText(parsed) {
             const content = parsed?.choices?.[0]?.message?.content;
-            const normalizedContent = Array.isArray(content)
-              ? content
-                  .map((item) => typeof item?.text === "string" ? item.text : "")
-                  .join("\n")
-                  .trim()
-              : String(content ?? "").trim();
+            if (Array.isArray(content)) {
+              return content
+                .map((item) => typeof item?.text === "string" ? item.text : "")
+                .join("\n")
+                .trim();
+            }
+            return String(content ?? "").trim();
+          }
 
-            if (!normalizedContent) {
-              throw new Error("OpenAI-compatible review response did not contain message content.");
+          async function main() {
+            const attempts = [
+              {
+                name: "responses",
+                url: `${baseUrl}/responses`,
+                body: {
+                  model,
+                  temperature: 0.1,
+                  input: [
+                    {
+                      role: "system",
+                      content: [{ type: "input_text", text: system }]
+                    },
+                    {
+                      role: "user",
+                      content: [{ type: "input_text", text: user }]
+                    }
+                  ],
+                  text: {
+                    format: {
+                      type: "text"
+                    }
+                  }
+                },
+                extract: extractResponsesText
+              },
+              {
+                name: "chat_completions",
+                url: `${baseUrl}/chat/completions`,
+                body: {
+                  model,
+                  temperature: 0.1,
+                  messages: [
+                    { role: "system", content: system },
+                    { role: "user", content: user }
+                  ]
+                },
+                extract: extractChatText
+              }
+            ];
+
+            const errors = [];
+            for (const attempt of attempts) {
+              const response = await fetch(attempt.url, {
+                method: "POST",
+                headers: {
+                  "Authorization": `Bearer ${apiKey}`,
+                  "Content-Type": "application/json"
+                },
+                body: JSON.stringify(attempt.body)
+              });
+
+              const bodyText = await response.text();
+              if (!response.ok) {
+                errors.push(`${attempt.name} (${response.status}): ${bodyText.slice(0, 800)}`);
+                continue;
+              }
+
+              let parsed;
+              try {
+                parsed = JSON.parse(bodyText);
+              } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                errors.push(`${attempt.name} (invalid-json): ${message}`);
+                continue;
+              }
+
+              const normalizedContent = attempt.extract(parsed);
+              if (!normalizedContent) {
+                errors.push(`${attempt.name} (empty-content): response did not contain model text`);
+                continue;
+              }
+
+              fs.writeFileSync(path.join("runtime", "review-provider.json"), JSON.stringify({
+                provider: "openai-compatible",
+                protocol: attempt.name,
+                model
+              }, null, 2), "utf8");
+              fs.writeFileSync(outputPath, normalizedContent, "utf8");
+              return;
             }
 
-            fs.writeFileSync(outputPath, normalizedContent, "utf8");
+            throw new Error(`OpenAI-compatible review request failed. ${errors.join(" | ").slice(0, 4000)}`);
           }
 
           main().catch((error) => {
@@ -278,6 +351,10 @@ jobs:
           const providerOutcome = provider === "openai-compatible"
             ? (process.env.OPENAI_REVIEW_OUTCOME || "")
             : (process.env.GEMINI_REVIEW_OUTCOME || "");
+          const providerMetaPath = path.join("runtime", "review-provider.json");
+          const providerMeta = fs.existsSync(providerMetaPath)
+            ? JSON.parse(fs.readFileSync(providerMetaPath, "utf8"))
+            : null;
           const rawSummaryPath = path.join("runtime", "review-model-output.txt");
           const rawSummary = fs.existsSync(rawSummaryPath)
             ? fs.readFileSync(rawSummaryPath, "utf8")
@@ -299,6 +376,8 @@ jobs:
             "Review callback captured from GitHub workflow.",
             `Review provider was ${provider}.`,
             `Credential source was ${process.env.REVIEW_CREDENTIAL_SOURCE}.`,
+            `Review transport was ${providerMeta?.protocol || "unknown"}.`,
+            `Review model was ${providerMeta?.model || "unknown"}.`,
             `Target repository was ${process.env.TARGET_REPOSITORY}.`,
             `Base branch was ${process.env.BASE_BRANCH}.`,
             `Work branch was ${process.env.WORK_BRANCH}.`,

@@ -1,9 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { createDefaultConfig, loadConfig, updateGitHubConfig } from "../src/config";
+import { createDefaultConfig, loadConfig, resolveMachineConfigPath, updateGitHubConfig } from "../src/config";
 import { createTempDir } from "./helpers";
 
 test("loadConfig accepts camelCase external config keys", () => {
@@ -102,4 +102,53 @@ test("updateGitHubConfig writes a repository override to workers.local.json", ()
   const config = loadConfig(root, result.path);
   assert.equal(config.github.repository, "axincha51234-commits/codex-head-test");
   assert.equal(config.github.dispatch_mode, "gh_cli");
+});
+
+test("loadConfig merges workers.machine.json after workers.local.json by default", () => {
+  const root = createTempDir("codex-head-machine-config-");
+  const configDir = join(root, "config");
+  mkdirSync(configDir, { recursive: true });
+
+  writeFileSync(join(configDir, "workers.local.json"), JSON.stringify({
+    github: {
+      enabled: true,
+      execution_preference: "remote_only"
+    },
+    command_templates: {
+      "gemini-cli": {
+        local: {
+          name: "gemini-local",
+          executable: "gemini",
+          args: ["-p", "{{task_prompt}}"],
+          env: {
+            GEMINI_API_KEY: "shared-placeholder"
+          }
+        }
+      }
+    }
+  }, null, 2), "utf8");
+
+  writeFileSync(resolveMachineConfigPath(root), JSON.stringify({
+    github: {
+      execution_preference: "local_preferred"
+    },
+    command_templates: {
+      "gemini-cli": {
+        local: {
+          name: "gemini-machine",
+          executable: "gemini",
+          args: ["-m", "gemini-2.5-flash", "-p", "{{task_prompt}}"],
+          env: {
+            GEMINI_API_KEY: "machine-secret"
+          }
+        }
+      }
+    }
+  }, null, 2), "utf8");
+
+  const config = loadConfig(root);
+  assert.equal(config.github.enabled, true);
+  assert.equal(config.github.execution_preference, "local_preferred");
+  assert.equal(config.command_templates["gemini-cli"].local?.name, "gemini-machine");
+  assert.equal(config.command_templates["gemini-cli"].local?.env?.GEMINI_API_KEY, "machine-secret");
 });

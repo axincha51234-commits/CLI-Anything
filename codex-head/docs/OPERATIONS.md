@@ -177,7 +177,9 @@ those values into the spawned worker environment after template interpolation.
 
 Create `config/workers.local.json` from
 [`config/workers.example.json`](../config/workers.example.json) when you want
-to override that behavior.
+to override that behavior. Keep machine-only secrets and absolute paths in
+`config/workers.machine.json`; the loader merges that file after
+`workers.local.json`.
 
 If you override `gemini-cli`, prefer keeping an explicit `-m` value in the
 local template so headless runs do not silently drift to a quota-exhausted
@@ -307,6 +309,8 @@ self-hosted runner on the same Windows machine. Use
 to register the runner, set `CODEX_HEAD_RUNS_ON_JSON`, and optionally wire
 `REVIEW_API_URL` plus `REVIEW_API_KEY` straight to a local
 Antigravity-Manager instance such as `http://127.0.0.1:8045/v1`.
+That review workflow now tries `/v1/responses` first and falls back to
+`/v1/chat/completions`, so proxies that expose either shape can be used.
 
 ## Common Failure Cases
 

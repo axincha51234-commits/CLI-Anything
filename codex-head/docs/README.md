@@ -136,6 +136,8 @@ older camelCase variants for backward compatibility.
   fallback callback
 - GitHub workflows can now switch to self-hosted runners through the repository
   variable `CODEX_HEAD_RUNS_ON_JSON`, instead of editing `runs-on` in YAML
+- Machine-only overrides can now live in `config/workers.machine.json`, which
+  is merged after `config/workers.local.json`
 - Callback reconciliation from GitHub artifacts into SQLite can be polled
   on-demand, but it is not automatic or background-polled
 - `run-goal` can self-heal across local workers, but it still cannot recover if

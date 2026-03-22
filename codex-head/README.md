@@ -27,11 +27,12 @@ The default local templates now run `claude-code`, `codex-cli`, and
 `gemini-cli` in safe non-interactive read-only or plan-style modes. The Gemini
 template is pinned to `gemini-2.5-flash` because headless `auto` or premium
 defaults can be quota-sensitive on real operator accounts. Local command
-templates can also inject environment variables through an optional `env` map
-in `workers.local.json`, which is useful for WSL-backed `codex-cli` setups.
-That same override path is also the clean way to route local workers through a
-local proxy such as Antigravity-Manager on `http://127.0.0.1:8045` without
-rewriting your global CLI config.
+templates can also inject environment variables through an optional `env` map.
+Use `config/workers.local.json` for shareable repo-local overrides, and keep
+machine-only secrets or absolute paths in `config/workers.machine.json`.
+That machine overlay is merged after `workers.local.json`, which keeps the
+tracked config safe while still supporting WSL-backed `codex-cli` or local
+proxy routing such as Antigravity-Manager on `http://127.0.0.1:8045`.
 These workers are meant to produce artifacts, summaries, and patch text, not
 uncontrolled local mutation.
 
@@ -120,6 +121,8 @@ currently local-ready and exposes the matching cooldown reason.
 - The GitHub review workflow now supports three remote auth paths in order:
   `REVIEW_API_URL` + `REVIEW_API_KEY` for an OpenAI-compatible endpoint,
   `OPENAI_API_KEY` for direct OpenAI usage, or `GEMINI_API_KEY` for Gemini.
+- On the OpenAI-compatible path, the workflow now tries `/v1/responses` first
+  and falls back to `/v1/chat/completions` if needed.
 - Both GitHub workflows now also honor the repository variable
   `CODEX_HEAD_RUNS_ON_JSON`, so you can switch from `["ubuntu-latest"]` to a
   self-hosted label array without editing workflow YAML each time.
