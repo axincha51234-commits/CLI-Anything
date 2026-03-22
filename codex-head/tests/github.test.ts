@@ -346,6 +346,122 @@ test("GitHubControlPlane can download a callback artifact for a task id", () => 
   );
 });
 
+test("GitHubControlPlane enriches callback download failures with queued self-hosted diagnosis", () => {
+  const root = createTempDir("codex-head-github-download-queued-");
+  const config = createTestConfig(root);
+  config.github.repository = "example/repo";
+  const previousMachineConfig = process.env.CODEX_HEAD_MACHINE_CONFIG;
+  delete process.env.CODEX_HEAD_MACHINE_CONFIG;
+
+  try {
+    const artifactStore = new FileArtifactStore(config.artifacts_dir);
+    const github = new GitHubControlPlane(config, artifactStore, {
+      findBinary: () => "C:/Program Files/GitHub CLI/gh.exe",
+      runCli: (args) => {
+        if (args[0] === "auth") {
+          return {
+            ok: true,
+            exitCode: 0,
+            stdout: "Logged in to github.com",
+            stderr: "",
+            durationMs: 1,
+            timedOut: false
+          };
+        }
+        if (args[0] === "api" && args[1] === "repos/example/repo/actions/variables/CODEX_HEAD_RUNS_ON_JSON") {
+          return {
+            ok: true,
+            exitCode: 0,
+            stdout: JSON.stringify({
+              name: "CODEX_HEAD_RUNS_ON_JSON",
+              value: "[\"self-hosted\",\"Windows\",\"codex-head\"]"
+            }),
+            stderr: "",
+            durationMs: 1,
+            timedOut: false
+          };
+        }
+        if (args[0] === "api" && args[1] === "repos/example/repo/actions/runners") {
+          return {
+            ok: true,
+            exitCode: 0,
+            stdout: JSON.stringify({
+              runners: [
+                {
+                  id: 21,
+                  name: "DESKTOP-F7V83BO-codex-head",
+                  os: "Windows",
+                  status: "online",
+                  busy: false,
+                  labels: [
+                    { name: "self-hosted" },
+                    { name: "Windows" },
+                    { name: "X64" },
+                    { name: "codex-head" }
+                  ]
+                }
+              ]
+            }),
+            stderr: "",
+            durationMs: 1,
+            timedOut: false
+          };
+        }
+        if (args[0] === "run" && args[1] === "view") {
+          return {
+            ok: true,
+            exitCode: 0,
+            stdout: JSON.stringify({
+              databaseId: 991,
+              status: "queued",
+              conclusion: null,
+              url: "https://github.com/example/repo/actions/runs/991",
+              workflowName: "codex-head-worker.yml",
+              updatedAt: new Date().toISOString(),
+              jobs: [
+                {
+                  name: "worker",
+                  status: "queued",
+                  conclusion: null,
+                  labels: ["self-hosted", "Windows", "codex-head"]
+                }
+              ]
+            }),
+            stderr: "",
+            durationMs: 1,
+            timedOut: false
+          };
+        }
+        if (args[0] === "run" && args[1] === "download") {
+          return {
+            ok: false,
+            exitCode: 1,
+            stdout: "",
+            stderr: "artifact not found",
+            durationMs: 1,
+            timedOut: false
+          };
+        }
+        throw new Error(`Unexpected gh args: ${args.join(" ")}`);
+      }
+    });
+
+    assert.throws(
+      () => github.downloadCallbackArtifact("task-queued-download", { run_id: 991 }),
+      /artifact not found|stale broker session|github-queue-diagnosis\.json/i
+    );
+
+    const diagnosisPath = resolve(config.artifacts_dir, "task-queued-download", "github-queue-diagnosis.json");
+    assert.equal(existsSync(diagnosisPath), true);
+  } finally {
+    if (previousMachineConfig === undefined) {
+      delete process.env.CODEX_HEAD_MACHINE_CONFIG;
+    } else {
+      process.env.CODEX_HEAD_MACHINE_CONFIG = previousMachineConfig;
+    }
+  }
+});
+
 test("GitHubControlPlane can publish issue and PR mirrors through gh cli", () => {
   const root = createTempDir("codex-head-github-mirror-");
   const config = createTestConfig(root);

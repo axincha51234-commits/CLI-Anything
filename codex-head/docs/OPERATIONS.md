@@ -341,6 +341,9 @@ If a GitHub run stays `queued` against a self-hosted label set for too long,
 `codex-head` now writes `github-queue-diagnosis.json` into the task artifact
 directory and raises a more specific error when it looks like no matching
 runner is available or a stale broker session is blocking pickup.
+The same diagnosis file is now referenced by `wait-github-callback`,
+`sync-github-callback`, and `recover-running` when callback ingestion fails
+while the run is still queued.
 
 ### `missing_binary`
 

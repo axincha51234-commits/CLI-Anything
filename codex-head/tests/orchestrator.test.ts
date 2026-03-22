@@ -660,6 +660,89 @@ test("syncGitHubCallback downloads and ingests a callback artifact into task sta
   assert.equal(orchestrator.getTask(task.task.task_id).state, "completed");
 });
 
+test("syncGitHubCallback surfaces queued self-hosted diagnosis when callback download is not ready", async () => {
+  const root = createTempDir("codex-head-sync-callback-queued-");
+  const registry = new AdapterRegistry();
+
+  registry.register(new FakeAdapter(
+    makeCapability("gemini-cli"),
+    createHealthyHealth("gemini-cli"),
+    async () => {
+      throw new Error("GitHub review should not run locally");
+    }
+  ));
+
+  registry.register(new FakeAdapter(
+    makeCapability("codex-cli"),
+    createHealthyHealth("codex-cli"),
+    async () => {
+      throw new Error("should not execute");
+    }
+  ));
+
+  registry.register(new FakeAdapter(
+    makeCapability("claude-code"),
+    createHealthyHealth("claude-code"),
+    async () => {
+      throw new Error("should not execute");
+    }
+  ));
+
+  registry.register(new FakeAdapter(
+    makeCapability("antigravity", { supports_local: false, supports_github: false }),
+    createHealthyHealth("antigravity"),
+    async () => {
+      throw new Error("should not execute");
+    }
+  ));
+
+  const config = createTestConfig(root);
+  config.github.repository = "example/repo";
+  const orchestrator = createAppWithRegistry(root, registry, config);
+  const task = orchestrator.submitTask(createTaskSpec({
+    goal: "Review the latest PR in GitHub",
+    repo: root,
+    worker_target: "gemini-cli",
+    expected_output: { kind: "review", format: "markdown", code_change: false },
+    requires_github: true
+  }));
+
+  orchestrator.enqueueTask(task.task.task_id);
+  const dispatchOutcome = await orchestrator.dispatchNext();
+  assert.equal(dispatchOutcome?.state, "running");
+
+  (orchestrator as any).github = {
+    resolveTaskRun: () => ({
+      run_id: 987,
+      run_url: "https://github.com/example/repo/actions/runs/987",
+      workflow_name: "codex-head-gemini-review.yml",
+      status: "queued",
+      conclusion: null,
+      updated_at: Date.now()
+    }),
+    downloadCallbackArtifact: () => {
+      throw new Error("GitHub callback download failed: no callback artifact is available yet");
+    },
+    diagnoseQueuedRunIfPresent: () => {
+      orchestrator.artifactStore.writeJson(task.task.task_id, "github-queue-diagnosis.json", {
+        task_id: task.task.task_id,
+        run_id: 987,
+        reason: "Matching self-hosted runners are all busy.",
+        suggested_action: "Consider recycling the self-hosted runner before retrying."
+      });
+      return {
+        reason: "Matching self-hosted runners are all busy.",
+        suggested_action: "Consider recycling the self-hosted runner before retrying."
+      };
+    }
+  };
+
+  assert.throws(
+    () => orchestrator.syncGitHubCallback(task.task.task_id),
+    /all busy|recycling the self-hosted runner|github-queue-diagnosis\.json/i
+  );
+});
+
 test("waitForGitHubCallback waits on a resolved run and ingests the callback", async () => {
   const root = createTempDir("codex-head-wait-callback-");
   const registry = new AdapterRegistry();
@@ -900,6 +983,99 @@ test("recoverRunningTasks resolves a GitHub run through the real control plane b
   assert.equal(recovered[0]?.status, "reconciled");
   assert.equal(orchestrator.getTask(task.task.task_id).state, "completed");
   assert.equal(orchestrator.getTask(task.task.task_id).github_run?.run_id, 654);
+});
+
+test("recoverRunningTasks preserves queued wait detail when fallback sync also fails", async () => {
+  const root = createTempDir("codex-head-recover-gh-queued-detail-");
+  const registry = new AdapterRegistry();
+
+  registry.register(new FakeAdapter(
+    makeCapability("gemini-cli"),
+    createHealthyHealth("gemini-cli"),
+    async () => {
+      throw new Error("GitHub review should not run locally");
+    }
+  ));
+
+  registry.register(new FakeAdapter(
+    makeCapability("codex-cli"),
+    createHealthyHealth("codex-cli"),
+    async () => {
+      throw new Error("should not execute");
+    }
+  ));
+
+  registry.register(new FakeAdapter(
+    makeCapability("claude-code"),
+    createHealthyHealth("claude-code"),
+    async () => {
+      throw new Error("should not execute");
+    }
+  ));
+
+  registry.register(new FakeAdapter(
+    makeCapability("antigravity", { supports_local: false, supports_github: false }),
+    createHealthyHealth("antigravity"),
+    async () => {
+      throw new Error("should not execute");
+    }
+  ));
+
+  const config = createTestConfig(root);
+  config.github.repository = "example/repo";
+  const orchestrator = createAppWithRegistry(root, registry, config);
+  const task = orchestrator.submitTask(createTaskSpec({
+    goal: "Review the latest PR in GitHub",
+    repo: root,
+    worker_target: "gemini-cli",
+    expected_output: { kind: "review", format: "markdown", code_change: false },
+    requires_github: true
+  }));
+
+  orchestrator.enqueueTask(task.task.task_id);
+  const dispatchOutcome = await orchestrator.dispatchNext();
+  assert.equal(dispatchOutcome?.state, "running");
+
+  (orchestrator as any).github = {
+    resolveTaskRun: () => ({
+      run_id: 321,
+      run_url: "https://github.com/example/repo/actions/runs/321",
+      workflow_name: "codex-head-gemini-review.yml",
+      status: "queued",
+      conclusion: null,
+      updated_at: Date.now()
+    }),
+    waitForRunCompletion: async () => {
+      orchestrator.artifactStore.writeJson(task.task.task_id, "github-queue-diagnosis.json", {
+        task_id: task.task.task_id,
+        run_id: 321,
+        reason: "The run is still queued even though a matching self-hosted runner appears online and idle; a stale broker session is likely.",
+        suggested_action: "Consider recycling the self-hosted runner before retrying."
+      });
+      throw new Error(
+        `GitHub run 321 appears stuck in queued state for task ${task.task.task_id}: `
+        + "The run is still queued even though a matching self-hosted runner appears online and idle; a stale broker session is likely."
+      );
+    },
+    downloadCallbackArtifact: () => {
+      throw new Error("GitHub callback download failed: no callback artifact is available yet");
+    },
+    diagnoseQueuedRunIfPresent: () => ({
+      reason: "The run is still queued even though a matching self-hosted runner appears online and idle; a stale broker session is likely.",
+      suggested_action: "Consider recycling the self-hosted runner before retrying."
+    })
+  };
+
+  const recovered = await orchestrator.recoverRunningTasks({ timeout_sec: 1, interval_sec: 1 });
+  assert.equal(recovered.length, 1);
+  assert.equal(recovered[0]?.status, "failed");
+  assert.match(recovered[0]?.detail ?? "", /stuck in queued state/i);
+  assert.match(recovered[0]?.detail ?? "", /Fallback callback sync also failed/i);
+  assert.match(recovered[0]?.detail ?? "", /github-queue-diagnosis\.json/i);
+
+  const record = orchestrator.getTask(task.task.task_id);
+  assert.equal(record.state, "failed");
+  assert.match(record.last_error ?? "", /Fallback callback sync also failed/i);
 });
 
 test("recoverRunningTasks fails unresolved GitHub tasks when no run or callback can be found", async () => {

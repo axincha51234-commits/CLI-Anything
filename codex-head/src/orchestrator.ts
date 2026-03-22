@@ -805,9 +805,14 @@ export class CodexHeadOrchestrator {
     if (runRef && (!record.github_run || record.github_run.run_id !== runRef.run_id)) {
       this.taskStore.recordGitHubRun(taskId, runRef);
     }
-    const download = this.github.downloadCallbackArtifact(taskId, {
-      run_id: runRef?.run_id ?? null
-    });
+    let download;
+    try {
+      download = this.github.downloadCallbackArtifact(taskId, {
+        run_id: runRef?.run_id ?? null
+      });
+    } catch (error) {
+      throw new Error(this.formatGitHubCallbackFailure(taskId, error, runRef?.run_id ?? null));
+    }
     return this.completeFromFile(download.callback_path);
   }
 
@@ -819,17 +824,27 @@ export class CodexHeadOrchestrator {
       throw new Error(`Task ${taskId} does not have a resolved GitHub workflow run yet`);
     }
 
-    const latest = await this.github.waitForRunCompletion(
-      taskId,
-      runRef.run_id,
-      Math.max(1, timeoutSec) * 1000,
-      Math.max(1, intervalSec) * 1000
-    );
+    let latest;
+    try {
+      latest = await this.github.waitForRunCompletion(
+        taskId,
+        runRef.run_id,
+        Math.max(1, timeoutSec) * 1000,
+        Math.max(1, intervalSec) * 1000
+      );
+    } catch (error) {
+      throw new Error(this.formatGitHubCallbackFailure(taskId, error, runRef.run_id));
+    }
     this.taskStore.recordGitHubRun(taskId, latest);
 
-    const download = this.github.downloadCallbackArtifact(taskId, {
-      run_id: latest.run_id
-    });
+    let download;
+    try {
+      download = this.github.downloadCallbackArtifact(taskId, {
+        run_id: latest.run_id
+      });
+    } catch (error) {
+      throw new Error(this.formatGitHubCallbackFailure(taskId, error, latest.run_id));
+    }
     return this.completeFromFile(download.callback_path);
   }
 
@@ -898,6 +913,7 @@ export class CodexHeadOrchestrator {
             outcome
           });
         } catch (error) {
+          const waitDetail = error instanceof Error ? error.message : String(error);
           try {
             const outcome = this.syncGitHubCallback(record.task.task_id);
             results.push({
@@ -907,7 +923,10 @@ export class CodexHeadOrchestrator {
               outcome
             });
           } catch (syncError) {
-            const detail = syncError instanceof Error ? syncError.message : String(syncError);
+            const syncDetail = syncError instanceof Error ? syncError.message : String(syncError);
+            const detail = syncDetail === waitDetail
+              ? syncDetail
+              : `${waitDetail} Fallback callback sync also failed: ${syncDetail}`;
             const routing = record.routing;
             const result: WorkerResult = {
               task_id: record.task.task_id,
@@ -1003,6 +1022,42 @@ export class CodexHeadOrchestrator {
       resolveTaskRun?: (taskInput: TaskSpec) => TaskRecord["github_run"] | null;
     }).resolveTaskRun;
     return typeof candidate === "function" ? candidate.call(this.github, task) : null;
+  }
+
+  private formatGitHubCallbackFailure(taskId: string, error: unknown, runId: number | null): string {
+    let detail = error instanceof Error ? error.message : String(error);
+
+    if (runId !== null && Number.isFinite(runId)) {
+      const candidate = (this.github as unknown as {
+        diagnoseQueuedRunIfPresent?: (
+          queuedTaskId: string,
+          queuedRunId: number,
+          queuedForMs?: number
+        ) => {
+          reason: string;
+          suggested_action: string | null;
+        } | null;
+      }).diagnoseQueuedRunIfPresent;
+
+      if (typeof candidate === "function") {
+        const diagnosis = candidate.call(this.github, taskId, runId, 0);
+        if (diagnosis) {
+          if (!detail.includes(diagnosis.reason)) {
+            detail = `${detail} ${diagnosis.reason}`;
+          }
+          if (diagnosis.suggested_action && !detail.includes(diagnosis.suggested_action)) {
+            detail = `${detail} ${diagnosis.suggested_action}`;
+          }
+        }
+      }
+    }
+
+    const diagnosisPath = join(this.artifactStore.getTaskDir(taskId), "github-queue-diagnosis.json");
+    if (existsSync(diagnosisPath) && !detail.includes(diagnosisPath)) {
+      detail = `${detail} See ${diagnosisPath} for runner queue diagnosis.`;
+    }
+
+    return detail;
   }
 
   private async inspectAdapterReadiness(healthEntries?: Awaited<ReturnType<AdapterRegistry["health"]>>): Promise<AdapterRuntimeReadiness[]> {

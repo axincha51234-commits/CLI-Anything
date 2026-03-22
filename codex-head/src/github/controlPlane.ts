@@ -814,6 +814,67 @@ export class GitHubControlPlane {
     };
   }
 
+  inspectRun(taskId: string, runId: number): GitHubRunState {
+    const runtime = this.inspectRuntime();
+    if (!runtime.enabled) {
+      throw new Error("GitHub control plane is disabled");
+    }
+    if (!runtime.gh_cli_available) {
+      throw new Error(`GitHub run inspection requires ${this.config.github.cli_binary} to be installed`);
+    }
+    if (!runtime.gh_authenticated) {
+      throw new Error(`GitHub run inspection requires ${this.config.github.cli_binary} authentication`);
+    }
+    if (!this.config.github.repository || this.config.github.repository === "OWNER/REPO") {
+      throw new Error("GitHub run inspection requires github.repository to be configured");
+    }
+
+    const args = [
+      "run",
+      "view",
+      String(runId),
+      "--repo",
+      this.config.github.repository,
+      "--json",
+      "databaseId,status,conclusion,url,workflowName,updatedAt"
+    ];
+    const result = this.runCli(args);
+    this.artifactStore.writeJson(taskId, "github-run-view.json", {
+      run_id: runId,
+      repository: this.config.github.repository,
+      command: [this.config.github.cli_binary, ...args],
+      gh_exit_code: result.exitCode,
+      gh_stdout: result.stdout.trim(),
+      gh_stderr: result.stderr.trim()
+    });
+    if (!result.ok) {
+      const detail = result.stderr.trim() || result.stdout.trim() || `exit code ${String(result.exitCode)}`;
+      throw new Error(`GitHub run status lookup failed: ${detail}`);
+    }
+
+    const parsed = JSON.parse(result.stdout || "{}") as Partial<GitHubRunListEntry>;
+    return {
+      run_id: Number(parsed.databaseId ?? runId),
+      run_url: parsed.url ?? null,
+      workflow_name: parsed.workflowName ?? "unknown",
+      status: parsed.status ?? "unknown",
+      conclusion: parsed.conclusion ?? null,
+      updated_at: Date.parse(parsed.updatedAt ?? "") || Date.now()
+    };
+  }
+
+  diagnoseQueuedRunIfPresent(taskId: string, runId: number, queuedForMs = 0): GitHubQueueDiagnosis | null {
+    try {
+      const runState = this.inspectRun(taskId, runId);
+      if (runState.status.trim().toLowerCase() !== "queued") {
+        return null;
+      }
+      return this.diagnoseQueuedRun(taskId, runId, runState, queuedForMs);
+    } catch {
+      return null;
+    }
+  }
+
   async waitForRunCompletion(taskId: string, runId: number, timeoutMs = 300_000, intervalMs = 5_000): Promise<GitHubRunState> {
     const runtime = this.inspectRuntime();
     if (!runtime.enabled) {
@@ -835,44 +896,13 @@ export class GitHubControlPlane {
     let lastState: GitHubRunState | null = null;
     let lastQueueDiagnosis: GitHubQueueDiagnosis | null = null;
     while (Date.now() <= deadline) {
-      const args = [
-        "run",
-        "view",
-        String(runId),
-        "--repo",
-        this.config.github.repository,
-        "--json",
-        "databaseId,status,conclusion,url,workflowName,updatedAt"
-      ];
-      const result = this.runCli(args);
-      this.artifactStore.writeJson(taskId, "github-run-view.json", {
-        run_id: runId,
-        repository: this.config.github.repository,
-        command: [this.config.github.cli_binary, ...args],
-        gh_exit_code: result.exitCode,
-        gh_stdout: result.stdout.trim(),
-        gh_stderr: result.stderr.trim()
-      });
-      if (!result.ok) {
-        const detail = result.stderr.trim() || result.stdout.trim() || `exit code ${String(result.exitCode)}`;
-        throw new Error(`GitHub run status lookup failed: ${detail}`);
-      }
-
-      const parsed = JSON.parse(result.stdout || "{}") as Partial<GitHubRunListEntry>;
-      lastState = {
-        run_id: Number(parsed.databaseId ?? runId),
-        run_url: parsed.url ?? null,
-        workflow_name: parsed.workflowName ?? "unknown",
-        status: parsed.status ?? "unknown",
-        conclusion: parsed.conclusion ?? null,
-        updated_at: Date.parse(parsed.updatedAt ?? "") || Date.now()
-      };
+      lastState = this.inspectRun(taskId, runId);
       if (lastState.status === "queued" && Date.now() - startedAt >= queueDiagnosisThresholdMs) {
         lastQueueDiagnosis = this.diagnoseQueuedRun(taskId, runId, lastState, Date.now() - startedAt);
         if (lastQueueDiagnosis.likely_stalled) {
           throw new Error(
             `GitHub run ${runId} appears stuck in queued state for task ${taskId}: ${lastQueueDiagnosis.reason}`
-            + (lastQueueDiagnosis.suggested_action ? ` ${lastQueueDiagnosis.suggested_action}` : "")
+            + this.renderQueueDiagnosisHint(taskId, lastQueueDiagnosis)
           );
         }
       }
@@ -891,7 +921,7 @@ export class GitHubControlPlane {
     throw new Error(
       `Timed out waiting for GitHub callback for task ${taskId} after ${Math.ceil(timeoutMs / 1000)}s`
       + (lastState ? ` (last status: ${lastState.status})` : "")
-      + (lastQueueDiagnosis ? ` (${lastQueueDiagnosis.reason})` : "")
+      + (lastQueueDiagnosis ? ` (${lastQueueDiagnosis.reason})${this.renderQueueDiagnosisHint(taskId, lastQueueDiagnosis)}` : "")
     );
   }
 
@@ -947,7 +977,13 @@ export class GitHubControlPlane {
 
     if (!result.ok) {
       const detail = result.stderr.trim() || result.stdout.trim() || `exit code ${String(result.exitCode)}`;
-      throw new Error(`GitHub callback download failed: ${detail}`);
+      const queueDiagnosis = options.run_id !== undefined && options.run_id !== null
+        ? this.diagnoseQueuedRunIfPresent(taskId, options.run_id)
+        : null;
+      throw new Error(
+        `GitHub callback download failed: ${detail}`
+        + (queueDiagnosis ? this.renderQueueDiagnosisHint(taskId, queueDiagnosis) : "")
+      );
     }
 
     const callbackPath = this.findDownloadedCallback(downloadDir);
@@ -1058,6 +1094,14 @@ export class GitHubControlPlane {
 
     this.artifactStore.writeJson(taskId, "github-queue-diagnosis.json", diagnosis);
     return diagnosis;
+  }
+
+  private renderQueueDiagnosisHint(taskId: string, diagnosis: Pick<GitHubQueueDiagnosis, "suggested_action">): string {
+    const parts = [
+      diagnosis.suggested_action,
+      `See ${join(this.artifactStore.getTaskDir(taskId), "github-queue-diagnosis.json")}.`
+    ].filter((value): value is string => Boolean(value && value.trim()));
+    return parts.length > 0 ? ` ${parts.join(" ")}` : "";
   }
 
   private selectWorkflow(task: TaskSpec): string {
