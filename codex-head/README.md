@@ -147,6 +147,9 @@ currently local-ready and exposes the matching cooldown reason.
   again.
 - GitHub callback reconciliation can now either sync directly from artifacts or
   wait on a resolved workflow run, but it is not background or automatic yet.
+- `npm run health` now also reports the resolved self-hosted `runs-on` labels,
+  matching runner records, and whether a machine-local worker overlay is
+  visible, so operator triage no longer depends on ad hoc `gh api` calls.
 - Local worker defaults do not verify upstream CLI authentication in advance,
   so automatic fallback still fails if every candidate worker is unusable at
   runtime.

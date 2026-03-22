@@ -329,6 +329,14 @@ bring the runner back online without triggering an avoidable session conflict.
 
 ## Common Failure Cases
 
+Run `npm run health` first when GitHub dispatches stall. The health snapshot now
+includes:
+
+- the resolved `CODEX_HEAD_RUNS_ON_JSON` label array
+- matching self-hosted runner records and their `online` / `busy` state
+- whether `workers.machine.json` is visible through the current machine overlay
+- the usual local worker readiness and cooldown state
+
 ### `missing_binary`
 
 - Cause: `npm run health` can find no installed binary for the worker.

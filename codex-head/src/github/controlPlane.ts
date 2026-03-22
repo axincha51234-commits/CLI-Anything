@@ -42,6 +42,21 @@ export interface GitHubRuntimeStatus {
   gh_cli_available: boolean;
   gh_cli_path: string | null;
   gh_authenticated: boolean;
+  machine_config_path: string | null;
+  machine_config_exists: boolean;
+  runs_on_json: string | null;
+  runs_on_labels: string[];
+  self_hosted_targeted: boolean;
+  matching_runners: Array<{
+    id: number;
+    name: string;
+    os: string;
+    status: string;
+    busy: boolean;
+    labels: string[];
+    matches_target_labels: boolean;
+  }>;
+  runner_lookup_detail: string | null;
 }
 
 export interface GitHubDispatchReceipt {
@@ -109,6 +124,48 @@ interface GitHubRunListEntry {
   workflowName?: string;
   createdAt?: string;
   updatedAt?: string;
+}
+
+interface GitHubActionsVariableResponse {
+  name?: string;
+  value?: string;
+}
+
+interface GitHubRunnerApiEntry {
+  id?: number;
+  name?: string;
+  os?: string;
+  status?: string;
+  busy?: boolean;
+  labels?: Array<{ name?: string }>;
+}
+
+function parseRunsOnLabels(rawValue: string | null): string[] {
+  if (!rawValue) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(rawValue) as unknown;
+    if (Array.isArray(parsed)) {
+      return parsed
+        .filter((value): value is string => typeof value === "string")
+        .map((value) => value.trim())
+        .filter(Boolean);
+    }
+  } catch {
+    return [];
+  }
+
+  return [];
+}
+
+function parseJsonOrNull<T>(raw: string): T | null {
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
 }
 
 function sleep(ms: number): Promise<void> {
@@ -203,6 +260,84 @@ export class GitHubControlPlane {
     const ghCliPath = this.findBinary(this.config.github.cli_binary);
     const ghCliAvailable = Boolean(ghCliPath);
     const auth = ghCliAvailable ? this.runCli(["auth", "status"]) : null;
+    const machineConfigCandidate = process.env.CODEX_HEAD_MACHINE_CONFIG?.trim()
+      || join(this.config.app_root, "config", "workers.machine.json");
+    const machineConfigPath = machineConfigCandidate && existsSync(machineConfigCandidate)
+      ? machineConfigCandidate
+      : null;
+    let runsOnJson: string | null = null;
+    let runsOnLabels: string[] = [];
+    let matchingRunners: GitHubRuntimeStatus["matching_runners"] = [];
+    let runnerLookupDetail: string | null = null;
+
+    if (
+      this.config.github.enabled
+      && ghCliAvailable
+      && auth?.ok
+      && this.config.github.repository
+      && this.config.github.repository !== "OWNER/REPO"
+    ) {
+      try {
+        const variableResult = this.runCli([
+          "api",
+          `repos/${this.config.github.repository}/actions/variables/CODEX_HEAD_RUNS_ON_JSON`
+        ]);
+
+        if (variableResult.ok) {
+          const parsedVariable = parseJsonOrNull<GitHubActionsVariableResponse>(variableResult.stdout || "");
+          if (parsedVariable) {
+            runsOnJson = typeof parsedVariable.value === "string" ? parsedVariable.value : null;
+            runsOnLabels = parseRunsOnLabels(runsOnJson);
+          } else {
+            runnerLookupDetail = "unable to parse CODEX_HEAD_RUNS_ON_JSON response";
+          }
+        } else {
+          runnerLookupDetail = variableResult.stderr.trim() || variableResult.stdout.trim() || "unable to query CODEX_HEAD_RUNS_ON_JSON";
+        }
+      } catch (error) {
+        runnerLookupDetail = error instanceof Error ? error.message : String(error);
+      }
+
+      if (runsOnLabels.includes("self-hosted")) {
+        try {
+          const runnersResult = this.runCli([
+            "api",
+            `repos/${this.config.github.repository}/actions/runners`
+          ]);
+
+          if (runnersResult.ok) {
+            const parsedRunners = parseJsonOrNull<{ runners?: GitHubRunnerApiEntry[] }>(runnersResult.stdout || "");
+            if (parsedRunners) {
+              const targetLabels = runsOnLabels.map((label) => label.toLowerCase());
+              matchingRunners = (parsedRunners.runners ?? [])
+                .map((runner) => {
+                  const labels = (runner.labels ?? [])
+                    .map((label) => label.name?.trim() ?? "")
+                    .filter(Boolean);
+                  const normalizedLabels = labels.map((label) => label.toLowerCase());
+                  const matchesTargetLabels = targetLabels.every((label) => normalizedLabels.includes(label));
+                  return {
+                    id: Number(runner.id ?? 0),
+                    name: String(runner.name ?? ""),
+                    os: String(runner.os ?? ""),
+                    status: String(runner.status ?? "unknown"),
+                    busy: Boolean(runner.busy),
+                    labels,
+                    matches_target_labels: matchesTargetLabels
+                  };
+                })
+                .filter((runner) => runner.name.length > 0 && runner.matches_target_labels);
+            } else {
+              runnerLookupDetail = "unable to parse self-hosted runner response";
+            }
+          } else {
+            runnerLookupDetail = runnersResult.stderr.trim() || runnersResult.stdout.trim() || "unable to query self-hosted runners";
+          }
+        } catch (error) {
+          runnerLookupDetail = error instanceof Error ? error.message : String(error);
+        }
+      }
+    }
 
     return {
       enabled: this.config.github.enabled,
@@ -214,7 +349,14 @@ export class GitHubControlPlane {
       cli_binary: this.config.github.cli_binary,
       gh_cli_available: ghCliAvailable,
       gh_cli_path: ghCliPath,
-      gh_authenticated: Boolean(auth?.ok)
+      gh_authenticated: Boolean(auth?.ok),
+      machine_config_path: machineConfigPath,
+      machine_config_exists: Boolean(machineConfigPath),
+      runs_on_json: runsOnJson,
+      runs_on_labels: runsOnLabels,
+      self_hosted_targeted: runsOnLabels.includes("self-hosted"),
+      matching_runners: matchingRunners,
+      runner_lookup_detail: runnerLookupDetail
     };
   }
 

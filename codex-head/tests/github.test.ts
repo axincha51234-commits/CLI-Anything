@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { FileArtifactStore } from "../src/artifacts/fileArtifactStore";
@@ -68,6 +68,101 @@ test("GitHubControlPlane can verify repository access through gh cli", () => {
   assert.equal(status.accessible, true);
   assert.equal(status.default_branch, "main");
   assert.equal(status.viewer_permission, "WRITE");
+});
+
+test("GitHubControlPlane inspects targeted self-hosted runners from repository metadata", () => {
+  const root = createTempDir("codex-head-github-runtime-");
+  const config = createTestConfig(root);
+  config.github.repository = "example/repo";
+  const previousMachineConfig = process.env.CODEX_HEAD_MACHINE_CONFIG;
+  process.env.CODEX_HEAD_MACHINE_CONFIG = `${root}\\workers.machine.json`;
+  writeFileSync(process.env.CODEX_HEAD_MACHINE_CONFIG, JSON.stringify({}), "utf8");
+
+  try {
+    const artifactStore = new FileArtifactStore(config.artifacts_dir);
+    const github = new GitHubControlPlane(config, artifactStore, {
+      findBinary: () => "C:/Program Files/GitHub CLI/gh.exe",
+      runCli: (args) => {
+        if (args[0] === "auth") {
+          return {
+            ok: true,
+            exitCode: 0,
+            stdout: "Logged in to github.com",
+            stderr: "",
+            durationMs: 1,
+            timedOut: false
+          };
+        }
+        if (args[0] === "api" && args[1] === "repos/example/repo/actions/variables/CODEX_HEAD_RUNS_ON_JSON") {
+          return {
+            ok: true,
+            exitCode: 0,
+            stdout: JSON.stringify({
+              name: "CODEX_HEAD_RUNS_ON_JSON",
+              value: "[\"self-hosted\",\"Windows\",\"codex-head\"]"
+            }),
+            stderr: "",
+            durationMs: 1,
+            timedOut: false
+          };
+        }
+        if (args[0] === "api" && args[1] === "repos/example/repo/actions/runners") {
+          return {
+            ok: true,
+            exitCode: 0,
+            stdout: JSON.stringify({
+              runners: [
+                {
+                  id: 21,
+                  name: "DESKTOP-F7V83BO-codex-head",
+                  os: "Windows",
+                  status: "online",
+                  busy: false,
+                  labels: [
+                    { name: "self-hosted" },
+                    { name: "Windows" },
+                    { name: "X64" },
+                    { name: "codex-head" }
+                  ]
+                },
+                {
+                  id: 22,
+                  name: "ubuntu-runner",
+                  os: "Linux",
+                  status: "online",
+                  busy: false,
+                  labels: [
+                    { name: "self-hosted" },
+                    { name: "Linux" }
+                  ]
+                }
+              ]
+            }),
+            stderr: "",
+            durationMs: 1,
+            timedOut: false
+          };
+        }
+        throw new Error(`Unexpected gh args: ${args.join(" ")}`);
+      }
+    });
+
+    const runtime = github.inspectRuntime();
+    assert.equal(runtime.machine_config_path, `${root}\\workers.machine.json`);
+    assert.equal(runtime.machine_config_exists, true);
+    assert.equal(runtime.self_hosted_targeted, true);
+    assert.equal(runtime.runs_on_json, "[\"self-hosted\",\"Windows\",\"codex-head\"]");
+    assert.deepEqual(runtime.runs_on_labels, ["self-hosted", "Windows", "codex-head"]);
+    assert.equal(runtime.matching_runners.length, 1);
+    assert.equal(runtime.matching_runners[0]?.name, "DESKTOP-F7V83BO-codex-head");
+    assert.equal(runtime.matching_runners[0]?.status, "online");
+  } finally {
+    if (previousMachineConfig === undefined) {
+      delete process.env.CODEX_HEAD_MACHINE_CONFIG;
+    } else {
+      process.env.CODEX_HEAD_MACHINE_CONFIG = previousMachineConfig;
+    }
+  }
 });
 
 test("GitHubControlPlane can dispatch the generic worker workflow through gh cli", () => {
