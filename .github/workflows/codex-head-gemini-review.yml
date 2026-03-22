@@ -71,9 +71,21 @@ jobs:
           git fetch origin "${{ github.event.inputs.base_branch }}" --depth=1
           git diff "origin/${{ github.event.inputs.base_branch }}...HEAD" > runtime/review.diff
 
+      - name: Detect Gemini workflow auth
+        id: gemini_auth
+        shell: bash
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          if [[ -n "${GEMINI_API_KEY}" ]]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Run Gemini review
         id: gemini_review
-        if: ${{ secrets.GEMINI_API_KEY != '' }}
+        if: ${{ steps.gemini_auth.outputs.configured == 'true' }}
         continue-on-error: true
         uses: google-github-actions/run-gemini-cli@v0.1.21
         with:
@@ -110,7 +122,7 @@ jobs:
           EXPECTED_OUTPUT: ${{ github.event.inputs.expected_output }}
           GEMINI_SUMMARY: ${{ steps.gemini_review.outputs.summary }}
           GEMINI_OUTCOME: ${{ steps.gemini_review.outcome }}
-          GEMINI_CONFIGURED: ${{ secrets.GEMINI_API_KEY != '' }}
+          GEMINI_CONFIGURED: ${{ steps.gemini_auth.outputs.configured }}
         run: |
           mkdir -p runtime/artifacts/${TASK_ID}
           node - <<'NODE'
