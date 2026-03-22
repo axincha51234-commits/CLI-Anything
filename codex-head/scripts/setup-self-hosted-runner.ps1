@@ -7,6 +7,7 @@ param(
   [switch]$InstallService = $true,
   [switch]$InstallScheduledTaskFallback = $true,
   [switch]$ForceNode24Actions = $true,
+  [string]$MachineConfigPath = "",
   [switch]$SetRunsOnVariable,
   [string]$ScheduledTaskName = "",
   [string]$ReviewApiUrl = "",
@@ -94,6 +95,12 @@ $resolvedRunnerName = if ([string]::IsNullOrWhiteSpace($RunnerName)) {
 } else {
   $RunnerName
 }
+$resolvedMachineConfigPath = if ([string]::IsNullOrWhiteSpace($MachineConfigPath)) {
+  Join-Path $PSScriptRoot "..\\config\\workers.machine.json"
+} else {
+  $MachineConfigPath
+}
+$resolvedMachineConfigPath = [System.IO.Path]::GetFullPath($resolvedMachineConfigPath)
 $resolvedScheduledTaskName = if ([string]::IsNullOrWhiteSpace($ScheduledTaskName)) {
   "Codex Head Runner ($resolvedRunnerName)"
 } else {
@@ -113,6 +120,14 @@ if ($ForceNode24Actions) {
   [Environment]::SetEnvironmentVariable("FORCE_JAVASCRIPT_ACTIONS_TO_NODE24", "true", "User")
   $env:FORCE_JAVASCRIPT_ACTIONS_TO_NODE24 = "true"
   Write-Host "Configured FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true for the current user."
+}
+
+if (Test-Path $resolvedMachineConfigPath) {
+  [Environment]::SetEnvironmentVariable("CODEX_HEAD_MACHINE_CONFIG", $resolvedMachineConfigPath, "User")
+  $env:CODEX_HEAD_MACHINE_CONFIG = $resolvedMachineConfigPath
+  Write-Host "Configured CODEX_HEAD_MACHINE_CONFIG=$resolvedMachineConfigPath for the current user."
+} else {
+  Write-Warning "Machine config file was not found at $resolvedMachineConfigPath. Self-hosted worker runs will use repository-local config only."
 }
 
 $downloads = Invoke-GhJson -Args @("api", "repos/$Repository/actions/runners/downloads")
@@ -220,6 +235,9 @@ if ($InstallScheduledTaskFallback -and -not (Test-Path $svcCmd)) {
 }
 if ($ForceNode24Actions) {
   Write-Host "Node 24 actions opt-in: enabled"
+}
+if (Test-Path $resolvedMachineConfigPath) {
+  Write-Host "Machine config overlay: $resolvedMachineConfigPath"
 }
 if (-not [string]::IsNullOrWhiteSpace($ReviewApiUrl)) {
   Write-Host "Configured REVIEW_API_URL and REVIEW_API_KEY for $Repository."

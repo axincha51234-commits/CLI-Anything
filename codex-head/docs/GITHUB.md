@@ -120,6 +120,8 @@ It can:
 - optionally install and start it as a Windows service
 - optionally set `CODEX_HEAD_RUNS_ON_JSON`
 - optionally set `REVIEW_API_URL`, `REVIEW_API_KEY`, and `REVIEW_MODEL`
+- automatically export `CODEX_HEAD_MACHINE_CONFIG` when a machine-only
+  `config/workers.machine.json` file exists next to the bootstrap script
 
 If the downloaded Windows runner package omits `svc.cmd`, the helper now
 registers the runner and installs a scheduled-task fallback by default. The
@@ -129,6 +131,9 @@ yourself.
 The helper also enables `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true` for the
 current user so self-hosted runs pick up the newer JavaScript action runtime
 after the runner restarts.
+The same environment bootstrap lets `codex-head` running inside the clean
+runner checkout merge a machine-local worker overlay from outside `_work`,
+which is useful for local proxy credentials or WSL-specific worker commands.
 
 For `run-goal`, that opt-in can be satisfied automatically for the current run
 when the conditions above are already true.

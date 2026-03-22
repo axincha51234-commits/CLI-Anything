@@ -309,6 +309,10 @@ self-hosted runner on the same Windows machine. Use
 to register the runner, set `CODEX_HEAD_RUNS_ON_JSON`, and optionally wire
 `REVIEW_API_URL` plus `REVIEW_API_KEY` straight to a local
 Antigravity-Manager instance such as `http://127.0.0.1:8045/v1`.
+If `config/workers.machine.json` exists beside that bootstrap script, the same
+setup now exports `CODEX_HEAD_MACHINE_CONFIG` for the runner user so GitHub
+worker executions can reuse machine-local worker overrides even though the
+checkout under `_work` is cleaned on every run.
 That review workflow now tries `/v1/responses` first and falls back to
 `/v1/chat/completions`, so proxies that expose either shape can be used.
 If the downloaded Windows runner package omits `svc.cmd`, the bootstrap helper

@@ -102,7 +102,8 @@ export function resolveConfigPath(appRoot: string, configPath?: string): string 
 }
 
 export function resolveMachineConfigPath(appRoot: string): string {
-  return path.join(appRoot, "config", "workers.machine.json");
+  return process.env.CODEX_HEAD_MACHINE_CONFIG
+    ?? path.join(appRoot, "config", "workers.machine.json");
 }
 
 function readExternalConfig(finalPath: string): ExternalConfig {

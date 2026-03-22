@@ -152,3 +152,51 @@ test("loadConfig merges workers.machine.json after workers.local.json by default
   assert.equal(config.command_templates["gemini-cli"].local?.name, "gemini-machine");
   assert.equal(config.command_templates["gemini-cli"].local?.env?.GEMINI_API_KEY, "machine-secret");
 });
+
+test("loadConfig honors CODEX_HEAD_MACHINE_CONFIG override", () => {
+  const root = createTempDir("codex-head-machine-env-config-");
+  const configDir = join(root, "config");
+  const externalMachineConfig = join(root, "external-workers.machine.json");
+  mkdirSync(configDir, { recursive: true });
+
+  writeFileSync(join(configDir, "workers.local.json"), JSON.stringify({
+    github: {
+      enabled: true,
+      execution_preference: "remote_only"
+    }
+  }, null, 2), "utf8");
+
+  writeFileSync(externalMachineConfig, JSON.stringify({
+    github: {
+      execution_preference: "local_preferred"
+    },
+    command_templates: {
+      "codex-cli": {
+        local: {
+          name: "codex-machine-env",
+          executable: "codex",
+          args: ["exec", "{{task_prompt}}"],
+          env: {
+            CODEX_HOME: "C:\\machine\\profile"
+          }
+        }
+      }
+    }
+  }, null, 2), "utf8");
+
+  const previous = process.env.CODEX_HEAD_MACHINE_CONFIG;
+  process.env.CODEX_HEAD_MACHINE_CONFIG = externalMachineConfig;
+
+  try {
+    const config = loadConfig(root);
+    assert.equal(config.github.execution_preference, "local_preferred");
+    assert.equal(config.command_templates["codex-cli"].local?.name, "codex-machine-env");
+    assert.equal(config.command_templates["codex-cli"].local?.env?.CODEX_HOME, "C:\\machine\\profile");
+  } finally {
+    if (previous === undefined) {
+      delete process.env.CODEX_HEAD_MACHINE_CONFIG;
+    } else {
+      process.env.CODEX_HEAD_MACHINE_CONFIG = previous;
+    }
+  }
+});

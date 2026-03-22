@@ -130,6 +130,10 @@ currently local-ready and exposes the matching cooldown reason.
   [scripts/setup-self-hosted-runner.ps1](C:/Users/khoa%20phan/Documents/CLI-Anything-main/codex-head/scripts/setup-self-hosted-runner.ps1)
   to register a Windows self-hosted runner and optionally wire
   `REVIEW_API_URL` / `REVIEW_API_KEY` for local proxy-backed review.
+- That bootstrap helper now also exports `CODEX_HEAD_MACHINE_CONFIG` for the
+  current user when `config/workers.machine.json` exists, so self-hosted worker
+  runs can reuse machine-local proxy and account-manager overrides outside the
+  clean GitHub checkout.
 - On newer Windows runner packages that omit `svc.cmd`, the bootstrap helper
   now falls back to a Windows scheduled task by default so the runner can come
   back after logon without a manual terminal. You can still disable that and
