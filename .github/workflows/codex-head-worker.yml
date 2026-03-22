@@ -47,14 +47,15 @@ jobs:
       - name: Materialize dispatch payload
         id: payload
         shell: pwsh
+        env:
+          PAYLOAD_JSON: ${{ inputs.payload_json }}
+          PAYLOAD_PATH: ${{ inputs.payload_path }}
         run: |
           New-Item -ItemType Directory -Force -Path runtime | Out-Null
-          if ("${{ inputs.payload_json }}") {
-            @'
-          ${{ inputs.payload_json }}
-          '@ | Set-Content -Path runtime/worker-dispatch.json -NoNewline -Encoding utf8NoBOM
-          } elseif ("${{ inputs.payload_path }}" -and (Test-Path "${{ inputs.payload_path }}")) {
-            Copy-Item "${{ inputs.payload_path }}" runtime/worker-dispatch.json -Force
+          if ($env:PAYLOAD_JSON) {
+            $env:PAYLOAD_JSON | Set-Content -Path runtime/worker-dispatch.json -NoNewline -Encoding utf8NoBOM
+          } elseif ($env:PAYLOAD_PATH -and (Test-Path $env:PAYLOAD_PATH)) {
+            Copy-Item $env:PAYLOAD_PATH runtime/worker-dispatch.json -Force
           } else {
             Write-Error "Dispatch payload is not available in the runner checkout and no inline payload was provided."
             exit 1
