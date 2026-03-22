@@ -58,8 +58,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: "npm"
-          cache-dependency-path: codex-head/package-lock.json
 
       - name: Install dependencies
         run: npm ci
@@ -150,9 +148,9 @@ jobs:
           const fs = require("node:fs");
           const path = require("node:path");
 
-          const baseUrl = (process.env.REVIEW_API_URL || process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
-          const apiKey = process.env.REVIEW_API_KEY || process.env.OPENAI_API_KEY;
-          const model = process.env.REVIEW_MODEL || process.env.OPENAI_REVIEW_MODEL || "gpt-4.1-mini";
+          const baseUrl = String(process.env.REVIEW_API_URL || process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").trim().replace(/\/$/, "");
+          const apiKey = String(process.env.REVIEW_API_KEY || process.env.OPENAI_API_KEY || "").trim();
+          const model = String(process.env.REVIEW_MODEL || process.env.OPENAI_REVIEW_MODEL || "gpt-4.1-mini").trim();
           const diffPath = path.join("runtime", "review.diff");
           const outputPath = path.join("runtime", "review-model-output.txt");
           const diff = fs.existsSync(diffPath) ? fs.readFileSync(diffPath, "utf8") : "";
