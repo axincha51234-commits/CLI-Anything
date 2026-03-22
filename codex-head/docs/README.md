@@ -134,6 +134,8 @@ older camelCase variants for backward compatibility.
   `REVIEW_API_URL` + `REVIEW_API_KEY`, `OPENAI_API_KEY`, or `GEMINI_API_KEY`;
   without any of them, the review workflow can still run but only emits a
   fallback callback
+- GitHub workflows can now switch to self-hosted runners through the repository
+  variable `CODEX_HEAD_RUNS_ON_JSON`, instead of editing `runs-on` in YAML
 - Callback reconciliation from GitHub artifacts into SQLite can be polled
   on-demand, but it is not automatic or background-polled
 - `run-goal` can self-heal across local workers, but it still cannot recover if

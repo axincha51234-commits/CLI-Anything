@@ -39,7 +39,7 @@ on:
 
 jobs:
   review:
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(vars.CODEX_HEAD_RUNS_ON_JSON != '' && vars.CODEX_HEAD_RUNS_ON_JSON || '["ubuntu-latest"]') }}
     permissions:
       contents: read
       pull-requests: read

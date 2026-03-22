@@ -19,7 +19,7 @@ on:
 
 jobs:
   worker:
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(vars.CODEX_HEAD_RUNS_ON_JSON != '' && vars.CODEX_HEAD_RUNS_ON_JSON || '["ubuntu-latest"]') }}
     defaults:
       run:
         working-directory: codex-head

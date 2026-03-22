@@ -120,6 +120,9 @@ currently local-ready and exposes the matching cooldown reason.
 - The GitHub review workflow now supports three remote auth paths in order:
   `REVIEW_API_URL` + `REVIEW_API_KEY` for an OpenAI-compatible endpoint,
   `OPENAI_API_KEY` for direct OpenAI usage, or `GEMINI_API_KEY` for Gemini.
+- Both GitHub workflows now also honor the repository variable
+  `CODEX_HEAD_RUNS_ON_JSON`, so you can switch from `["ubuntu-latest"]` to a
+  self-hosted label array without editing workflow YAML each time.
 - GitHub callback reconciliation can now either sync directly from artifacts or
   wait on a resolved workflow run, but it is not background or automatic yet.
 - Local worker defaults do not verify upstream CLI authentication in advance,

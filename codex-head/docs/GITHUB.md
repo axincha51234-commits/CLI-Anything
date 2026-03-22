@@ -106,6 +106,11 @@ Live dispatch is opt-in and requires:
 - `gh` installed
 - `gh auth status` passing for the target host
 
+Both GitHub workflows also honor the repository variable
+`CODEX_HEAD_RUNS_ON_JSON`. When unset, they default to `["ubuntu-latest"]`.
+For a self-hosted path, set it to JSON such as
+`["self-hosted","windows","khoa"]`.
+
 For `run-goal`, that opt-in can be satisfied automatically for the current run
 when the conditions above are already true.
 
