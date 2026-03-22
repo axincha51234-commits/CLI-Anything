@@ -168,9 +168,39 @@ The default config now provides safe local execution templates for:
 Those defaults use non-interactive read-only or plan-style flags so the worker
 returns artifact content instead of mutating the repository directly.
 
+The default `gemini-cli` template now pins `-m gemini-2.5-flash`. In local
+testing, that model has been materially more reliable for headless runs than
+leaving Gemini on its account-level default or auto-selected premium model.
+
+Local command templates also accept an optional `env` map. `codex-head` merges
+those values into the spawned worker environment after template interpolation.
+
 Create `config/workers.local.json` from
 [`config/workers.example.json`](../config/workers.example.json) when you want
 to override that behavior.
+
+If you override `gemini-cli`, prefer keeping an explicit `-m` value in the
+local template so headless runs do not silently drift to a quota-exhausted
+default model.
+
+For Antigravity-Manager, the practical local-only pattern is:
+
+- keep the proxy service on `http://127.0.0.1:8045`
+- point `codex-cli` at a repo-local `CODEX_HOME` whose `config.toml` uses a
+  custom provider with `wire_api = "responses"` and `base_url =
+  "http://<reachable-host>:8045/v1"`
+- inject `ANTHROPIC_BASE_URL=http://127.0.0.1:8045` for `claude-code`
+- point `gemini-cli` at a repo-local home whose `.gemini/settings.json`
+  selects `gemini-api-key`, then inject
+  `GOOGLE_GEMINI_BASE_URL=http://127.0.0.1:8045`
+- pass the manager API key through the matching worker env vars instead of
+  rewriting your global CLI setup
+
+For WSL-backed `codex-cli`, `127.0.0.1` may still resolve inside Linux instead
+of the Windows host. In that case, use the Windows-side WSL vEthernet address
+that is reachable from Linux, for example `172.31.64.1`, and make sure Windows
+Firewall allows inbound TCP `8045` for the running `antigravity_tools.exe`
+process from the WSL subnet.
 
 The config loader expects snake_case keys:
 
@@ -197,6 +227,11 @@ GitHub is disabled by default. To enable live workflow dispatch, set:
 - `github.repository` to a real `OWNER/REPO`
 - `github.dispatch_mode` to `gh_cli`
 - `github.cli_binary` if `gh` is not on the default path
+- `github.execution_preference` to:
+  - `remote_only` if GitHub-shaped tasks must execute on GitHub
+  - `local_preferred` if GitHub should stay as mirror/control plane while
+    execution prefers local workers and only falls back to GitHub when local
+    execution is unavailable
 
 `github.repository` is resolved in this order:
 
@@ -207,6 +242,11 @@ GitHub is disabled by default. To enable live workflow dispatch, set:
 
 `github.review_workflow` is optional. When set, review tasks use that workflow
 instead of the generic worker workflow.
+
+In `local_preferred` mode, `run-goal` can still publish GitHub mirrors for a
+GitHub-shaped task, but `dispatch-next` first exhausts the healthy local worker
+chain. If that local chain fails, routing can still fall through into GitHub
+workflow dispatch for the same task.
 
 To validate a repo with `gh` and write the override automatically:
 
@@ -252,6 +292,15 @@ Supported template variables are interpolated by
 - `{{artifact_dir}}`
 - `{{github_payload}}`
 
+The same variables are available inside `command_templates.<worker>.<mode>.env`
+values.
+
+If you point `codex-cli` at a proxy-backed provider through Codex CLI config
+overrides, the endpoint must expose the OpenAI Responses API at
+`/v1/responses`. Codex CLI no longer supports `wire_api = "chat"`, so a local
+gateway that only offers `/v1/chat/completions` can still look healthy at the
+models endpoint while every real execution fails at runtime.
+
 ## Common Failure Cases
 
 ### `missing_binary`
@@ -268,6 +317,30 @@ Supported template variables are interpolated by
 - Fix: verify the workers' own login states, then inspect
   `execution-attempts.json` and the combined task logs for the exact failure
   text if every candidate fails.
+
+### `codex-cli` works directly but not through a local proxy
+
+- Cause: the proxy only exposes `/v1/chat/completions`, while Codex CLI now
+  expects the OpenAI Responses API at `/v1/responses` and may also probe the
+  websocket transport on that path first.
+- Symptom: task logs show repeated reconnect attempts to `/v1/responses`,
+  transport errors, or a final `stream disconnected before completion`.
+- Fix: use a Responses-compatible proxy, or keep `codex-cli` on direct auth
+  until your local gateway speaks `/v1/responses`.
+
+### Windows `codex` resolves to WSL, but the switcher manages Windows auth
+
+- Cause: the visible `codex` command is a Windows wrapper that forwards into
+  `wsl.exe`, while your account switcher only updates `C:\\Users\\<you>\\.codex`.
+- Symptom: `codex-head` detects `codex-cli`, but real runs still use the wrong
+  profile or keep hitting the direct account usage limit.
+- Fix: override `command_templates.codex-cli.local` to call `wsl.exe`
+  directly and add:
+  - `WSLENV=CODEX_HOME/p`
+  - `CODEX_HOME=C:\\Users\\<you>\\.codex`
+- Reason: the `/p` flag in `WSLENV` converts the Windows path into a Linux
+  mount path before WSL launches `codex`, so the child process reads the same
+  auth directory as the Windows-side switcher.
 
 ### Worker is healthy but temporarily cooled down
 
@@ -307,6 +380,13 @@ node dist/src/index.js clear-penalties gemini-cli
 - Cause: a task requires GitHub, but no healthy adapter supports GitHub mode.
 - Fix: make sure `gemini-cli` is enabled and healthy, and keep `github.enabled`
   set to `true`.
+
+### GitHub-shaped tasks always dispatch remotely even though local workers are healthy
+
+- Cause: `github.execution_preference` is still `remote_only`.
+- Fix: set `github.execution_preference` to `local_preferred` so GitHub stays
+  available for mirrors and remote fallback, but local workers get first claim
+  on execution.
 
 ### Generic worker workflow returns a typed `failed` callback
 

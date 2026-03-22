@@ -8,6 +8,7 @@ export interface CommandTemplate {
   name: string;
   executable: string;
   args: string[];
+  env?: Record<string, string>;
 }
 
 export interface WorkerTemplateConfig {
@@ -24,6 +25,7 @@ export interface GitHubConfig {
   review_workflow: string | null;
   dispatch_mode: "artifacts_only" | "gh_cli";
   cli_binary: string;
+  execution_preference: "remote_only" | "local_preferred";
 }
 
 export interface CodexHeadConfig {
@@ -38,7 +40,9 @@ export interface CodexHeadConfig {
 }
 
 type ExternalConfig = Omit<Partial<CodexHeadConfig>, "github" | "command_templates"> & {
-  github?: Partial<GitHubConfig>;
+  github?: Partial<GitHubConfig> & {
+    executionPreference?: GitHubConfig["execution_preference"];
+  };
   feature_flags?: Record<string, boolean>;
   command_templates?: Partial<Record<WorkerTarget, Partial<WorkerTemplateConfig>>>;
   featureFlags?: Record<string, boolean>;
@@ -160,7 +164,7 @@ export function createDefaultConfig(appRoot: string): CodexHeadConfig {
         local: {
           name: "gemini-task",
           executable: "gemini",
-          args: ["-p", "{{task_prompt}}", "--approval-mode", "plan", "--output-format", "text"]
+          args: ["-m", "gemini-2.5-flash", "-p", "{{task_prompt}}", "--approval-mode", "plan", "--output-format", "text"]
         }
       },
       antigravity: {
@@ -179,7 +183,8 @@ export function createDefaultConfig(appRoot: string): CodexHeadConfig {
       workflow: "codex-head-worker.yml",
       review_workflow: "codex-head-gemini-review.yml",
       dispatch_mode: "artifacts_only",
-      cli_binary: "gh"
+      cli_binary: "gh",
+      execution_preference: "remote_only"
     }
   };
 }
@@ -241,6 +246,12 @@ function normalizeExternalConfig(parsed: ExternalConfig): Partial<CodexHeadConfi
   return {
     ...parsed,
     feature_flags: parsed.feature_flags ?? parsed.featureFlags,
+    github: parsed.github
+      ? {
+          ...parsed.github,
+          execution_preference: parsed.github.execution_preference ?? parsed.github.executionPreference
+        }
+      : undefined,
     command_templates: (parsed.command_templates ?? parsed.commandTemplates) as Partial<CodexHeadConfig["command_templates"]> | undefined
   } as Partial<CodexHeadConfig>;
 }

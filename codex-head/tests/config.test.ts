@@ -10,6 +10,9 @@ test("loadConfig accepts camelCase external config keys", () => {
   const root = createTempDir("codex-head-config-");
   const configPath = join(root, "workers.local.json");
   writeFileSync(configPath, JSON.stringify({
+    github: {
+      executionPreference: "local_preferred"
+    },
     featureFlags: {
       antigravity: true
     },
@@ -18,7 +21,10 @@ test("loadConfig accepts camelCase external config keys", () => {
         local: {
           name: "codex-task",
           executable: "codex",
-          args: ["exec", "{{task_goal}}"]
+          args: ["exec", "{{task_goal}}"],
+          env: {
+            "CODEX_HEAD_PROFILE": "{{task_goal}}"
+          }
         }
       }
     }
@@ -26,7 +32,12 @@ test("loadConfig accepts camelCase external config keys", () => {
 
   const config = loadConfig(root, configPath);
   assert.equal(config.feature_flags.antigravity, true);
+  assert.equal(config.github.execution_preference, "local_preferred");
   assert.equal(config.command_templates["codex-cli"].local?.name, "codex-task");
+  assert.equal(
+    config.command_templates["codex-cli"].local?.env?.CODEX_HEAD_PROFILE,
+    "{{task_goal}}"
+  );
 });
 
 test("createDefaultConfig provides safe local execution templates", () => {
@@ -34,6 +45,7 @@ test("createDefaultConfig provides safe local execution templates", () => {
   const config = createDefaultConfig(root);
 
   assert.equal(config.github.enabled, false);
+  assert.equal(config.github.execution_preference, "remote_only");
   assert.deepEqual(config.command_templates["claude-code"].local?.args, [
     "-p",
     "--permission-mode",
@@ -52,6 +64,8 @@ test("createDefaultConfig provides safe local execution templates", () => {
     "{{task_prompt}}"
   ]);
   assert.deepEqual(config.command_templates["gemini-cli"].local?.args, [
+    "-m",
+    "gemini-2.5-flash",
     "-p",
     "{{task_prompt}}",
     "--approval-mode",

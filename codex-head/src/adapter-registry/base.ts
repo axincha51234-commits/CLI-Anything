@@ -30,12 +30,12 @@ function summarize(task: TaskSpec, stdout: string): string {
     : `${task.worker_target} completed ${task.expected_output.kind}`;
 }
 
-function buildTaskPrompt(task: TaskSpec, runtime: TaskRuntimeContext): string {
+export function buildTaskPrompt(task: TaskSpec, runtime: TaskRuntimeContext): string {
   const lines = [
     "You are a subordinate worker operating under Codex Head.",
     "Codex Head remains the only planner, router, and synthesis authority.",
-    `Task spec JSON: ${runtime.task_file}`,
-    `Artifact directory: ${runtime.artifact_dir}`,
+    "The task specification is fully summarized below, so do not try to read it from disk unless the task explicitly asks for artifact inspection.",
+    "Codex Head will capture your stdout as the worker artifact unless the task explicitly requires a code artifact.",
     `Goal: ${task.goal}`,
     `Expected output kind: ${task.expected_output.kind}`,
     `Expected output format: ${task.expected_output.format}`,
@@ -177,7 +177,7 @@ export abstract class BaseWorkerAdapter implements WorkerAdapter {
       };
     }
 
-    const { executable, args } = interpolateTemplate(template, {
+    const { executable, args, env } = interpolateTemplate(template, {
       task_file: runtime.task_file,
       task_goal: runtime.task_goal,
       task_prompt: runtime.task_prompt || buildTaskPrompt(task, runtime),
@@ -206,6 +206,10 @@ export abstract class BaseWorkerAdapter implements WorkerAdapter {
               ],
               {
                 cwd: options.cwd,
+                env: {
+                  ...process.env,
+                  ...env
+                },
                 shell: false,
                 windowsVerbatimArguments: true,
                 stdio: ["ignore", "pipe", "pipe"]
@@ -214,6 +218,10 @@ export abstract class BaseWorkerAdapter implements WorkerAdapter {
           })()
         : spawn(spawnCommand.executable, args, {
             cwd: options.cwd,
+            env: {
+              ...process.env,
+              ...env
+            },
             shell: false,
             stdio: ["ignore", "pipe", "pipe"]
           });

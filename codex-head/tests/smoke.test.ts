@@ -201,3 +201,52 @@ test("local execution timeout tears down a Windows process tree quickly", async 
   assert.match(result.summary, /timed out/i);
   assert.ok(Date.now() - startedAt < 15_000);
 });
+
+test("local execution forwards interpolated environment variables", async () => {
+  const root = createTempDir("codex-head-env-forwarding-");
+  const artifactsDir = join(root, "artifacts");
+  mkdirSync(artifactsDir, { recursive: true });
+
+  const workerPath = join(root, "env-worker.js");
+  writeFileSync(
+    workerPath,
+    "console.log(`${process.env.CODEX_HEAD_PROFILE ?? 'missing'}|${process.env.CODEX_HEAD_PROMPT ?? 'missing'}`);\n",
+    "utf8"
+  );
+
+  const adapter = new CodexCliAdapter({
+    enabled: true,
+    binary: "node",
+    local: {
+      name: "env-worker",
+      executable: "node",
+      args: [workerPath],
+      env: {
+        CODEX_HEAD_PROFILE: "{{task_goal}}",
+        CODEX_HEAD_PROMPT: "{{task_prompt}}"
+      }
+    }
+  });
+
+  const task = createTaskSpec({
+    goal: "Summarize the current orchestration state",
+    repo: root,
+    worker_target: "codex-cli"
+  });
+  const runtime = {
+    task_file: join(root, "task.json"),
+    task_goal: task.goal,
+    task_prompt: "Return only the final requested content.",
+    artifact_dir: join(artifactsDir, task.task_id),
+    github_payload: null
+  };
+
+  const result = await adapter.execute(task, runtime, {
+    cwd: root,
+    artifactStore: new FileArtifactStore(artifactsDir)
+  });
+
+  assert.equal(result.status, "completed");
+  assert.match(result.summary, /Summarize the current orchestration state/i);
+  assert.match(result.summary, /Return only the final requested content\./i);
+});

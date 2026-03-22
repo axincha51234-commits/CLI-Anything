@@ -24,12 +24,15 @@ export function findInstalledBinary(bin: string): string | null {
 export function interpolateTemplate(
   template: CommandTemplate,
   values: Record<string, string | null>
-): { executable: string; args: string[] } {
+): { executable: string; args: string[]; env: Record<string, string> } {
   const interpolate = (value: string): string =>
     value.replace(/\{\{([^}]+)\}\}/g, (_match, key) => values[key.trim()] ?? "");
 
   return {
     executable: interpolate(template.executable),
-    args: template.args.map((arg) => interpolate(arg))
+    args: template.args.map((arg) => interpolate(arg)),
+    env: Object.fromEntries(
+      Object.entries(template.env ?? {}).map(([key, value]) => [key, interpolate(value)])
+    )
   };
 }

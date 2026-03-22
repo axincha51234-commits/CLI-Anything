@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { createDefaultRegistry, type AdapterRegistry } from "./adapter-registry";
+import { buildTaskPrompt } from "./adapter-registry/base";
 import { FileArtifactStore } from "./artifacts/fileArtifactStore";
 import { loadConfig, type CodexHeadConfig } from "./config";
 import type {
@@ -337,19 +338,23 @@ export class CodexHeadOrchestrator {
 
   private buildRuntime(task: TaskSpec): TaskRuntimeContext {
     const taskFile = this.artifactStore.writeJson(task.task_id, "task-input.json", task);
+    const artifactDir = this.artifactStore.getTaskDir(task.task_id);
+    const githubPayload = join(artifactDir, "github-dispatch.json");
     const taskPrompt = toCliPrompt([
-      "You are running under Codex Head.",
-      `Read the task specification from ${taskFile}.`,
-      `Use the current working directory as the repository root for ${task.repo}.`,
-      "Return only the requested deliverable.",
-      "Never delegate to another worker and never emit commands for another worker to execute."
+      buildTaskPrompt(task, {
+        task_file: taskFile,
+        task_goal: task.goal,
+        task_prompt: "",
+        artifact_dir: artifactDir,
+        github_payload: githubPayload
+      })
     ]);
     return {
       task_file: taskFile,
       task_goal: task.goal,
       task_prompt: taskPrompt,
-      artifact_dir: this.artifactStore.getTaskDir(task.task_id),
-      github_payload: join(this.artifactStore.getTaskDir(task.task_id), "github-dispatch.json")
+      artifact_dir: artifactDir,
+      github_payload: githubPayload
     };
   }
 
@@ -360,21 +365,44 @@ export class CodexHeadOrchestrator {
     });
   }
 
-  private async resolveNextLocalFallback(
+  private async resolveNextFallback(
     task: TaskSpec,
     attemptedTargets: WorkerTarget[]
   ): Promise<RoutingDecision | null> {
+    const deprioritizedTargets = this.getRecentWorkerPenalties()
+      .map((penalty) => penalty.worker_target)
+      .filter((target) => !attemptedTargets.includes(target));
+
     try {
-      const nextRouting = await this.router.resolve(task, {
+      return await this.router.resolve(task, {
         exclude_targets: attemptedTargets,
-        deprioritized_targets: this.getRecentWorkerPenalties()
-          .map((penalty) => penalty.worker_target)
-          .filter((target) => !attemptedTargets.includes(target))
+        deprioritized_targets: deprioritizedTargets,
+        required_mode: "local"
       });
-      return nextRouting.mode === "local" ? nextRouting : null;
+    } catch {}
+
+    if (!task.requires_github || this.config.github.execution_preference !== "local_preferred") {
+      return null;
+    }
+
+    try {
+      return await this.router.resolve(task, {
+        required_mode: "github"
+      });
     } catch {
       return null;
     }
+  }
+
+  private defaultMirrorRouting(task: TaskSpec): RoutingDecision {
+    return {
+      worker_target: task.worker_target,
+      mode: task.requires_github && this.config.github.execution_preference !== "local_preferred"
+        ? "github"
+        : "local",
+      reason: "mirror publish",
+      fallback_from: null
+    };
   }
 
   private getPenaltyResetPath(): string {
@@ -522,73 +550,72 @@ export class CodexHeadOrchestrator {
     this.artifactStore.writeJson(task.task_id, "routing-decision.json", routing);
     this.taskStore.recordRouting(task.task_id, routing);
 
-    if (routing.mode === "github") {
-      const dispatch = this.github.prepareDispatch(task, routing);
-      if (!this.github.shouldDispatchLive()) {
-        this.artifactStore.writeJson(task.task_id, "dispatch-outcome.json", {
-          ...dispatch,
-          mode: "artifacts_only"
-        });
-        return {
-          task_id: task.task_id,
-          state: "running",
-          routing,
-          detail: `Prepared GitHub payload at ${dispatch.payload_path}`
-        };
-      }
-
-      try {
-        const receipt = this.github.dispatchWorkflow(task, routing, dispatch);
-        if (receipt.run) {
-          this.taskStore.recordGitHubRun(task.task_id, receipt.run);
-        }
-        this.artifactStore.writeJson(task.task_id, "dispatch-outcome.json", {
-          ...dispatch,
-          mode: "gh_cli",
-          receipt
-        });
-        return {
-          task_id: task.task_id,
-          state: "running",
-          routing,
-          detail: `Triggered GitHub workflow ${dispatch.workflow_name}`
-        };
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        const result: WorkerResult = {
-          task_id: task.task_id,
-          worker_target: routing.worker_target,
-          status: "failed",
-          review_verdict: null,
-          summary: message,
-          artifacts: [dispatch.payload_path, dispatch.workflow_inputs_path],
-          patch_ref: null,
-          log_ref: null,
-          cost: 0,
-          duration_ms: 0,
-          next_action: "manual",
-          review_notes: [message]
-        };
-        this.artifactStore.writeJson(task.task_id, "dispatch-outcome.json", {
-          ...dispatch,
-          mode: "gh_cli",
-          error: message
-        });
-        this.taskStore.finish(task.task_id, "failed", result, routing, message);
-        return {
-          task_id: task.task_id,
-          state: "failed",
-          routing,
-          detail: message
-        };
-      }
-
-    }
-
     const attemptedTargets: WorkerTarget[] = [];
     const attemptArtifacts: ExecutionAttemptArtifact[] = [];
 
     while (true) {
+      if (routing.mode === "github") {
+        const dispatch = this.github.prepareDispatch(task, routing);
+        if (!this.github.shouldDispatchLive()) {
+          this.artifactStore.writeJson(task.task_id, "dispatch-outcome.json", {
+            ...dispatch,
+            mode: "artifacts_only"
+          });
+          return {
+            task_id: task.task_id,
+            state: "running",
+            routing,
+            detail: `Prepared GitHub payload at ${dispatch.payload_path}`
+          };
+        }
+
+        try {
+          const receipt = this.github.dispatchWorkflow(task, routing, dispatch);
+          if (receipt.run) {
+            this.taskStore.recordGitHubRun(task.task_id, receipt.run);
+          }
+          this.artifactStore.writeJson(task.task_id, "dispatch-outcome.json", {
+            ...dispatch,
+            mode: "gh_cli",
+            receipt
+          });
+          return {
+            task_id: task.task_id,
+            state: "running",
+            routing,
+            detail: `Triggered GitHub workflow ${dispatch.workflow_name}`
+          };
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          const result: WorkerResult = {
+            task_id: task.task_id,
+            worker_target: routing.worker_target,
+            status: "failed",
+            review_verdict: null,
+            summary: message,
+            artifacts: [dispatch.payload_path, dispatch.workflow_inputs_path],
+            patch_ref: null,
+            log_ref: null,
+            cost: 0,
+            duration_ms: 0,
+            next_action: "manual",
+            review_notes: [message]
+          };
+          this.artifactStore.writeJson(task.task_id, "dispatch-outcome.json", {
+            ...dispatch,
+            mode: "gh_cli",
+            error: message
+          });
+          this.taskStore.finish(task.task_id, "failed", result, routing, message);
+          return {
+            task_id: task.task_id,
+            state: "failed",
+            routing,
+            detail: message
+          };
+        }
+      }
+
       const adapter = this.registry.get(routing.worker_target);
       const runtime = this.buildRuntime(task);
       const result = await adapter.execute(task, runtime, {
@@ -609,7 +636,7 @@ export class CodexHeadOrchestrator {
       }
 
       attemptedTargets.push(routing.worker_target);
-      const fallback = await this.resolveNextLocalFallback(task, attemptedTargets);
+      const fallback = await this.resolveNextFallback(task, attemptedTargets);
       if (!fallback) {
         return this.acceptWorkerResult(result, routing);
       }
@@ -756,12 +783,7 @@ export class CodexHeadOrchestrator {
 
   publishGitHubMirror(taskId: string): DispatchOutcome {
     const record = this.taskStore.getTaskOrThrow(taskId);
-    const routing = record.routing ?? {
-      worker_target: record.task.worker_target,
-      mode: record.task.requires_github ? "github" : "local",
-      reason: "mirror publish",
-      fallback_from: null
-    };
+    const routing = record.routing ?? this.defaultMirrorRouting(record.task);
     const dispatch = this.github.prepareDispatch(record.task, routing);
     const receipt = this.github.publishMirror(record.task, dispatch, record.github_mirror);
     this.taskStore.recordGitHubMirror(taskId, receipt.mirror);

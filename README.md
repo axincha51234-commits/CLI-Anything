@@ -8,7 +8,7 @@ CLI-Anything: Bridging the Gap Between AI Agents and the World's Software</stron
 <p align="center">
   <a href="#-quick-start"><img src="https://img.shields.io/badge/Quick_Start-5_min-blue?style=for-the-badge" alt="Quick Start"></a>
   <a href="https://hkuds.github.io/CLI-Anything/hub/"><img src="https://img.shields.io/badge/CLI_Hub-Browse_%26_Install-ff69b4?style=for-the-badge" alt="CLI Hub"></a>
-  <a href="#-demonstrations"><img src="https://img.shields.io/badge/Demos-16_Apps-green?style=for-the-badge" alt="Demos"></a>
+  <a href="#-demonstrations"><img src="https://img.shields.io/badge/Demos-18_CLIs-green?style=for-the-badge" alt="Demos"></a>
   <a href="#-test-results"><img src="https://img.shields.io/badge/Tests-1%2C839_Passing-brightgreen?style=for-the-badge" alt="Tests"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge" alt="License"></a>
 </p>
@@ -401,7 +401,7 @@ AI agents are great at reasoning but terrible at using real professional softwar
 | 💸 "UI automation breaks constantly" | No screenshots, no clicking, no RPA fragility. Pure command-line reliability with structured interfaces |
 | 📊 "Agents need structured data" | Built-in JSON output for seamless agent consumption + human-readable formats for debugging |
 | 🔧 "Custom integrations are expensive" | One Claude plugin auto-generates CLIs for ANY codebase through proven 7-phase pipeline |
-| ⚡ "Prototype vs Production gap" | 1,839+ tests with real software validation. Battle-tested across 16 major applications |
+| ⚡ "Prototype vs Production gap" | 1,839+ tests with real software validation. Battle-tested across 18 CLI harnesses |
 
 ---
 
@@ -727,9 +727,13 @@ cli-anything/
 │       └── setup-cli-anything.sh         # Setup script
 │
 ├── 🤖 codex-skill/                      # Codex skill entry point
+├── 🐾 openclaw-skill/                   # OpenClaw skill entry point
+├── 💬 opencode-commands/                # OpenCode slash commands
+├── 🧩 qoder-plugin/                     # Qoder setup helpers
+├── 🧠 codex-head/                       # Internal TypeScript orchestrator (beta)
 ├── 🎨 gimp/agent-harness/               # GIMP CLI (107 tests)
 ├── 🧊 blender/agent-harness/            # Blender CLI (208 tests)
-├── ✏️ inkscape/agent-harness/            # Inkscape CLI (202 tests)
+├── ✏️ inkscape/agent-harness/           # Inkscape CLI (202 tests)
 ├── 🎵 audacity/agent-harness/           # Audacity CLI (161 tests)
 ├── 📄 libreoffice/agent-harness/        # LibreOffice CLI (158 tests)
 ├── 📝 mubu/agent-harness/               # Mubu CLI (96 tests)
@@ -740,11 +744,11 @@ cli-anything/
 ├── 📐 drawio/agent-harness/             # Draw.io CLI (138 tests)
 ├── 🧜 mermaid/agent-harness/            # Mermaid Live Editor CLI (10 tests)
 ├── ✨ anygen/agent-harness/             # AnyGen CLI (50 tests)
-├── 🖼️ comfyui/agent-harness/            # ComfyUI CLI (70 tests)
 ├── 🧠 notebooklm/agent-harness/         # NotebookLM CLI (experimental, 21 tests)
 ├── 🖼️ comfyui/agent-harness/            # ComfyUI CLI (70 tests)
-├── 🛡️ adguardhome/agent-harness/       # AdGuard Home CLI (36 tests)
-└── 🦙 ollama/agent-harness/             # Ollama CLI (98 tests)
+├── 🛡️ adguardhome/agent-harness/        # AdGuard Home CLI (36 tests)
+├── 🦙 ollama/agent-harness/             # Ollama CLI (98 tests)
+└── 🌐 novita/agent-harness/             # Novita CLI
 ```
 
 Each `agent-harness/` contains an installable Python package under `cli_anything.<software>/` with Click CLI, core modules, utils (including `repl_skin.py` and backend wrapper), and comprehensive tests.
@@ -970,7 +974,7 @@ MIT License — free to use, modify, and distribute.
 
 **CLI-Anything** — *Make any software with a codebase Agent-native.*
 
-<sub>A methodology for the age of AI agents | 16 professional software demos | 1,839 passing tests</sub>
+<sub>A methodology for the age of AI agents | 18 CLI harnesses | 1,839 passing tests</sub>
 
 <br>
 

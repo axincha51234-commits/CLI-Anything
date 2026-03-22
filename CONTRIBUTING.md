@@ -11,7 +11,7 @@ We welcome three main categories of contributions:
 Adding a new CLI harness is the most impactful contribution. Before submitting a PR, ensure the following are in place:
 
 1. **`<SOFTWARE>.md`** — the SOP document exists at `<software>/agent-harness/<SOFTWARE>.md` describing the harness architecture.
-2. **`SKILL.md`** — the AI-discoverable skill definition exists inside the Python package at `cli_anything/<software>/SKILL.md`.
+2. **`SKILL.md`** — the AI-discoverable skill definition exists inside the Python package at `cli_anything/<software>/skills/SKILL.md`.
 3. **Tests** — unit tests (`test_core.py`, passable without backend) and E2E tests (`test_full_e2e.py`) are present and passing.
 4. **`README.md`** — the project README includes the new software with a link to its harness directory.
 5. **`registry.json`** — add an entry for the new software so it appears on the [CLI-Hub](https://hkuds.github.io/CLI-Anything/hub/).

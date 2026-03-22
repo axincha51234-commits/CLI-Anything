@@ -4,7 +4,7 @@ Build powerful, stateful CLI interfaces for any GUI application using the cli-an
 
 ## Overview
 
-The cli-anything plugin automates the process of creating production-ready command-line interfaces for GUI applications. It follows a proven methodology that has successfully generated CLIs for GIMP, Blender, Inkscape, Audacity, LibreOffice, OBS Studio, and Kdenlive — with over 1,100 passing tests across all implementations.
+The cli-anything plugin automates the process of creating production-ready command-line interfaces for GUI applications. It follows a proven methodology that now spans 18 CLI harnesses and 1,839 passing tests across the repository.
 
 ## What It Does
 
@@ -23,18 +23,23 @@ The result: A stateful CLI with REPL mode, JSON output, undo/redo, and full test
 ### From Claude Code
 
 ```bash
-/plugin install cli-anything@your-registry
+/plugin marketplace add HKUDS/CLI-Anything
+/plugin install cli-anything
 ```
 
 ### Manual Installation
 
-1. Clone this repository to your Claude Code plugins directory:
+1. Clone the full repository:
    ```bash
-   cd ~/.claude/plugins
-   git clone https://github.com/yourusername/cli-anything-plugin.git
+   git clone https://github.com/HKUDS/CLI-Anything.git
    ```
 
-2. Reload plugins:
+2. Copy the bundled plugin into your Claude Code plugins directory:
+   ```bash
+   cp -r CLI-Anything/cli-anything-plugin ~/.claude/plugins/cli-anything
+   ```
+
+3. Reload plugins:
    ```bash
    /reload-plugins
    ```
@@ -272,19 +277,20 @@ to coexist in the same Python environment without conflicts.
 
 ## Success Stories
 
-The cli-anything methodology has successfully built CLIs for:
+Selected reference harnesses built with the cli-anything methodology:
 
 | Software | Tests | Description |
 |----------|-------|-------------|
-| GIMP | 103 | Raster image editor (Pillow-based) |
-| Blender | 200 | 3D creation suite (bpy script generation) |
-| Inkscape | 197 | Vector graphics editor (SVG manipulation) |
-| Audacity | 154 | Audio editor (WAV processing) |
-| LibreOffice | 143 | Office suite (ODF ZIP/XML) |
+| GIMP | 107 | Raster image editor (GIMP batch mode / Script-Fu) |
+| Blender | 208 | 3D creation suite (bpy script generation) |
+| Inkscape | 202 | Vector graphics editor (SVG manipulation) |
+| Audacity | 161 | Audio editor (SoX-backed workflows) |
+| LibreOffice | 158 | Office suite (ODF ZIP/XML) |
 | OBS Studio | 153 | Streaming/recording (JSON scene collections) |
-| Kdenlive | 151 | Video editor (MLT XML) |
-| Shotcut | 144 | Video editor (MLT XML, ffmpeg) |
-| **Total** | **1,245** | All tests passing |
+| Kdenlive | 155 | Video editor (MLT XML) |
+| Shotcut | 154 | Video editor (MLT XML, ffmpeg) |
+
+For the full up-to-date catalog, see the root `README.md` and `registry.json`.
 
 ## Key Features
 
@@ -428,7 +434,7 @@ MIT License - See LICENSE file for details
 
 ## Credits
 
-Built on the cli-anything methodology developed through the creation of 8 production CLI harnesses with 1,245 passing tests.
+Built on the cli-anything methodology developed through 18 CLI harnesses with 1,839 passing tests across the repository.
 
 Inspired by the ralph-loop plugin's iterative development approach.
 
@@ -436,7 +442,7 @@ Inspired by the ralph-loop plugin's iterative development approach.
 
 - Documentation: See HARNESS.md in this plugin for the complete methodology
 - Issues: Report bugs or request features on GitHub
-- Examples: Check `/root/cli-anything/` for reference implementations
+- Examples: Check the harness directories in the repository root for reference implementations
 
 ## Version History
 

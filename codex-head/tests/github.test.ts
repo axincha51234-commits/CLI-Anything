@@ -243,7 +243,12 @@ test("GitHubControlPlane can download a callback artifact for a task id", () => 
   assert.equal(download.artifact_name, "codex-head-worker-callback-task-123");
   assert.equal(download.run_id, 789);
   assert.equal(calls.find((entry) => entry[0] === "run" && entry[1] === "download")?.[2], "789");
+  assert.equal(download.callback_path, resolve(config.artifacts_dir, "task-123", "github-callback.json"));
   assert.equal(existsSync(download.callback_path), true);
+  assert.equal(
+    JSON.parse(readFileSync(download.callback_path, "utf8") as string).summary,
+    "Downloaded callback"
+  );
 });
 
 test("GitHubControlPlane can publish issue and PR mirrors through gh cli", () => {

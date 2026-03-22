@@ -42,7 +42,7 @@
       "local": {
         "name": "gemini-task",
         "executable": "gemini",
-        "args": ["-p", "{{task_prompt}}", "--approval-mode", "plan", "--output-format", "text"]
+        "args": ["-m", "gemini-2.5-flash", "-p", "{{task_prompt}}", "--approval-mode", "plan", "--output-format", "text"]
       }
     },
     "antigravity": {
@@ -61,6 +61,7 @@
     "workflow": "codex-head-worker.yml",
     "review_workflow": "codex-head-gemini-review.yml",
     "dispatch_mode": "artifacts_only",
-    "cli_binary": "gh"
+    "cli_binary": "gh",
+    "execution_preference": "local_preferred"
   }
 }

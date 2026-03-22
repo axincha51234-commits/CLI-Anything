@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 
@@ -34,6 +34,7 @@ export interface GitHubCliRunResult {
 export interface GitHubRuntimeStatus {
   enabled: boolean;
   dispatch_mode: CodexHeadConfig["github"]["dispatch_mode"];
+  execution_preference: CodexHeadConfig["github"]["execution_preference"];
   repository: string;
   workflow: string;
   review_workflow: string | null;
@@ -206,6 +207,7 @@ export class GitHubControlPlane {
     return {
       enabled: this.config.github.enabled,
       dispatch_mode: this.config.github.dispatch_mode,
+      execution_preference: this.config.github.execution_preference,
       repository: this.config.github.repository,
       workflow: this.config.github.workflow,
       review_workflow: this.config.github.review_workflow,
@@ -748,6 +750,8 @@ export class GitHubControlPlane {
     if (!callbackPath) {
       throw new Error(`GitHub callback download succeeded but no github-callback.json was found. See ${receiptPath}`);
     }
+    const stableCallbackPath = this.buildCompletionEnvelope(taskId);
+    copyFileSync(callbackPath, stableCallbackPath);
 
     const artifactName = artifactNames.find((name) => existsSync(join(downloadDir, name, "github-callback.json")))
       ?? artifactNames.find((name) => existsSync(join(downloadDir, "github-callback.json")))
@@ -757,14 +761,15 @@ export class GitHubControlPlane {
       task_id: taskId,
       repository: this.config.github.repository,
       download_dir: downloadDir,
-      callback_path: callbackPath,
+      callback_path: stableCallbackPath,
       artifact_name: artifactName,
       run_id: options.run_id ?? null
     };
   }
 
-  buildCompletionEnvelope(result: WorkerResult): string {
-    return join(this.artifactStore.getTaskDir(result.task_id), "github-callback.json");
+  buildCompletionEnvelope(result: Pick<WorkerResult, "task_id"> | string): string {
+    const taskId = typeof result === "string" ? result : result.task_id;
+    return join(this.artifactStore.getTaskDir(taskId), "github-callback.json");
   }
 
   private selectWorkflow(task: TaskSpec): string {

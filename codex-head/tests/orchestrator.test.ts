@@ -330,6 +330,114 @@ test("runGoal plans, enqueues, mirrors, and reconciles a GitHub task automatical
   assert.equal(waitedTaskId, result.task.task.task_id);
 });
 
+test("runGoal can keep GitHub mirrors while executing a GitHub-shaped task locally in local-preferred mode", async () => {
+  const root = createTempDir("codex-head-run-goal-hybrid-");
+  const registry = new AdapterRegistry();
+
+  registry.register(new FakeAdapter(
+    makeCapability("gemini-cli"),
+    createHealthyHealth("gemini-cli"),
+    async (task, runtime) => ({
+      task_id: task.task_id,
+      worker_target: "gemini-cli",
+      status: "completed",
+      review_verdict: "commented",
+      summary: "Local Gemini review completed",
+      artifacts: [runtime.task_file],
+      patch_ref: null,
+      log_ref: null,
+      cost: 0,
+      duration_ms: 25,
+      next_action: "none",
+      review_notes: []
+    })
+  ));
+
+  registry.register(new FakeAdapter(
+    makeCapability("codex-cli"),
+    createHealthyHealth("codex-cli"),
+    async () => {
+      throw new Error("should not execute");
+    }
+  ));
+
+  registry.register(new FakeAdapter(
+    makeCapability("claude-code"),
+    createHealthyHealth("claude-code"),
+    async () => {
+      throw new Error("should not execute");
+    }
+  ));
+
+  registry.register(new FakeAdapter(
+    makeCapability("antigravity", { supports_local: false, supports_github: false }),
+    createHealthyHealth("antigravity"),
+    async () => {
+      throw new Error("should not execute");
+    }
+  ));
+
+  const config = createTestConfig(root);
+  config.github.repository = "example/repo";
+  config.github.execution_preference = "local_preferred";
+  const orchestrator = createAppWithRegistry(root, registry, config);
+
+  let dispatchCalled = false;
+  let mirrorRoutingMode = "";
+  (orchestrator as any).github = {
+    prepareDispatch: (_task: any, routingInput: any) => {
+      mirrorRoutingMode = routingInput.mode;
+      return {
+        workflow_name: "codex-head-gemini-review.yml",
+        payload_path: `${root}/dispatch.json`,
+        workflow_inputs_path: `${root}/inputs.json`,
+        issue_path: `${root}/issue.md`,
+        pr_path: null
+      };
+    },
+    publishMirror: (task: any) => ({
+      repository: "example/repo",
+      issue_command: ["gh", "issue", "create"],
+      issue_stdout: "https://github.com/example/repo/issues/456",
+      issue_stderr: "",
+      issue_created: true,
+      pr_command: null,
+      pr_stdout: "",
+      pr_stderr: "",
+      pr_created: false,
+      mirror: {
+        issue: {
+          number: 456,
+          url: "https://github.com/example/repo/issues/456",
+          title: `Codex Head task ${task.task_id}: ${task.goal}`
+        },
+        pull_request: null,
+        issue_error: null,
+        pull_request_error: null,
+        updated_at: Date.now()
+      }
+    }),
+    shouldDispatchLive: () => true,
+    dispatchWorkflow: () => {
+      dispatchCalled = true;
+      throw new Error("should not dispatch to GitHub");
+    }
+  };
+
+  const result = await orchestrator.runGoal("Review the latest PR in GitHub", {
+    publish_github_mirror: true
+  });
+
+  assert.equal(result.mirror?.detail.includes("Published GitHub issue mirror"), true);
+  assert.equal(result.outcome.state, "completed");
+  assert.equal(result.outcome.routing.mode, "local");
+  assert.equal(result.outcome.routing.worker_target, "gemini-cli");
+  assert.equal(result.task.state, "completed");
+  assert.equal(result.task.github_mirror?.issue?.number, 456);
+  assert.equal(mirrorRoutingMode, "local");
+  assert.equal(dispatchCalled, false);
+});
+
 test("GitHub live dispatch fails fast when gh authentication is missing", async () => {
   const root = createTempDir("codex-head-live-dispatch-fail-");
   const registry = new AdapterRegistry();
@@ -404,6 +512,70 @@ test("GitHub live dispatch fails fast when gh authentication is missing", async 
   assert.equal(outcome?.state, "failed");
   assert.match(outcome?.detail ?? "", /requires gh authentication/i);
   assert.equal(orchestrator.getTask(task.task.task_id).state, "failed");
+});
+
+test("local-preferred GitHub tasks can fall through from failed local execution into GitHub dispatch", async () => {
+  const root = createTempDir("codex-head-hybrid-local-to-github-");
+  const registry = new AdapterRegistry();
+
+  registry.register(new FakeAdapter(
+    makeCapability("gemini-cli"),
+    createHealthyHealth("gemini-cli"),
+    async (task) => ({
+      task_id: task.task_id,
+      worker_target: "gemini-cli",
+      status: "failed",
+      review_verdict: null,
+      summary: "Gemini local execution failed",
+      artifacts: [],
+      patch_ref: null,
+      log_ref: null,
+      cost: 0,
+      duration_ms: 10,
+      next_action: "manual",
+      review_notes: ["quota exhausted"]
+    })
+  ));
+
+  const config = createTestConfig(root);
+  config.github.execution_preference = "local_preferred";
+  config.github.repository = "example/repo";
+  config.command_templates["codex-cli"].local = undefined;
+  config.command_templates["claude-code"].local = undefined;
+  const orchestrator = createAppWithRegistry(root, registry, config);
+
+  (orchestrator as any).github = {
+    prepareDispatch: (task: any) => ({
+      workflow_name: "codex-head-gemini-review.yml",
+      payload_path: `${root}/${task.task_id}-dispatch.json`,
+      workflow_inputs_path: `${root}/${task.task_id}-inputs.json`,
+      issue_path: `${root}/${task.task_id}-issue.md`,
+      pr_path: null
+    }),
+    shouldDispatchLive: () => false
+  };
+
+  const task = orchestrator.submitTask(createTaskSpec({
+    goal: "Review the latest PR in GitHub",
+    repo: root,
+    worker_target: "gemini-cli",
+    expected_output: { kind: "review", format: "markdown", code_change: false },
+    requires_github: true
+  }));
+  orchestrator.enqueueTask(task.task.task_id);
+
+  const outcome = await orchestrator.dispatchNext();
+  assert.equal(outcome?.state, "running");
+  assert.equal(outcome?.routing.mode, "github");
+  assert.equal(outcome?.routing.worker_target, "gemini-cli");
+
+  const attempts = JSON.parse(
+    readFileSync(`${root}/artifacts/${task.task.task_id}/execution-attempts.json`, "utf8")
+  ) as {
+    attempts: Array<{ routing: { mode: string } }>;
+  };
+  assert.equal(attempts.attempts.length, 1);
+  assert.equal(attempts.attempts[0]?.routing.mode, "local");
 });
 
 test("syncGitHubCallback downloads and ingests a callback artifact into task state", async () => {

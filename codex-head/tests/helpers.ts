@@ -52,7 +52,8 @@ export function createTestConfig(root: string): CodexHeadConfig {
     workflow: "codex-head-worker.yml",
     review_workflow: "codex-head-gemini-review.yml",
     dispatch_mode: "artifacts_only",
-    cli_binary: "gh"
+    cli_binary: "gh",
+    execution_preference: "remote_only"
   };
   return config;
 }

@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 
 import { createDefaultRegistry, type AdapterRegistry } from "../adapter-registry";
+import { buildTaskPrompt } from "../adapter-registry/base";
 import { FileArtifactStore } from "../artifacts/fileArtifactStore";
 import { loadConfig, type CodexHeadConfig } from "../config";
 import type {
@@ -69,17 +70,18 @@ export function validateGitHubDispatchPayload(input: unknown): GitHubDispatchPay
 
 function buildRuntime(task: TaskSpec, artifactStore: FileArtifactStore, payloadPath: string): TaskRuntimeContext {
   const taskFile = artifactStore.writeJson(task.task_id, "task-input.json", task);
+  const artifactDir = artifactStore.getTaskDir(task.task_id);
   return {
     task_file: taskFile,
     task_goal: task.goal,
-    task_prompt: [
-      "You are running under Codex Head from a GitHub worker workflow.",
-      `Read the task specification from ${taskFile}.`,
-      `Use the current working directory as the repository root for ${task.repo}.`,
-      "Return only the requested deliverable.",
-      "Never delegate to another worker and never emit commands for another worker to execute."
-    ].join("\n"),
-    artifact_dir: artifactStore.getTaskDir(task.task_id),
+    task_prompt: buildTaskPrompt(task, {
+      task_file: taskFile,
+      task_goal: task.goal,
+      task_prompt: "",
+      artifact_dir: artifactDir,
+      github_payload: payloadPath
+    }),
+    artifact_dir: artifactDir,
     github_payload: payloadPath
   };
 }
