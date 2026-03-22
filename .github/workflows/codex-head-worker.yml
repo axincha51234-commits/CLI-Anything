@@ -31,10 +31,10 @@ jobs:
       issues: write
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
 
@@ -67,7 +67,7 @@ jobs:
 
       - name: Upload callback artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: codex-head-worker-callback-${{ inputs.task_id }}
           path: codex-head/runtime/artifacts/${{ inputs.task_id }}/github-callback.json
