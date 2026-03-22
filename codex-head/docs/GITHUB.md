@@ -111,6 +111,16 @@ Both GitHub workflows also honor the repository variable
 For a self-hosted path, set it to JSON such as
 `["self-hosted","windows","khoa"]`.
 
+For this repo, there is now a bootstrap helper at
+[`../scripts/setup-self-hosted-runner.ps1`](../scripts/setup-self-hosted-runner.ps1).
+It can:
+
+- download and verify the Windows x64 GitHub Actions runner
+- register it against the target repository
+- optionally install and start it as a Windows service
+- optionally set `CODEX_HEAD_RUNS_ON_JSON`
+- optionally set `REVIEW_API_URL`, `REVIEW_API_KEY`, and `REVIEW_MODEL`
+
 For `run-goal`, that opt-in can be satisfied automatically for the current run
 when the conditions above are already true.
 

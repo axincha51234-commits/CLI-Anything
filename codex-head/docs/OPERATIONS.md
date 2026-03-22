@@ -301,6 +301,13 @@ overrides, the endpoint must expose the OpenAI Responses API at
 gateway that only offers `/v1/chat/completions` can still look healthy at the
 models endpoint while every real execution fails at runtime.
 
+For the GitHub review workflow, the easiest no-public-endpoint path is now a
+self-hosted runner on the same Windows machine. Use
+[`../scripts/setup-self-hosted-runner.ps1`](../scripts/setup-self-hosted-runner.ps1)
+to register the runner, set `CODEX_HEAD_RUNS_ON_JSON`, and optionally wire
+`REVIEW_API_URL` plus `REVIEW_API_KEY` straight to a local
+Antigravity-Manager instance such as `http://127.0.0.1:8045/v1`.
+
 ## Common Failure Cases
 
 ### `missing_binary`

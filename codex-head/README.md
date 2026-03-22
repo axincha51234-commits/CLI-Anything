@@ -123,6 +123,10 @@ currently local-ready and exposes the matching cooldown reason.
 - Both GitHub workflows now also honor the repository variable
   `CODEX_HEAD_RUNS_ON_JSON`, so you can switch from `["ubuntu-latest"]` to a
   self-hosted label array without editing workflow YAML each time.
+- A bootstrap helper now exists at
+  [scripts/setup-self-hosted-runner.ps1](C:/Users/khoa%20phan/Documents/CLI-Anything-main/codex-head/scripts/setup-self-hosted-runner.ps1)
+  to register a Windows self-hosted runner and optionally wire
+  `REVIEW_API_URL` / `REVIEW_API_KEY` for local proxy-backed review.
 - GitHub callback reconciliation can now either sync directly from artifacts or
   wait on a resolved workflow run, but it is not background or automatic yet.
 - Local worker defaults do not verify upstream CLI authentication in advance,
