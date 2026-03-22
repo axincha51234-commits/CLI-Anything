@@ -18,6 +18,27 @@ function stripCodeFence(raw: string): string {
     .trim();
 }
 
+function summarizePlainTextReview(raw: string): NormalizedGeminiReview {
+  const cleaned = stripCodeFence(raw)
+    .replace(/\r\n/g, "\n")
+    .trim();
+  const lines = cleaned
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const summarySource = lines[0] ?? cleaned;
+  const summary = summarySource.length > 240
+    ? `${summarySource.slice(0, 237).trimEnd()}...`
+    : summarySource;
+  const reviewNotes = lines.slice(1, 6);
+
+  return {
+    review_verdict: "commented",
+    summary,
+    review_notes: reviewNotes.length > 0 ? reviewNotes : [cleaned]
+  };
+}
+
 function ensureVerdict(value: unknown): ReviewVerdict {
   if (value === "approved" || value === "changes_requested" || value === "commented") {
     return value;
@@ -61,10 +82,14 @@ export function normalizeGeminiReviewSummary(raw: string | null | undefined, rea
     return buildFallbackGeminiReview(reason);
   }
 
+  const cleaned = stripCodeFence(raw);
   try {
-    return parseGeminiReviewSummary(raw);
+    return parseGeminiReviewSummary(cleaned);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    if (!cleaned.trim().startsWith("{")) {
+      return summarizePlainTextReview(cleaned);
+    }
     return buildFallbackGeminiReview(`${reason} ${message}`.trim());
   }
 }

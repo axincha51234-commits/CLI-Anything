@@ -27,7 +27,22 @@ test("normalizeGeminiReviewSummary strips code fences and falls back safely on i
 
   const fallback = normalizeGeminiReviewSummary("not json", "Gemini review returned invalid structured output.");
   assert.equal(fallback.review_verdict, "commented");
-  assert.match(fallback.summary, /Gemini review returned invalid structured output/i);
+  assert.equal(fallback.summary, "not json");
+  assert.deepEqual(fallback.review_notes, ["not json"]);
+});
+
+test("normalizeGeminiReviewSummary salvages plain text review output into a commented review", () => {
+  const parsed = normalizeGeminiReviewSummary(
+    "Gemini 3.1 Pro High review summary\nPotential issue: remote review output was not strict JSON.\nConsider re-running with a narrower diff.",
+    "fallback"
+  );
+
+  assert.equal(parsed.review_verdict, "commented");
+  assert.equal(parsed.summary, "Gemini 3.1 Pro High review summary");
+  assert.deepEqual(parsed.review_notes, [
+    "Potential issue: remote review output was not strict JSON.",
+    "Consider re-running with a narrower diff."
+  ]);
 });
 
 test("buildGitHubReviewCallback produces a typed worker result", () => {
