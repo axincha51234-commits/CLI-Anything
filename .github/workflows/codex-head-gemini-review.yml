@@ -40,6 +40,8 @@ on:
 jobs:
   review:
     runs-on: ${{ fromJSON(vars.CODEX_HEAD_RUNS_ON_JSON != '' && vars.CODEX_HEAD_RUNS_ON_JSON || '["ubuntu-latest"]') }}
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
     permissions:
       contents: read
       pull-requests: read

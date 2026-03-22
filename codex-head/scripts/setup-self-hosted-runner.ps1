@@ -5,7 +5,9 @@ param(
   [string]$RunnerName = "",
   [string[]]$RunnerLabels = @("windows", "codex-head"),
   [switch]$InstallService = $true,
+  [switch]$InstallScheduledTaskFallback = $true,
   [switch]$SetRunsOnVariable,
+  [string]$ScheduledTaskName = "",
   [string]$ReviewApiUrl = "",
   [string]$ReviewApiKey = "",
   [string]$ReviewModel = ""
@@ -36,7 +38,48 @@ function Invoke-GhJson {
   return $output | ConvertFrom-Json
 }
 
+function Register-RunnerScheduledTask {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$TaskName,
+    [Parameter(Mandatory = $true)]
+    [string]$RunnerRoot,
+    [Parameter(Mandatory = $true)]
+    [string]$RunCmd
+  )
+
+  $taskAction = New-ScheduledTaskAction `
+    -Execute "cmd.exe" `
+    -Argument "/c `"`"$RunCmd`"`"" `
+    -WorkingDirectory $RunnerRoot
+
+  $taskTrigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
+  $taskSettings = New-ScheduledTaskSettingsSet `
+    -AllowStartIfOnBatteries `
+    -DontStopIfGoingOnBatteries `
+    -ExecutionTimeLimit (New-TimeSpan -Hours 0) `
+    -MultipleInstances IgnoreNew `
+    -RestartCount 999 `
+    -RestartInterval (New-TimeSpan -Minutes 1) `
+    -StartWhenAvailable
+
+  $taskPrincipal = New-ScheduledTaskPrincipal `
+    -UserId $env:USERNAME `
+    -LogonType Interactive `
+    -RunLevel Highest
+
+  Register-ScheduledTask `
+    -TaskName $TaskName `
+    -Action $taskAction `
+    -Trigger $taskTrigger `
+    -Settings $taskSettings `
+    -Principal $taskPrincipal `
+    -Force | Out-Null
+}
+
 Require-Command "gh"
+Require-Command "Register-ScheduledTask"
+Require-Command "Start-ScheduledTask"
 
 $repoUrl = "https://github.com/$Repository"
 $resolvedRunnerRoot = if ([string]::IsNullOrWhiteSpace($RunnerRoot)) {
@@ -50,6 +93,11 @@ $resolvedRunnerName = if ([string]::IsNullOrWhiteSpace($RunnerName)) {
 } else {
   $RunnerName
 }
+$resolvedScheduledTaskName = if ([string]::IsNullOrWhiteSpace($ScheduledTaskName)) {
+  "Codex Head Runner ($resolvedRunnerName)"
+} else {
+  $ScheduledTaskName
+}
 $labelCsv = (($RunnerLabels | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join ",")
 $runsOnLabels = @("self-hosted") + ($RunnerLabels | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
 $runsOnJson = $runsOnLabels | ConvertTo-Json -Compress
@@ -58,6 +106,7 @@ Write-Host "Repository: $Repository"
 Write-Host "Runner root: $resolvedRunnerRoot"
 Write-Host "Runner name: $resolvedRunnerName"
 Write-Host "Runner labels: $labelCsv"
+Write-Host "Scheduled task: $resolvedScheduledTaskName"
 
 $downloads = Invoke-GhJson -Args @("api", "repos/$Repository/actions/runners/downloads")
 $runnerPackage = $downloads | Where-Object { $_.os -eq "win" -and $_.architecture -eq "x64" } | Select-Object -First 1
@@ -116,7 +165,13 @@ if ($PSCmdlet.ShouldProcess($Repository, "Register self-hosted runner")) {
         }
       } else {
         Write-Warning "svc.cmd was not found in the downloaded runner package. Skipping Windows service installation."
-        Write-Warning "Start the runner manually with '$runCmd' or wrap it in your own Windows service or scheduled task."
+        if ($InstallScheduledTaskFallback) {
+          Register-RunnerScheduledTask -TaskName $resolvedScheduledTaskName -RunnerRoot $resolvedRunnerRoot -RunCmd $runCmd
+          Start-ScheduledTask -TaskName $resolvedScheduledTaskName
+          Write-Warning "Registered scheduled task fallback '$resolvedScheduledTaskName' and started it."
+        } else {
+          Write-Warning "Start the runner manually with '$runCmd' or wrap it in your own Windows service or scheduled task."
+        }
       }
     }
   } finally {
@@ -153,6 +208,9 @@ if (-not [string]::IsNullOrWhiteSpace($ReviewApiUrl) -and -not [string]::IsNullO
 Write-Host ""
 Write-Host "Self-hosted runner setup is complete."
 Write-Host "Suggested runs-on JSON: $runsOnJson"
+if ($InstallScheduledTaskFallback -and -not (Test-Path $svcCmd)) {
+  Write-Host "Scheduled task fallback: $resolvedScheduledTaskName"
+}
 if (-not [string]::IsNullOrWhiteSpace($ReviewApiUrl)) {
   Write-Host "Configured REVIEW_API_URL and REVIEW_API_KEY for $Repository."
 }

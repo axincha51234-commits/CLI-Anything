@@ -122,8 +122,10 @@ It can:
 - optionally set `REVIEW_API_URL`, `REVIEW_API_KEY`, and `REVIEW_MODEL`
 
 If the downloaded Windows runner package omits `svc.cmd`, the helper now
-registers the runner and warns instead of failing. In that case, start
-`run.cmd` manually or wrap the runner in your own scheduled task or service.
+registers the runner and installs a scheduled-task fallback by default. The
+task runs `run.cmd` at user logon and can be disabled with
+`-InstallScheduledTaskFallback:$false` if you want to manage persistence
+yourself.
 
 For `run-goal`, that opt-in can be satisfied automatically for the current run
 when the conditions above are already true.

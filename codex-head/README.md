@@ -131,8 +131,9 @@ currently local-ready and exposes the matching cooldown reason.
   to register a Windows self-hosted runner and optionally wire
   `REVIEW_API_URL` / `REVIEW_API_KEY` for local proxy-backed review.
 - On newer Windows runner packages that omit `svc.cmd`, the bootstrap helper
-  now warns instead of failing so you can still register the runner and start
-  `run.cmd` manually or wrap it in your own service/task.
+  now falls back to a Windows scheduled task by default so the runner can come
+  back after logon without a manual terminal. You can still disable that and
+  manage `run.cmd` yourself if you prefer.
 - GitHub callback reconciliation can now either sync directly from artifacts or
   wait on a resolved workflow run, but it is not background or automatic yet.
 - Local worker defaults do not verify upstream CLI authentication in advance,

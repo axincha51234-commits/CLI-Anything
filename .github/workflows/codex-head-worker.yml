@@ -20,6 +20,8 @@ on:
 jobs:
   worker:
     runs-on: ${{ fromJSON(vars.CODEX_HEAD_RUNS_ON_JSON != '' && vars.CODEX_HEAD_RUNS_ON_JSON || '["ubuntu-latest"]') }}
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
     defaults:
       run:
         working-directory: codex-head
