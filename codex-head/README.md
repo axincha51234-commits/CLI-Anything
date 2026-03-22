@@ -145,11 +145,17 @@ currently local-ready and exposes the matching cooldown reason.
   [scripts/recycle-self-hosted-runner.ps1](C:/Users/khoa%20phan/Documents/CLI-Anything-main/codex-head/scripts/recycle-self-hosted-runner.ps1)
   so the old GitHub broker session can drain before the listener is started
   again.
+- If you want `codex-head` to try that recycle flow automatically when a
+  self-hosted run looks stuck behind a stale broker session, set
+  `github.auto_recycle_stale_runner=true` in your local or machine config.
+  This is opt-in and currently meant for Windows self-hosted runners.
 - GitHub callback reconciliation can now either sync directly from artifacts or
   wait on a resolved workflow run, but it is not background or automatic yet.
 - `npm run health` now also reports the resolved self-hosted `runs-on` labels,
   matching runner records, and whether a machine-local worker overlay is
   visible, so operator triage no longer depends on ad hoc `gh api` calls.
+  It also shows whether stale-runner auto-recycle is enabled and whether the
+  recycle script is present on disk.
 - Self-hosted queue-stall handling now writes `github-queue-diagnosis.json`,
   and an opt-in `github.auto_recycle_stale_runner` flag can automatically call
   the Windows recycle helper for stale broker sessions.
