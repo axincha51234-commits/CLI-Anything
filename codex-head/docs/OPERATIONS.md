@@ -322,6 +322,10 @@ runner package ships no native service wrapper.
 The same helper now also sets
 `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true` for the current user so the
 self-hosted runner opts into the newer JavaScript action runtime.
+If you need to recycle that runner later, use
+[`../scripts/recycle-self-hosted-runner.ps1`](../scripts/recycle-self-hosted-runner.ps1)
+to stop the listener, wait for the stale broker session to clear, and then
+bring the runner back online without triggering an avoidable session conflict.
 
 ## Common Failure Cases
 

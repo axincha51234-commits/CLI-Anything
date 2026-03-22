@@ -134,6 +134,11 @@ after the runner restarts.
 The same environment bootstrap lets `codex-head` running inside the clean
 runner checkout merge a machine-local worker overlay from outside `_work`,
 which is useful for local proxy credentials or WSL-specific worker commands.
+If you need to restart the runner later, prefer
+[`../scripts/recycle-self-hosted-runner.ps1`](../scripts/recycle-self-hosted-runner.ps1)
+instead of killing `Runner.Listener` and restarting immediately. That helper
+waits for GitHub to clear the previous broker session before bringing the
+scheduled-task runner back online.
 
 For `run-goal`, that opt-in can be satisfied automatically for the current run
 when the conditions above are already true.
