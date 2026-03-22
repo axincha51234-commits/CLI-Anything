@@ -69,55 +69,68 @@ jobs:
 
       - name: Build review diff
         id: build_review_diff
-        shell: bash
+        shell: pwsh
         run: |
-          mkdir -p runtime
-          git fetch origin "${{ github.event.inputs.base_branch }}" --depth=1
-          git fetch origin "${{ github.event.inputs.work_branch }}" --depth=1 || true
+          New-Item -ItemType Directory -Force -Path runtime | Out-Null
+          & git fetch origin "${{ github.event.inputs.base_branch }}" --depth=1
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to fetch base branch ${{ github.event.inputs.base_branch }} from origin."
+          }
 
-          if git rev-parse --verify "origin/${{ github.event.inputs.work_branch }}" >/dev/null 2>&1; then
-            git diff "origin/${{ github.event.inputs.base_branch }}...origin/${{ github.event.inputs.work_branch }}" > runtime/review.diff
-            echo "work_branch_available=true" >> "$GITHUB_OUTPUT"
-          else
-            {
-              echo "Work branch '${{ github.event.inputs.work_branch }}' was not available on origin."
-              echo "Falling back to base branch context only."
-            } > runtime/review.diff
-            echo "work_branch_available=false" >> "$GITHUB_OUTPUT"
-          fi
+          & git fetch origin "${{ github.event.inputs.work_branch }}" --depth=1 *> $null
+          $workBranchRef = "origin/${{ github.event.inputs.work_branch }}"
+          & git rev-parse --verify $workBranchRef *> $null
+          if ($LASTEXITCODE -eq 0) {
+            & git diff "origin/${{ github.event.inputs.base_branch }}...$workBranchRef" | Set-Content -Path runtime/review.diff -Encoding utf8NoBOM
+            "work_branch_available=true" | Add-Content -Path $env:GITHUB_OUTPUT
+          } else {
+            @(
+              "Work branch '${{ github.event.inputs.work_branch }}' was not available on origin."
+              "Falling back to base branch context only."
+            ) | Set-Content -Path runtime/review.diff -Encoding utf8NoBOM
+            "work_branch_available=false" | Add-Content -Path $env:GITHUB_OUTPUT
+          }
 
       - name: Detect remote review auth
         id: review_auth
-        shell: bash
+        shell: pwsh
         env:
           REVIEW_API_URL: ${{ secrets.REVIEW_API_URL }}
           REVIEW_API_KEY: ${{ secrets.REVIEW_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
-          if [[ -n "${REVIEW_API_URL}" && -n "${REVIEW_API_KEY}" ]]; then
-            echo "configured=true" >> "$GITHUB_OUTPUT"
-            echo "provider=openai-compatible" >> "$GITHUB_OUTPUT"
-            echo "credential_source=review_api" >> "$GITHUB_OUTPUT"
-          elif [[ -n "${OPENAI_API_KEY}" ]]; then
-            echo "configured=true" >> "$GITHUB_OUTPUT"
-            echo "provider=openai-compatible" >> "$GITHUB_OUTPUT"
-            echo "credential_source=openai" >> "$GITHUB_OUTPUT"
-          elif [[ -n "${GEMINI_API_KEY}" ]]; then
-            echo "configured=true" >> "$GITHUB_OUTPUT"
-            echo "provider=gemini" >> "$GITHUB_OUTPUT"
-            echo "credential_source=gemini" >> "$GITHUB_OUTPUT"
-          else
-            echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "provider=none" >> "$GITHUB_OUTPUT"
-            echo "credential_source=none" >> "$GITHUB_OUTPUT"
-          fi
+          if ($env:REVIEW_API_URL -and $env:REVIEW_API_KEY) {
+            @(
+              "configured=true"
+              "provider=openai-compatible"
+              "credential_source=review_api"
+            ) | Add-Content -Path $env:GITHUB_OUTPUT
+          } elseif ($env:OPENAI_API_KEY) {
+            @(
+              "configured=true"
+              "provider=openai-compatible"
+              "credential_source=openai"
+            ) | Add-Content -Path $env:GITHUB_OUTPUT
+          } elseif ($env:GEMINI_API_KEY) {
+            @(
+              "configured=true"
+              "provider=gemini"
+              "credential_source=gemini"
+            ) | Add-Content -Path $env:GITHUB_OUTPUT
+          } else {
+            @(
+              "configured=false"
+              "provider=none"
+              "credential_source=none"
+            ) | Add-Content -Path $env:GITHUB_OUTPUT
+          }
 
       - name: Run OpenAI-compatible review
         id: openai_review
         if: ${{ steps.review_auth.outputs.provider == 'openai-compatible' }}
         continue-on-error: true
-        shell: bash
+        shell: pwsh
         env:
           REVIEW_API_URL: ${{ secrets.REVIEW_API_URL }}
           REVIEW_API_KEY: ${{ secrets.REVIEW_API_KEY }}
@@ -133,7 +146,7 @@ jobs:
           REVIEW_POLICY: ${{ github.event.inputs.review_policy }}
           EXPECTED_OUTPUT: ${{ github.event.inputs.expected_output }}
         run: |
-          node - <<'NODE'
+          @'
           const fs = require("node:fs");
           const path = require("node:path");
 
@@ -281,7 +294,7 @@ jobs:
             process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
             process.exitCode = 1;
           });
-          NODE
+          '@ | node
 
       - name: Run Gemini review
         id: gemini_review
@@ -312,12 +325,14 @@ jobs:
 
       - name: Persist Gemini review output
         if: ${{ steps.review_auth.outputs.provider == 'gemini' && steps.gemini_review.outcome == 'success' }}
-        shell: bash
+        shell: pwsh
         run: |
-          printf '%s' '${{ steps.gemini_review.outputs.summary }}' > runtime/review-model-output.txt
+          @'
+          ${{ steps.gemini_review.outputs.summary }}
+          '@ | Set-Content -Path runtime/review-model-output.txt -NoNewline -Encoding utf8NoBOM
 
       - name: Write callback artifact
-        shell: bash
+        shell: pwsh
         env:
           TASK_ID: ${{ github.event.inputs.task_id }}
           TARGET_REPOSITORY: ${{ github.event.inputs.target_repository }}
@@ -333,8 +348,8 @@ jobs:
           OPENAI_REVIEW_OUTCOME: ${{ steps.openai_review.outcome }}
           GEMINI_REVIEW_OUTCOME: ${{ steps.gemini_review.outcome }}
         run: |
-          mkdir -p runtime/artifacts/${TASK_ID}
-          node - <<'NODE'
+          New-Item -ItemType Directory -Force -Path "runtime/artifacts/$env:TASK_ID" | Out-Null
+          @'
           const fs = require("node:fs");
           const path = require("node:path");
           const reviewCallbackModule = path.resolve("dist", "src", "github", "reviewCallback.js");
@@ -387,7 +402,7 @@ jobs:
             `Expected output was ${process.env.EXPECTED_OUTPUT}.`
           ]);
           fs.writeFileSync(callbackPath, JSON.stringify(callback, null, 2), "utf8");
-          NODE
+          '@ | node
 
       - name: Upload callback artifact
         if: always()

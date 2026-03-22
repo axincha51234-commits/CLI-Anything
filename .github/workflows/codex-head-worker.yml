@@ -44,19 +44,21 @@ jobs:
 
       - name: Materialize dispatch payload
         id: payload
-        shell: bash
+        shell: pwsh
         run: |
-          mkdir -p runtime
-          if [[ -n "${{ inputs.payload_json }}" ]]; then
-            printf '%s' '${{ inputs.payload_json }}' > runtime/worker-dispatch.json
-          elif [[ -n "${{ inputs.payload_path }}" && -f "${{ inputs.payload_path }}" ]]; then
-            cp "${{ inputs.payload_path }}" runtime/worker-dispatch.json
-          else
-            echo "::error::Dispatch payload is not available in the runner checkout and no inline payload was provided."
+          New-Item -ItemType Directory -Force -Path runtime | Out-Null
+          if ("${{ inputs.payload_json }}") {
+            @'
+          ${{ inputs.payload_json }}
+          '@ | Set-Content -Path runtime/worker-dispatch.json -NoNewline -Encoding utf8NoBOM
+          } elseif ("${{ inputs.payload_path }}" -and (Test-Path "${{ inputs.payload_path }}")) {
+            Copy-Item "${{ inputs.payload_path }}" runtime/worker-dispatch.json -Force
+          } else {
+            Write-Error "Dispatch payload is not available in the runner checkout and no inline payload was provided."
             exit 1
-          fi
-          cat runtime/worker-dispatch.json
-          echo "payload_path=runtime/worker-dispatch.json" >> "$GITHUB_OUTPUT"
+          }
+          Get-Content runtime/worker-dispatch.json
+          "payload_path=runtime/worker-dispatch.json" | Add-Content -Path $env:GITHUB_OUTPUT
 
       - name: Execute worker payload
         run: node dist/src/index.js run-github-payload "${{ steps.payload.outputs.payload_path }}"

@@ -130,6 +130,9 @@ currently local-ready and exposes the matching cooldown reason.
   [scripts/setup-self-hosted-runner.ps1](C:/Users/khoa%20phan/Documents/CLI-Anything-main/codex-head/scripts/setup-self-hosted-runner.ps1)
   to register a Windows self-hosted runner and optionally wire
   `REVIEW_API_URL` / `REVIEW_API_KEY` for local proxy-backed review.
+- On newer Windows runner packages that omit `svc.cmd`, the bootstrap helper
+  now warns instead of failing so you can still register the runner and start
+  `run.cmd` manually or wrap it in your own service/task.
 - GitHub callback reconciliation can now either sync directly from artifacts or
   wait on a resolved workflow run, but it is not background or automatic yet.
 - Local worker defaults do not verify upstream CLI authentication in advance,

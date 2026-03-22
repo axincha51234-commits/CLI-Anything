@@ -87,6 +87,7 @@ if (-not $registration.token) {
 
 $configCmd = Join-Path $resolvedRunnerRoot "config.cmd"
 $svcCmd = Join-Path $resolvedRunnerRoot "svc.cmd"
+$runCmd = Join-Path $resolvedRunnerRoot "run.cmd"
 
 if ($PSCmdlet.ShouldProcess($Repository, "Register self-hosted runner")) {
   Push-Location $resolvedRunnerRoot
@@ -104,13 +105,18 @@ if ($PSCmdlet.ShouldProcess($Repository, "Register self-hosted runner")) {
     }
 
     if ($InstallService) {
-      & $svcCmd install
-      if ($LASTEXITCODE -ne 0) {
-        throw "svc.cmd install failed with exit code $LASTEXITCODE."
-      }
-      & $svcCmd start
-      if ($LASTEXITCODE -ne 0) {
-        throw "svc.cmd start failed with exit code $LASTEXITCODE."
+      if (Test-Path $svcCmd) {
+        & $svcCmd install
+        if ($LASTEXITCODE -ne 0) {
+          throw "svc.cmd install failed with exit code $LASTEXITCODE."
+        }
+        & $svcCmd start
+        if ($LASTEXITCODE -ne 0) {
+          throw "svc.cmd start failed with exit code $LASTEXITCODE."
+        }
+      } else {
+        Write-Warning "svc.cmd was not found in the downloaded runner package. Skipping Windows service installation."
+        Write-Warning "Start the runner manually with '$runCmd' or wrap it in your own Windows service or scheduled task."
       }
     }
   } finally {

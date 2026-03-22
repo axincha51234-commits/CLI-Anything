@@ -311,6 +311,9 @@ to register the runner, set `CODEX_HEAD_RUNS_ON_JSON`, and optionally wire
 Antigravity-Manager instance such as `http://127.0.0.1:8045/v1`.
 That review workflow now tries `/v1/responses` first and falls back to
 `/v1/chat/completions`, so proxies that expose either shape can be used.
+If the downloaded Windows runner package omits `svc.cmd`, the bootstrap helper
+now completes registration and warns instead of aborting. In that case, keep
+the runner online with `run.cmd` or your own Windows service/task wrapper.
 
 ## Common Failure Cases
 
