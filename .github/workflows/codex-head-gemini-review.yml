@@ -64,6 +64,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Build codex-head
+        run: npm run build
+
       - name: Build review diff
         id: build_review_diff
         shell: bash
@@ -141,11 +144,12 @@ jobs:
           node - <<'NODE'
           const fs = require("node:fs");
           const path = require("node:path");
+          const reviewCallbackModule = path.resolve("dist", "src", "github", "reviewCallback.js");
           const {
             buildFallbackGeminiReview,
             buildGitHubReviewCallback,
             normalizeGeminiReviewSummary
-          } = require("./dist/src/github/reviewCallback.js");
+          } = require(reviewCallbackModule);
 
           const taskId = process.env.TASK_ID;
           const callbackPath = path.join("runtime", "artifacts", taskId, "github-callback.json");
