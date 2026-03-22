@@ -41,9 +41,10 @@ Capability values come from the adapter definitions in
 - The planner chooses it for GitHub, PR, issue, workflow, or triage language.
 - The repo now ships a safe default local template that runs Gemini in
   headless plan mode and expects artifact text back.
-- The review workflow now builds a real diff review on GitHub when
-  `GEMINI_API_KEY` is configured, and otherwise falls back to a safe commented
-  callback artifact.
+- The review workflow now builds a real diff review on GitHub when any of
+  these are configured: `REVIEW_API_URL` + `REVIEW_API_KEY`,
+  `OPENAI_API_KEY`, or `GEMINI_API_KEY`. Without them, it falls back to a safe
+  commented callback artifact.
 
 ### `antigravity`
 

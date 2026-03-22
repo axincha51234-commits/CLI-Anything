@@ -86,21 +86,133 @@ jobs:
             echo "work_branch_available=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Detect Gemini workflow auth
-        id: gemini_auth
+      - name: Detect remote review auth
+        id: review_auth
         shell: bash
         env:
+          REVIEW_API_URL: ${{ secrets.REVIEW_API_URL }}
+          REVIEW_API_KEY: ${{ secrets.REVIEW_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
-          if [[ -n "${GEMINI_API_KEY}" ]]; then
+          if [[ -n "${REVIEW_API_URL}" && -n "${REVIEW_API_KEY}" ]]; then
             echo "configured=true" >> "$GITHUB_OUTPUT"
+            echo "provider=openai-compatible" >> "$GITHUB_OUTPUT"
+            echo "credential_source=review_api" >> "$GITHUB_OUTPUT"
+          elif [[ -n "${OPENAI_API_KEY}" ]]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+            echo "provider=openai-compatible" >> "$GITHUB_OUTPUT"
+            echo "credential_source=openai" >> "$GITHUB_OUTPUT"
+          elif [[ -n "${GEMINI_API_KEY}" ]]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+            echo "provider=gemini" >> "$GITHUB_OUTPUT"
+            echo "credential_source=gemini" >> "$GITHUB_OUTPUT"
           else
             echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "provider=none" >> "$GITHUB_OUTPUT"
+            echo "credential_source=none" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Run OpenAI-compatible review
+        id: openai_review
+        if: ${{ steps.review_auth.outputs.provider == 'openai-compatible' }}
+        continue-on-error: true
+        shell: bash
+        env:
+          REVIEW_API_URL: ${{ secrets.REVIEW_API_URL }}
+          REVIEW_API_KEY: ${{ secrets.REVIEW_API_KEY }}
+          REVIEW_MODEL: ${{ secrets.REVIEW_MODEL }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
+          OPENAI_REVIEW_MODEL: ${{ secrets.OPENAI_REVIEW_MODEL }}
+          TARGET_REPOSITORY: ${{ github.event.inputs.target_repository }}
+          BASE_BRANCH: ${{ github.event.inputs.base_branch }}
+          WORK_BRANCH: ${{ github.event.inputs.work_branch }}
+          EXECUTION_TARGET: ${{ github.event.inputs.execution_target }}
+          PRIOR_RESULT_STATUS: ${{ github.event.inputs.prior_result_status }}
+          REVIEW_POLICY: ${{ github.event.inputs.review_policy }}
+          EXPECTED_OUTPUT: ${{ github.event.inputs.expected_output }}
+        run: |
+          node - <<'NODE'
+          const fs = require("node:fs");
+          const path = require("node:path");
+
+          const baseUrl = (process.env.REVIEW_API_URL || process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
+          const apiKey = process.env.REVIEW_API_KEY || process.env.OPENAI_API_KEY;
+          const model = process.env.REVIEW_MODEL || process.env.OPENAI_REVIEW_MODEL || "gpt-4.1-mini";
+          const diffPath = path.join("runtime", "review.diff");
+          const outputPath = path.join("runtime", "review-model-output.txt");
+          const diff = fs.existsSync(diffPath) ? fs.readFileSync(diffPath, "utf8") : "";
+
+          const system = "You are the remote review worker under Codex Head. Return JSON only with keys review_verdict, summary, and review_notes. Do not use code fences or extra text.";
+          const user = [
+            `Review the git diff in codex-head/runtime/review.diff for repository ${process.env.TARGET_REPOSITORY}.`,
+            `Base branch: ${process.env.BASE_BRANCH}`,
+            `Work branch: ${process.env.WORK_BRANCH}`,
+            `Primary execution target: ${process.env.EXECUTION_TARGET}`,
+            `Prior worker status: ${process.env.PRIOR_RESULT_STATUS}`,
+            `Review policy: ${process.env.REVIEW_POLICY}`,
+            `Expected output: ${process.env.EXPECTED_OUTPUT}`,
+            "",
+            "Return JSON only, with no code fences and no extra text:",
+            "{",
+            '  "review_verdict": "approved|changes_requested|commented",',
+            '  "summary": "short summary",',
+            '  "review_notes": ["note 1", "note 2"]',
+            "}",
+            "",
+            "Do not modify files, do not create commits, and do not post GitHub comments.",
+            "",
+            diff
+          ].join("\n");
+
+          async function main() {
+            const response = await fetch(`${baseUrl}/chat/completions`, {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${apiKey}`,
+                "Content-Type": "application/json"
+              },
+              body: JSON.stringify({
+                model,
+                temperature: 0.1,
+                messages: [
+                  { role: "system", content: system },
+                  { role: "user", content: user }
+                ]
+              })
+            });
+
+            const bodyText = await response.text();
+            if (!response.ok) {
+              throw new Error(`OpenAI-compatible review request failed (${response.status}): ${bodyText.slice(0, 2000)}`);
+            }
+
+            const parsed = JSON.parse(bodyText);
+            const content = parsed?.choices?.[0]?.message?.content;
+            const normalizedContent = Array.isArray(content)
+              ? content
+                  .map((item) => typeof item?.text === "string" ? item.text : "")
+                  .join("\n")
+                  .trim()
+              : String(content ?? "").trim();
+
+            if (!normalizedContent) {
+              throw new Error("OpenAI-compatible review response did not contain message content.");
+            }
+
+            fs.writeFileSync(outputPath, normalizedContent, "utf8");
+          }
+
+          main().catch((error) => {
+            process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+            process.exitCode = 1;
+          });
+          NODE
 
       - name: Run Gemini review
         id: gemini_review
-        if: ${{ steps.gemini_auth.outputs.configured == 'true' }}
+        if: ${{ steps.review_auth.outputs.provider == 'gemini' }}
         continue-on-error: true
         uses: google-github-actions/run-gemini-cli@v0.1.21
         with:
@@ -125,6 +237,12 @@ jobs:
             Do not modify files, do not create commits, and do not post GitHub comments.
           upload_artifacts: false
 
+      - name: Persist Gemini review output
+        if: ${{ steps.review_auth.outputs.provider == 'gemini' && steps.gemini_review.outcome == 'success' }}
+        shell: bash
+        run: |
+          printf '%s' '${{ steps.gemini_review.outputs.summary }}' > runtime/review-model-output.txt
+
       - name: Write callback artifact
         shell: bash
         env:
@@ -136,9 +254,11 @@ jobs:
           PRIOR_RESULT_STATUS: ${{ github.event.inputs.prior_result_status }}
           EXPECTED_OUTPUT: ${{ github.event.inputs.expected_output }}
           WORK_BRANCH_AVAILABLE: ${{ steps.build_review_diff.outputs.work_branch_available }}
-          GEMINI_SUMMARY: ${{ steps.gemini_review.outputs.summary }}
-          GEMINI_OUTCOME: ${{ steps.gemini_review.outcome }}
-          GEMINI_CONFIGURED: ${{ steps.gemini_auth.outputs.configured }}
+          REVIEW_PROVIDER: ${{ steps.review_auth.outputs.provider }}
+          REVIEW_CREDENTIAL_SOURCE: ${{ steps.review_auth.outputs.credential_source }}
+          REVIEW_CONFIGURED: ${{ steps.review_auth.outputs.configured }}
+          OPENAI_REVIEW_OUTCOME: ${{ steps.openai_review.outcome }}
+          GEMINI_REVIEW_OUTCOME: ${{ steps.gemini_review.outcome }}
         run: |
           mkdir -p runtime/artifacts/${TASK_ID}
           node - <<'NODE'
@@ -153,24 +273,32 @@ jobs:
 
           const taskId = process.env.TASK_ID;
           const callbackPath = path.join("runtime", "artifacts", taskId, "github-callback.json");
-          const configured = process.env.GEMINI_CONFIGURED === "true";
-          const outcome = process.env.GEMINI_OUTCOME || "";
-          const rawSummary = process.env.GEMINI_SUMMARY || "";
+          const configured = process.env.REVIEW_CONFIGURED === "true";
+          const provider = process.env.REVIEW_PROVIDER || "none";
+          const providerOutcome = provider === "openai-compatible"
+            ? (process.env.OPENAI_REVIEW_OUTCOME || "")
+            : (process.env.GEMINI_REVIEW_OUTCOME || "");
+          const rawSummaryPath = path.join("runtime", "review-model-output.txt");
+          const rawSummary = fs.existsSync(rawSummaryPath)
+            ? fs.readFileSync(rawSummaryPath, "utf8")
+            : "";
 
           let review;
           if (!configured) {
-            review = buildFallbackGeminiReview("Gemini review skipped because workflow auth was not configured.");
-          } else if (outcome !== "success") {
-            review = buildFallbackGeminiReview(`Gemini review failed or was skipped with outcome: ${outcome || "unknown"}.`);
+            review = buildFallbackGeminiReview("Remote review skipped because no supported workflow credential was configured.");
+          } else if (providerOutcome !== "success") {
+            review = buildFallbackGeminiReview(`Remote review failed or was skipped with provider ${provider} and outcome: ${providerOutcome || "unknown"}.`);
           } else {
             review = normalizeGeminiReviewSummary(
               rawSummary,
-              "Gemini review returned invalid structured output."
+              `Remote review returned invalid structured output for provider ${provider}.`
             );
           }
 
           const callback = buildGitHubReviewCallback(taskId, callbackPath, review, [
             "Review callback captured from GitHub workflow.",
+            `Review provider was ${provider}.`,
+            `Credential source was ${process.env.REVIEW_CREDENTIAL_SOURCE}.`,
             `Target repository was ${process.env.TARGET_REPOSITORY}.`,
             `Base branch was ${process.env.BASE_BRANCH}.`,
             `Work branch was ${process.env.WORK_BRANCH}.`,

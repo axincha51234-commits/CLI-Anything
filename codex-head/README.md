@@ -24,12 +24,25 @@ node dist/src/index.js run-goal "Review the latest PR in GitHub"
 ```
 
 The default local templates now run `claude-code`, `codex-cli`, and
-`gemini-cli` in safe non-interactive read-only or plan-style modes. They are
-meant to produce artifacts, summaries, and patch text, not uncontrolled local
-mutation.
+`gemini-cli` in safe non-interactive read-only or plan-style modes. The Gemini
+template is pinned to `gemini-2.5-flash` because headless `auto` or premium
+defaults can be quota-sensitive on real operator accounts. Local command
+templates can also inject environment variables through an optional `env` map
+in `workers.local.json`, which is useful for WSL-backed `codex-cli` setups.
+That same override path is also the clean way to route local workers through a
+local proxy such as Antigravity-Manager on `http://127.0.0.1:8045` without
+rewriting your global CLI config.
+These workers are meant to produce artifacts, summaries, and patch text, not
+uncontrolled local mutation.
 
 The default bootstrap is now local-first. `github.enabled` starts as `false`,
 so a fresh clone stays on-machine unless you explicitly enable GitHub routing.
+
+When you do enable GitHub, `github.execution_preference` controls whether
+GitHub-shaped tasks must execute remotely or can still prefer local workers
+while keeping GitHub mirrors and workflow artifacts. The conservative default
+is `remote_only`. For the strongest mixed setup on an operator machine, set
+`execution_preference` to `local_preferred`.
 
 `run-goal` is now the shortest operator path. It plans, saves, enqueues,
 publishes mirrors when needed, dispatches the task, and waits for GitHub
@@ -97,17 +110,37 @@ currently local-ready and exposes the matching cooldown reason.
 
 - Live GitHub workflow dispatch is opt-in and still requires `gh` auth plus a
   real `github.repository` value.
+- `github.execution_preference = "local_preferred"` is now the practical
+  hybrid mode: keep GitHub as mirror/control plane, but execute locally first
+  and only fall through to GitHub execution when the local chain is unusable.
 - `run-goal` can auto-upgrade GitHub tasks to live `gh_cli` dispatch for the
   current run, but a real target repo still has to be discoverable or supplied.
 - GitHub issue and PR mirror publishing is now supported, but automatic mirror
   updates and richer sync flows are not fully wired.
-- The Gemini review workflow now uses real Gemini review logic only when
-  `GEMINI_API_KEY` is configured in GitHub Actions.
+- The GitHub review workflow now supports three remote auth paths in order:
+  `REVIEW_API_URL` + `REVIEW_API_KEY` for an OpenAI-compatible endpoint,
+  `OPENAI_API_KEY` for direct OpenAI usage, or `GEMINI_API_KEY` for Gemini.
 - GitHub callback reconciliation can now either sync directly from artifacts or
   wait on a resolved workflow run, but it is not background or automatic yet.
 - Local worker defaults do not verify upstream CLI authentication in advance,
   so automatic fallback still fails if every candidate worker is unusable at
   runtime.
+- `codex-cli` local proxy overrides must speak the OpenAI Responses API at
+  `/v1/responses`; chat-completions-only gateways are not compatible with
+  current Codex CLI local execution.
+- If your Windows `codex` entrypoint forwards into WSL, override
+  `command_templates.codex-cli.local` to call `wsl.exe` directly and set
+  `env.WSLENV="CODEX_HOME/p"` plus
+  `env.CODEX_HOME="C:\\Users\\<you>\\.codex"` so the Linux-side Codex process
+  reads the same auth store as the Windows-side switcher.
+- If you want `codex-head` to use Antigravity-Manager only for this repo, point
+  `command_templates.codex-cli.*.env.CODEX_HOME` at a repo-local Codex profile
+  that contains `auth.json` plus a `config.toml` custom provider targeting the
+  reachable Antigravity-Manager host for that runtime, such as
+  `http://172.31.64.1:8045/v1` from WSL-backed Codex, and inject
+  `ANTHROPIC_BASE_URL` for Claude. For Gemini, prefer a repo-local home/profile
+  that sets `.gemini/settings.json` auth to `gemini-api-key`, otherwise the CLI
+  may keep preferring cached Google login instead of your proxy env.
 - `antigravity` is disabled by default behind a feature flag.
 - Legacy config files may still use camelCase keys, but the loader now accepts
   both camelCase and snake_case overrides.

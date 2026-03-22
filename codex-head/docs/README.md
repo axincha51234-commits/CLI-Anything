@@ -130,7 +130,10 @@ older camelCase variants for backward compatibility.
 - No fully wired GitHub API control plane for mirror updates, PR review events,
   or background workflow callbacks
 - A real target `OWNER/REPO` still has to be chosen for live end-to-end use
-- Gemini review requires GitHub Actions auth via `GEMINI_API_KEY`
+- Real model review on GitHub-hosted runners requires one of:
+  `REVIEW_API_URL` + `REVIEW_API_KEY`, `OPENAI_API_KEY`, or `GEMINI_API_KEY`;
+  without any of them, the review workflow can still run but only emits a
+  fallback callback
 - Callback reconciliation from GitHub artifacts into SQLite can be polled
   on-demand, but it is not automatic or background-polled
 - `run-goal` can self-heal across local workers, but it still cannot recover if

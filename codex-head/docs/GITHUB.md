@@ -4,7 +4,9 @@ This document describes the current GitHub-facing behavior in `codex-head`.
 
 ## What Exists Today
 
-`codex-head` currently treats GitHub as a supporting control plane.
+`codex-head` currently treats GitHub as a supporting control plane. In
+`github.execution_preference = "local_preferred"` mode, that control plane can
+stay active even when real execution happens on local workers first.
 
 Implemented now:
 
@@ -22,6 +24,8 @@ Implemented now:
   `dispatch-and-wait`
 - batch reconciliation for running GitHub tasks through
   `reconcile-github-running`
+- hybrid local-first execution for GitHub-shaped tasks when
+  `github.execution_preference` is set to `local_preferred`
 
 Not implemented yet:
 
@@ -86,6 +90,14 @@ live `gh_cli` dispatch when:
 - `artifacts_only`: write artifacts and stop there
 - `gh_cli`: write artifacts and then trigger the selected workflow through
   `gh workflow run`
+
+Separately, `github.execution_preference` controls where GitHub-shaped tasks
+execute:
+
+- `remote_only`: route `requires_github` work straight to GitHub execution
+- `local_preferred`: keep GitHub mirrors and dispatch artifacts available, but
+  let healthy local workers execute first and only fall through to GitHub when
+  the local chain is unavailable
 
 Live dispatch is opt-in and requires:
 
@@ -229,13 +241,18 @@ Current behavior:
   branch, work branch, output, and prior status
 - checks out the repo and installs `codex-head`
 - builds a real branch diff between `base_branch` and `work_branch`
-- runs `google-github-actions/run-gemini-cli@v0.1.21` when `GEMINI_API_KEY` is
-  configured
+- runs remote review through one of:
+  `REVIEW_API_URL` + `REVIEW_API_KEY` for an OpenAI-compatible endpoint,
+  `OPENAI_API_KEY` for direct OpenAI usage, or `GEMINI_API_KEY` for Gemini
 - writes `runtime/artifacts/<task-id>/github-callback.json`
 - uploads that callback as a workflow artifact
 
-This workflow is the current review-specific handoff path for Gemini-native
-GitHub review work.
+These remote credentials are only for the GitHub runner. They do not reuse
+local CLI login state or a local Antigravity-Manager proxy running on your
+machine unless you deliberately expose that proxy with a runner-reachable URL.
+
+This workflow is the current review-specific handoff path for GitHub review
+work in `codex-head`.
 
 When `github.review_workflow` is configured and a task's
 `expected_output.kind === "review"`, `codex-head` selects this workflow for
