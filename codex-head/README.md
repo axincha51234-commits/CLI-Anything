@@ -134,6 +134,9 @@ currently local-ready and exposes the matching cooldown reason.
   now falls back to a Windows scheduled task by default so the runner can come
   back after logon without a manual terminal. You can still disable that and
   manage `run.cmd` yourself if you prefer.
+- The bootstrap helper also opts the self-hosted runner into Node 24 JavaScript
+  actions by setting `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true` for the current
+  user, which reduces GitHub Actions deprecation noise on newer runners.
 - GitHub callback reconciliation can now either sync directly from artifacts or
   wait on a resolved workflow run, but it is not background or automatic yet.
 - Local worker defaults do not verify upstream CLI authentication in advance,

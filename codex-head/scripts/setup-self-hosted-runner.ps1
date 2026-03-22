@@ -6,6 +6,7 @@ param(
   [string[]]$RunnerLabels = @("windows", "codex-head"),
   [switch]$InstallService = $true,
   [switch]$InstallScheduledTaskFallback = $true,
+  [switch]$ForceNode24Actions = $true,
   [switch]$SetRunsOnVariable,
   [string]$ScheduledTaskName = "",
   [string]$ReviewApiUrl = "",
@@ -107,6 +108,12 @@ Write-Host "Runner root: $resolvedRunnerRoot"
 Write-Host "Runner name: $resolvedRunnerName"
 Write-Host "Runner labels: $labelCsv"
 Write-Host "Scheduled task: $resolvedScheduledTaskName"
+
+if ($ForceNode24Actions) {
+  [Environment]::SetEnvironmentVariable("FORCE_JAVASCRIPT_ACTIONS_TO_NODE24", "true", "User")
+  $env:FORCE_JAVASCRIPT_ACTIONS_TO_NODE24 = "true"
+  Write-Host "Configured FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true for the current user."
+}
 
 $downloads = Invoke-GhJson -Args @("api", "repos/$Repository/actions/runners/downloads")
 $runnerPackage = $downloads | Where-Object { $_.os -eq "win" -and $_.architecture -eq "x64" } | Select-Object -First 1
@@ -210,6 +217,9 @@ Write-Host "Self-hosted runner setup is complete."
 Write-Host "Suggested runs-on JSON: $runsOnJson"
 if ($InstallScheduledTaskFallback -and -not (Test-Path $svcCmd)) {
   Write-Host "Scheduled task fallback: $resolvedScheduledTaskName"
+}
+if ($ForceNode24Actions) {
+  Write-Host "Node 24 actions opt-in: enabled"
 }
 if (-not [string]::IsNullOrWhiteSpace($ReviewApiUrl)) {
   Write-Host "Configured REVIEW_API_URL and REVIEW_API_KEY for $Repository."

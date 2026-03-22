@@ -126,6 +126,9 @@ registers the runner and installs a scheduled-task fallback by default. The
 task runs `run.cmd` at user logon and can be disabled with
 `-InstallScheduledTaskFallback:$false` if you want to manage persistence
 yourself.
+The helper also enables `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true` for the
+current user so self-hosted runs pick up the newer JavaScript action runtime
+after the runner restarts.
 
 For `run-goal`, that opt-in can be satisfied automatically for the current run
 when the conditions above are already true.

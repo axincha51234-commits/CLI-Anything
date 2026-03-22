@@ -315,6 +315,9 @@ If the downloaded Windows runner package omits `svc.cmd`, the bootstrap helper
 now completes registration and installs a per-user scheduled-task fallback by
 default. That keeps the runner coming back after logon even when the upstream
 runner package ships no native service wrapper.
+The same helper now also sets
+`FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true` for the current user so the
+self-hosted runner opts into the newer JavaScript action runtime.
 
 ## Common Failure Cases
 
