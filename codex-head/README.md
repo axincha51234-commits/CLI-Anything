@@ -150,6 +150,9 @@ currently local-ready and exposes the matching cooldown reason.
 - `npm run health` now also reports the resolved self-hosted `runs-on` labels,
   matching runner records, and whether a machine-local worker overlay is
   visible, so operator triage no longer depends on ad hoc `gh api` calls.
+- Self-hosted queue-stall handling now writes `github-queue-diagnosis.json`,
+  and an opt-in `github.auto_recycle_stale_runner` flag can automatically call
+  the Windows recycle helper for stale broker sessions.
 - Local worker defaults do not verify upstream CLI authentication in advance,
   so automatic fallback still fails if every candidate worker is unusable at
   runtime.

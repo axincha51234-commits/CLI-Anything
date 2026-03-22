@@ -35,6 +35,7 @@ export interface GitHubRuntimeStatus {
   enabled: boolean;
   dispatch_mode: CodexHeadConfig["github"]["dispatch_mode"];
   execution_preference: CodexHeadConfig["github"]["execution_preference"];
+  auto_recycle_stale_runner: boolean;
   repository: string;
   workflow: string;
   review_workflow: string | null;
@@ -47,6 +48,8 @@ export interface GitHubRuntimeStatus {
   runs_on_json: string | null;
   runs_on_labels: string[];
   self_hosted_targeted: boolean;
+  recycle_script_path: string | null;
+  recycle_script_available: boolean;
   matching_runners: Array<{
     id: number;
     name: string;
@@ -111,6 +114,8 @@ export interface GitHubRepositoryStatus {
 export interface GitHubControlPlaneDeps {
   runCli?: (args: string[], options?: { input?: string }) => GitHubCliRunResult;
   findBinary?: (bin: string) => string | null;
+  runProcess?: (command: string, args: string[]) => GitHubCliRunResult;
+  platform?: NodeJS.Platform;
 }
 
 interface GitHubRunListEntry {
@@ -171,6 +176,21 @@ interface GitHubQueueDiagnosis {
   likely_stalled: boolean;
   reason: string;
   suggested_action: string | null;
+}
+
+interface GitHubQueueRecoveryReceipt {
+  task_id: string;
+  run_id: number;
+  attempted_at: string;
+  diagnosis_reason: string;
+  command: string[];
+  executable: string | null;
+  skipped: boolean;
+  detail: string;
+  ok: boolean;
+  exit_code: number | null;
+  stdout: string;
+  stderr: string;
 }
 
 function parseRunsOnLabels(rawValue: string | null): string[] {
@@ -282,6 +302,8 @@ function defaultRunCli(cliBinary: string, args: string[], options: { input?: str
 export class GitHubControlPlane {
   private readonly runCli: (args: string[], options?: { input?: string }) => GitHubCliRunResult;
   private readonly findBinary: (bin: string) => string | null;
+  private readonly runProcess: (command: string, args: string[]) => GitHubCliRunResult;
+  private readonly platform: NodeJS.Platform;
 
   constructor(
     private readonly config: CodexHeadConfig,
@@ -290,6 +312,8 @@ export class GitHubControlPlane {
   ) {
     this.runCli = deps.runCli ?? ((args, options) => defaultRunCli(this.config.github.cli_binary, args, options));
     this.findBinary = deps.findBinary ?? findInstalledBinary;
+    this.runProcess = deps.runProcess ?? ((command, args) => defaultRunCli(command, args));
+    this.platform = deps.platform ?? process.platform;
   }
 
   isEnabled(): boolean {
@@ -304,6 +328,7 @@ export class GitHubControlPlane {
     const ghCliPath = this.findBinary(this.config.github.cli_binary);
     const ghCliAvailable = Boolean(ghCliPath);
     const auth = ghCliAvailable ? this.runCli(["auth", "status"]) : null;
+    const recycleScriptPath = join(this.config.app_root, "scripts", "recycle-self-hosted-runner.ps1");
     const machineConfigCandidate = process.env.CODEX_HEAD_MACHINE_CONFIG?.trim()
       || join(this.config.app_root, "config", "workers.machine.json");
     const machineConfigPath = machineConfigCandidate && existsSync(machineConfigCandidate)
@@ -387,6 +412,7 @@ export class GitHubControlPlane {
       enabled: this.config.github.enabled,
       dispatch_mode: this.config.github.dispatch_mode,
       execution_preference: this.config.github.execution_preference,
+      auto_recycle_stale_runner: this.config.github.auto_recycle_stale_runner,
       repository: this.config.github.repository,
       workflow: this.config.github.workflow,
       review_workflow: this.config.github.review_workflow,
@@ -399,6 +425,8 @@ export class GitHubControlPlane {
       runs_on_json: runsOnJson,
       runs_on_labels: runsOnLabels,
       self_hosted_targeted: runsOnLabels.includes("self-hosted"),
+      recycle_script_path: recycleScriptPath,
+      recycle_script_available: existsSync(recycleScriptPath),
       matching_runners: matchingRunners,
       runner_lookup_detail: runnerLookupDetail
     };
@@ -891,15 +919,30 @@ export class GitHubControlPlane {
     }
 
     const deadline = Date.now() + Math.max(1, timeoutMs);
-    const startedAt = Date.now();
+    let monitoredSince = Date.now();
+    let recycleAttempted = false;
     const queueDiagnosisThresholdMs = Math.min(60_000, Math.max(intervalMs * 3, Math.floor(timeoutMs / 3)));
     let lastState: GitHubRunState | null = null;
     let lastQueueDiagnosis: GitHubQueueDiagnosis | null = null;
     while (Date.now() <= deadline) {
       lastState = this.inspectRun(taskId, runId);
-      if (lastState.status === "queued" && Date.now() - startedAt >= queueDiagnosisThresholdMs) {
-        lastQueueDiagnosis = this.diagnoseQueuedRun(taskId, runId, lastState, Date.now() - startedAt);
+      if (lastState.status === "queued" && Date.now() - monitoredSince >= queueDiagnosisThresholdMs) {
+        lastQueueDiagnosis = this.diagnoseQueuedRun(taskId, runId, lastState, Date.now() - monitoredSince);
         if (lastQueueDiagnosis.likely_stalled) {
+          if (!recycleAttempted && this.shouldAutoRecycleQueuedStall(lastQueueDiagnosis)) {
+            const recycleReceipt = this.attemptQueuedStallRecovery(taskId, runId, lastQueueDiagnosis);
+            recycleAttempted = true;
+            if (recycleReceipt.ok) {
+              monitoredSince = Date.now();
+              lastQueueDiagnosis = null;
+              continue;
+            }
+            throw new Error(
+              `GitHub run ${runId} appears stuck in queued state for task ${taskId}: ${lastQueueDiagnosis.reason}`
+              + this.renderQueueDiagnosisHint(taskId, lastQueueDiagnosis)
+              + this.renderQueueRecoveryHint(taskId, recycleReceipt)
+            );
+          }
           throw new Error(
             `GitHub run ${runId} appears stuck in queued state for task ${taskId}: ${lastQueueDiagnosis.reason}`
             + this.renderQueueDiagnosisHint(taskId, lastQueueDiagnosis)
@@ -915,7 +958,7 @@ export class GitHubControlPlane {
 
     if (lastState?.status === "queued") {
       lastQueueDiagnosis = lastQueueDiagnosis
-        ?? this.diagnoseQueuedRun(taskId, runId, lastState, Date.now() - startedAt);
+        ?? this.diagnoseQueuedRun(taskId, runId, lastState, Date.now() - monitoredSince);
     }
 
     throw new Error(
@@ -1096,12 +1139,113 @@ export class GitHubControlPlane {
     return diagnosis;
   }
 
+  private shouldAutoRecycleQueuedStall(diagnosis: GitHubQueueDiagnosis): boolean {
+    return this.config.github.auto_recycle_stale_runner
+      && diagnosis.likely_stalled
+      && /stale broker session/i.test(diagnosis.reason);
+  }
+
+  private attemptQueuedStallRecovery(
+    taskId: string,
+    runId: number,
+    diagnosis: GitHubQueueDiagnosis
+  ): GitHubQueueRecoveryReceipt {
+    const recycleScript = join(this.config.app_root, "scripts", "recycle-self-hosted-runner.ps1");
+    const executable = this.findBinary("powershell.exe")
+      ?? this.findBinary("powershell")
+      ?? this.findBinary("pwsh")
+      ?? null;
+
+    let receipt: GitHubQueueRecoveryReceipt;
+
+    if (this.platform !== "win32") {
+      receipt = {
+        task_id: taskId,
+        run_id: runId,
+        attempted_at: new Date().toISOString(),
+        diagnosis_reason: diagnosis.reason,
+        command: [],
+        executable: null,
+        skipped: true,
+        detail: "Automatic recycle is currently only supported on Windows self-hosted runners.",
+        ok: false,
+        exit_code: null,
+        stdout: "",
+        stderr: ""
+      };
+    } else if (!existsSync(recycleScript)) {
+      receipt = {
+        task_id: taskId,
+        run_id: runId,
+        attempted_at: new Date().toISOString(),
+        diagnosis_reason: diagnosis.reason,
+        command: [],
+        executable: null,
+        skipped: true,
+        detail: `Recycle script was not found at ${recycleScript}.`,
+        ok: false,
+        exit_code: null,
+        stdout: "",
+        stderr: ""
+      };
+    } else if (!executable) {
+      receipt = {
+        task_id: taskId,
+        run_id: runId,
+        attempted_at: new Date().toISOString(),
+        diagnosis_reason: diagnosis.reason,
+        command: [],
+        executable: null,
+        skipped: true,
+        detail: "PowerShell is required to recycle the self-hosted runner automatically.",
+        ok: false,
+        exit_code: null,
+        stdout: "",
+        stderr: ""
+      };
+    } else {
+      const args = [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        recycleScript,
+        "-Repository",
+        this.config.github.repository
+      ];
+      const result = this.runProcess(executable, args);
+      receipt = {
+        task_id: taskId,
+        run_id: runId,
+        attempted_at: new Date().toISOString(),
+        diagnosis_reason: diagnosis.reason,
+        command: [executable, ...args],
+        executable,
+        skipped: false,
+        detail: result.ok
+          ? "Automatic self-hosted runner recycle completed successfully."
+          : result.stderr.trim() || result.stdout.trim() || `exit code ${String(result.exitCode)}`,
+        ok: result.ok,
+        exit_code: result.exitCode,
+        stdout: result.stdout.trim(),
+        stderr: result.stderr.trim()
+      };
+    }
+
+    this.artifactStore.writeJson(taskId, "github-queue-recycle.json", receipt);
+    return receipt;
+  }
+
   private renderQueueDiagnosisHint(taskId: string, diagnosis: Pick<GitHubQueueDiagnosis, "suggested_action">): string {
     const parts = [
       diagnosis.suggested_action,
       `See ${join(this.artifactStore.getTaskDir(taskId), "github-queue-diagnosis.json")}.`
     ].filter((value): value is string => Boolean(value && value.trim()));
     return parts.length > 0 ? ` ${parts.join(" ")}` : "";
+  }
+
+  private renderQueueRecoveryHint(taskId: string, receipt: Pick<GitHubQueueRecoveryReceipt, "detail">): string {
+    return ` Automatic recycle attempt failed: ${receipt.detail} See ${join(this.artifactStore.getTaskDir(taskId), "github-queue-recycle.json")}.`;
   }
 
   private selectWorkflow(task: TaskSpec): string {

@@ -139,6 +139,11 @@ If you need to restart the runner later, prefer
 instead of killing `Runner.Listener` and restarting immediately. That helper
 waits for GitHub to clear the previous broker session before bringing the
 scheduled-task runner back online.
+If you want `codex-head` to invoke that helper automatically after diagnosing a
+stale broker session, set `"github": { "auto_recycle_stale_runner": true }` in
+`config/workers.machine.json` on the runner host. This remains opt-in and only
+applies to the self-hosted "queued even though the runner looks online and
+idle" case.
 
 For `run-goal`, that opt-in can be satisfied automatically for the current run
 when the conditions above are already true.

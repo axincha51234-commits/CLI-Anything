@@ -26,6 +26,7 @@ export interface GitHubConfig {
   dispatch_mode: "artifacts_only" | "gh_cli";
   cli_binary: string;
   execution_preference: "remote_only" | "local_preferred";
+  auto_recycle_stale_runner: boolean;
 }
 
 export interface CodexHeadConfig {
@@ -42,6 +43,7 @@ export interface CodexHeadConfig {
 type ExternalConfig = Omit<Partial<CodexHeadConfig>, "github" | "command_templates"> & {
   github?: Partial<GitHubConfig> & {
     executionPreference?: GitHubConfig["execution_preference"];
+    autoRecycleStaleRunner?: GitHubConfig["auto_recycle_stale_runner"];
   };
   feature_flags?: Record<string, boolean>;
   command_templates?: Partial<Record<WorkerTarget, Partial<WorkerTemplateConfig>>>;
@@ -189,7 +191,8 @@ export function createDefaultConfig(appRoot: string): CodexHeadConfig {
       review_workflow: "codex-head-gemini-review.yml",
       dispatch_mode: "artifacts_only",
       cli_binary: "gh",
-      execution_preference: "remote_only"
+      execution_preference: "remote_only",
+      auto_recycle_stale_runner: false
     }
   };
 }
@@ -254,7 +257,8 @@ function normalizeExternalConfig(parsed: ExternalConfig): Partial<CodexHeadConfi
     github: parsed.github
       ? {
           ...parsed.github,
-          execution_preference: parsed.github.execution_preference ?? parsed.github.executionPreference
+          execution_preference: parsed.github.execution_preference ?? parsed.github.executionPreference,
+          auto_recycle_stale_runner: parsed.github.auto_recycle_stale_runner ?? parsed.github.autoRecycleStaleRunner
         }
       : undefined,
     command_templates: (parsed.command_templates ?? parsed.commandTemplates) as Partial<CodexHeadConfig["command_templates"]> | undefined

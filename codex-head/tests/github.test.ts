@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { FileArtifactStore } from "../src/artifacts/fileArtifactStore";
@@ -151,8 +151,10 @@ test("GitHubControlPlane inspects targeted self-hosted runners from repository m
     assert.equal(runtime.machine_config_path, `${root}\\workers.machine.json`);
     assert.equal(runtime.machine_config_exists, true);
     assert.equal(runtime.self_hosted_targeted, true);
+    assert.equal(runtime.auto_recycle_stale_runner, false);
     assert.equal(runtime.runs_on_json, "[\"self-hosted\",\"Windows\",\"codex-head\"]");
     assert.deepEqual(runtime.runs_on_labels, ["self-hosted", "Windows", "codex-head"]);
+    assert.equal(runtime.recycle_script_available, false);
     assert.equal(runtime.matching_runners.length, 1);
     assert.equal(runtime.matching_runners[0]?.name, "DESKTOP-F7V83BO-codex-head");
     assert.equal(runtime.matching_runners[0]?.status, "online");
@@ -714,6 +716,147 @@ test("GitHubControlPlane diagnoses a queued self-hosted stall with a concrete me
     assert.equal(diagnosis.likely_stalled, true);
     assert.equal(diagnosis.queued_jobs[0]?.name, "worker");
     assert.equal(diagnosis.matching_runners[0]?.name, "DESKTOP-F7V83BO-codex-head");
+  } finally {
+    if (previousMachineConfig === undefined) {
+      delete process.env.CODEX_HEAD_MACHINE_CONFIG;
+    } else {
+      process.env.CODEX_HEAD_MACHINE_CONFIG = previousMachineConfig;
+    }
+  }
+});
+
+test("GitHubControlPlane can auto-recycle a stale self-hosted queued stall when enabled", async () => {
+  const root = createTempDir("codex-head-github-auto-recycle-");
+  const config = createTestConfig(root);
+  config.github.repository = "example/repo";
+  config.github.auto_recycle_stale_runner = true;
+  const previousMachineConfig = process.env.CODEX_HEAD_MACHINE_CONFIG;
+  delete process.env.CODEX_HEAD_MACHINE_CONFIG;
+
+  try {
+    const recycleScriptPath = resolve(root, "scripts", "recycle-self-hosted-runner.ps1");
+    mkdirSync(resolve(root, "scripts"), { recursive: true });
+    writeFileSync(recycleScriptPath, "Write-Host 'recycle runner'\n", "utf8");
+
+    const artifactStore = new FileArtifactStore(config.artifacts_dir);
+    let recycled = false;
+    let recycleCalls = 0;
+    const github = new GitHubControlPlane(config, artifactStore, {
+      platform: "win32",
+      findBinary: (bin) => {
+        if (bin === "gh") {
+          return "C:/Program Files/GitHub CLI/gh.exe";
+        }
+        if (bin === "powershell.exe") {
+          return "C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe";
+        }
+        return null;
+      },
+      runCli: (args) => {
+        if (args[0] === "auth") {
+          return {
+            ok: true,
+            exitCode: 0,
+            stdout: "Logged in to github.com",
+            stderr: "",
+            durationMs: 1,
+            timedOut: false
+          };
+        }
+        if (args[0] === "api" && args[1] === "repos/example/repo/actions/variables/CODEX_HEAD_RUNS_ON_JSON") {
+          return {
+            ok: true,
+            exitCode: 0,
+            stdout: JSON.stringify({
+              name: "CODEX_HEAD_RUNS_ON_JSON",
+              value: "[\"self-hosted\",\"Windows\",\"codex-head\"]"
+            }),
+            stderr: "",
+            durationMs: 1,
+            timedOut: false
+          };
+        }
+        if (args[0] === "api" && args[1] === "repos/example/repo/actions/runners") {
+          return {
+            ok: true,
+            exitCode: 0,
+            stdout: JSON.stringify({
+              runners: [
+                {
+                  id: 21,
+                  name: "DESKTOP-F7V83BO-codex-head",
+                  os: "Windows",
+                  status: "online",
+                  busy: false,
+                  labels: [
+                    { name: "self-hosted" },
+                    { name: "Windows" },
+                    { name: "X64" },
+                    { name: "codex-head" }
+                  ]
+                }
+              ]
+            }),
+            stderr: "",
+            durationMs: 1,
+            timedOut: false
+          };
+        }
+        if (args[0] === "run" && args[1] === "view") {
+          return {
+            ok: true,
+            exitCode: 0,
+            stdout: JSON.stringify({
+              databaseId: 992,
+              status: recycled ? "completed" : "queued",
+              conclusion: recycled ? "success" : null,
+              url: "https://github.com/example/repo/actions/runs/992",
+              workflowName: "codex-head-worker.yml",
+              updatedAt: new Date().toISOString(),
+              jobs: recycled
+                ? []
+                : [
+                    {
+                      name: "worker",
+                      status: "queued",
+                      conclusion: null,
+                      labels: ["self-hosted", "Windows", "codex-head"]
+                    }
+                  ]
+            }),
+            stderr: "",
+            durationMs: 1,
+            timedOut: false
+          };
+        }
+        throw new Error(`Unexpected gh args: ${args.join(" ")}`);
+      },
+      runProcess: (_command, args) => {
+        recycleCalls += 1;
+        assert.equal(args.includes("-File"), true);
+        assert.equal(args.includes(recycleScriptPath), true);
+        recycled = true;
+        return {
+          ok: true,
+          exitCode: 0,
+          stdout: "Runner recycled successfully.",
+          stderr: "",
+          durationMs: 1,
+          timedOut: false
+        };
+      }
+    });
+
+    const completed = await github.waitForRunCompletion("task-auto-recycle", 992, 200, 25);
+    assert.equal(completed.status, "completed");
+    assert.equal(completed.conclusion, "success");
+    assert.equal(recycleCalls, 1);
+
+    const recycleReceiptPath = resolve(config.artifacts_dir, "task-auto-recycle", "github-queue-recycle.json");
+    assert.equal(existsSync(recycleReceiptPath), true);
+    const recycleReceipt = JSON.parse(readFileSync(recycleReceiptPath, "utf8")) as { ok: boolean; skipped: boolean };
+    assert.equal(recycleReceipt.ok, true);
+    assert.equal(recycleReceipt.skipped, false);
   } finally {
     if (previousMachineConfig === undefined) {
       delete process.env.CODEX_HEAD_MACHINE_CONFIG;

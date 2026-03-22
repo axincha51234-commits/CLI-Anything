@@ -11,7 +11,8 @@ test("loadConfig accepts camelCase external config keys", () => {
   const configPath = join(root, "workers.local.json");
   writeFileSync(configPath, JSON.stringify({
     github: {
-      executionPreference: "local_preferred"
+      executionPreference: "local_preferred",
+      autoRecycleStaleRunner: true
     },
     featureFlags: {
       antigravity: true
@@ -33,6 +34,7 @@ test("loadConfig accepts camelCase external config keys", () => {
   const config = loadConfig(root, configPath);
   assert.equal(config.feature_flags.antigravity, true);
   assert.equal(config.github.execution_preference, "local_preferred");
+  assert.equal(config.github.auto_recycle_stale_runner, true);
   assert.equal(config.command_templates["codex-cli"].local?.name, "codex-task");
   assert.equal(
     config.command_templates["codex-cli"].local?.env?.CODEX_HEAD_PROFILE,
@@ -46,6 +48,7 @@ test("createDefaultConfig provides safe local execution templates", () => {
 
   assert.equal(config.github.enabled, false);
   assert.equal(config.github.execution_preference, "remote_only");
+  assert.equal(config.github.auto_recycle_stale_runner, false);
   assert.deepEqual(config.command_templates["claude-code"].local?.args, [
     "-p",
     "--permission-mode",

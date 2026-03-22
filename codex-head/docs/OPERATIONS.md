@@ -344,6 +344,21 @@ runner is available or a stale broker session is blocking pickup.
 The same diagnosis file is now referenced by `wait-github-callback`,
 `sync-github-callback`, and `recover-running` when callback ingestion fails
 while the run is still queued.
+If you want `codex-head` to attempt a controlled runner bounce automatically for
+the stale-broker-session case, opt in with:
+
+```json
+{
+  "github": {
+    "auto_recycle_stale_runner": true
+  }
+}
+```
+
+Set that in `config/workers.machine.json` on the Windows runner host. The
+automatic recycle path only runs for the specific "runner looks online and idle
+but the job is still queued" case, and it writes `github-queue-recycle.json`
+beside the diagnosis artifact.
 
 ### `missing_binary`
 
