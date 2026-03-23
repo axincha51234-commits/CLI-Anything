@@ -61,6 +61,64 @@ function shouldRenderDoctorTaskLink(finding: DoctorReport["attention"]["tasks"][
     || Boolean(finding.github_run_url);
 }
 
+function isRoutineDoctorTaskFinding(finding: DoctorReport["attention"]["tasks"][number]): boolean {
+  return !shouldRenderDoctorArtifactFiles(finding)
+    && !finding.operator_receipt_path
+    && !finding.github_run_url
+    && !finding.manual_intervention_required
+    && (finding.state === "queued" || finding.state === "running" || finding.state === "awaiting_review")
+    && (finding.severity === "warning" || finding.severity === "info");
+}
+
+function renderDoctorTaskLine(finding: DoctorReport["attention"]["tasks"][number]): string {
+  const receiptSuffix = finding.operator_receipt_path
+    ? ` :: receipt=${finding.operator_receipt_path}${finding.operator_receipt_command ? ` [${finding.operator_receipt_command}]` : ""}`
+    : "";
+  return `- ${finding.task_id} [${finding.state}/${finding.severity}] ${compactText(finding.goal, 90)} :: ${compactText(finding.summary, 180)}${receiptSuffix}`;
+}
+
+function renderDoctorTaskSummaryLines(findings: DoctorReport["attention"]["tasks"]): string[] {
+  const routineGroups = new Map<string, DoctorReport["attention"]["tasks"]>();
+  const lines: string[] = [];
+
+  for (const finding of findings) {
+    if (!isRoutineDoctorTaskFinding(finding)) {
+      lines.push(renderDoctorTaskLine(finding));
+      continue;
+    }
+
+    const groupKey = [
+      finding.state,
+      finding.severity,
+      finding.goal,
+      finding.summary
+    ].join("::");
+    const group = routineGroups.get(groupKey) ?? [];
+    group.push(finding);
+    routineGroups.set(groupKey, group);
+  }
+
+  for (const group of routineGroups.values()) {
+    if (group.length === 1) {
+      lines.push(renderDoctorTaskLine(group[0]!));
+      continue;
+    }
+
+    const first = group[0]!;
+    const examples = group.slice(0, 3).map((entry) => entry.task_id).join(", ");
+    const moreCount = group.length - Math.min(group.length, 3);
+    const exampleSuffix = moreCount > 0
+      ? `${examples}, +${moreCount} more`
+      : examples;
+    lines.push(
+      `- ${group.length} similar task(s) [${first.state}/${first.severity}] ${compactText(first.goal, 90)}`
+      + ` :: ${compactText(first.summary, 180)} :: examples=${exampleSuffix}`
+    );
+  }
+
+  return lines;
+}
+
 function renderArtifactRefLines(refs: {
   worker_result: { path: string; freshness: string } | null;
   execution_attempts: { path: string; freshness: string } | null;
@@ -207,12 +265,7 @@ export function renderDoctorBrief(report: DoctorReport): string {
   pushLimitedSection(
     lines,
     "tasks:",
-    visibleTaskFindings.map((finding) => {
-      const receiptSuffix = finding.operator_receipt_path
-        ? ` :: receipt=${finding.operator_receipt_path}${finding.operator_receipt_command ? ` [${finding.operator_receipt_command}]` : ""}`
-        : "";
-      return `- ${finding.task_id} [${finding.state}/${finding.severity}] ${compactText(finding.goal, 90)} :: ${compactText(finding.summary, 180)}${receiptSuffix}`;
-    }),
+    renderDoctorTaskSummaryLines(visibleTaskFindings),
     8
   );
   pushLimitedSection(

@@ -316,7 +316,7 @@ test("renderDoctorBrief keeps receipt commands aligned with visible task rows", 
   const tasks: DoctorReport["attention"]["tasks"] = Array.from({ length: 9 }, (_, index) => ({
     task_id: `task-brief-visible-${index + 1}`,
     state: "queued",
-    goal: `Queued task ${index + 1}`,
+    goal: index < 2 ? `Queued task ${index + 1}` : "Queued task backlog",
     worker_target: "codex-cli",
     routing_mode: "local",
     artifact_dir_path: `C:/repo/codex-head/runtime/artifacts/task-brief-visible-${index + 1}`,
@@ -405,6 +405,8 @@ test("renderDoctorBrief keeps receipt commands aligned with visible task rows", 
 
   const rendered = renderDoctorBrief(report);
   assert.match(rendered, /tasks:\n- task-brief-visible-1/i);
+  assert.match(rendered, /- 6 similar task\(s\) \[queued\/warning\] Queued task backlog :: Task is queued and waiting for dispatch\. :: examples=task-brief-visible-3, task-brief-visible-4, task-brief-visible-5, \+3 more/i);
+  assert.doesNotMatch(rendered, /tasks:[\s\S]*task-brief-visible-3 \[queued\/warning\]/i);
   assert.doesNotMatch(rendered, /task-brief-visible-9/i);
   assert.match(rendered, /receipt-commands:\n- task-brief-visible-1 :: node dist\/src\/index\.js show-operator-receipt operator-actions\/2026-03-23T08-09-00\.000Z-run-doctor-hint\.json --brief/i);
   assert.match(rendered, /task-links:\n- task-brief-visible-1 :: artifacts=C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-visible-1/i);

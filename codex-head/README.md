@@ -203,6 +203,8 @@ currently local-ready and exposes the matching cooldown reason.
   rows that already have a receipt, GitHub run URL, or other stronger triage
   signals, with each row exposing its artifact directory path plus GitHub run
   URL when one is available.
+- routine queued/running backlog rows with the same goal and summary can also
+  collapse into a single `N similar task(s)` line so brief mode stays readable.
 - `doctor --brief` also adds an `artifact-files:` section only for the higher-
   signal visible task rows when canonical refs like `worker-result.json`,
   `execution-attempts.json`, primary output, or primary log are known.

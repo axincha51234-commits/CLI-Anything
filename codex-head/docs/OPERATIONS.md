@@ -228,6 +228,8 @@ receipt path for a task when one exists, so operators can jump directly into
 - `doctor --brief` also adds a `task-links:` section only for the visible task
   rows that already have a receipt, GitHub run URL, or other stronger triage
   signals, so `artifacts=...` and `github=...` pointers stay high-signal
+- routine queued/running backlog rows with the same goal and summary may
+  collapse into a single `N similar task(s)` line to keep brief mode compact
 - `doctor --brief` also adds an `artifact-files:` section only for the higher-
   signal visible task rows when `worker-result.json`,
   `execution-attempts.json`, primary output, or the primary log can be resolved
