@@ -210,6 +210,7 @@ test("buildDoctorReport aggregates worker, GitHub, and task findings", () => {
   assert.equal(report.attention.workers.length, 2);
   assert.equal(report.attention.github.length, 2);
   assert.equal(report.attention.tasks.length, 2);
+  assert.equal(report.task_filter.suppressed_task_findings, 0);
   assert.equal(report.actions.some((value) => /gh auth login/i.test(value)), true);
   assert.equal(report.actions.some((value) => /github-queue-recycle\.json/i.test(value)), true);
   assert.equal(report.summary.includes("blocking item"), true);
@@ -292,4 +293,91 @@ test("buildDoctorReport stays healthy when workers and completed tasks are clean
   assert.equal(report.attention.tasks.length, 0);
   assert.equal(report.actions.length, 0);
   assert.match(report.summary, /No blocking issues found/i);
+});
+
+test("buildDoctorReport hides older failed backlog by default but can include all history", () => {
+  const health: DoctorHealthSnapshot = {
+    adapters: [
+      { worker_target: "codex-cli", healthy: true, reason: "ok", detected_binary: "codex.exe" }
+    ],
+    readiness: [
+      {
+        worker_target: "codex-cli",
+        healthy: true,
+        feature_enabled: true,
+        supports_local: true,
+        supports_github: false,
+        has_local_template: true,
+        local_ready: true,
+        github_ready: false,
+        cooldown_until: null,
+        cooldown_reason: null
+      }
+    ],
+    recent_penalties: [],
+    github: createGitHubRuntime({ enabled: false, self_hosted_targeted: false, matching_runners: [] }),
+    database_path: "C:/repo/codex-head/runtime/codex-head.sqlite",
+    artifacts_dir: "C:/repo/codex-head/runtime/artifacts"
+  };
+
+  const recentRunning = createStatusSnapshot({
+    task: createTaskSpec({
+      task_id: "task-doctor-recent-running",
+      goal: "Summarize the current orchestration state",
+      repo: "C:/repo",
+      worker_target: "codex-cli",
+      expected_output: { kind: "analysis", format: "markdown", code_change: false }
+    }),
+    state: "running",
+    updated_at: Date.UTC(2026, 2, 23, 5, 30, 0),
+    routing: {
+      worker_target: "codex-cli",
+      mode: "local",
+      reason: "test",
+      fallback_from: null
+    }
+  });
+
+  const staleFailed = createStatusSnapshot({
+    task: createTaskSpec({
+      task_id: "task-doctor-stale-failed",
+      goal: "Old failed task",
+      repo: "C:/repo",
+      worker_target: "codex-cli",
+      expected_output: { kind: "analysis", format: "markdown", code_change: false }
+    }),
+    state: "failed",
+    updated_at: Date.UTC(2026, 2, 22, 1, 0, 0),
+    last_error: "Old failure",
+    routing: {
+      worker_target: "codex-cli",
+      mode: "local",
+      reason: "test",
+      fallback_from: null
+    }
+  });
+
+  const filtered = buildDoctorReport(
+    health,
+    [recentRunning, staleFailed],
+    {
+      now: Date.UTC(2026, 2, 23, 6, 0, 0),
+      task_window_hours: 6
+    }
+  );
+  assert.equal(filtered.attention.tasks.some((entry) => entry.task_id === "task-doctor-stale-failed"), false);
+  assert.equal(filtered.attention.tasks.some((entry) => entry.task_id === "task-doctor-recent-running"), true);
+  assert.equal(filtered.task_filter.suppressed_task_findings, 1);
+
+  const allTasks = buildDoctorReport(
+    health,
+    [recentRunning, staleFailed],
+    {
+      now: Date.UTC(2026, 2, 23, 6, 0, 0),
+      include_all_task_history: true
+    }
+  );
+  assert.equal(allTasks.attention.tasks.some((entry) => entry.task_id === "task-doctor-stale-failed"), true);
+  assert.equal(allTasks.task_filter.suppressed_task_findings, 0);
+  assert.equal(allTasks.task_filter.task_window_hours, null);
 });

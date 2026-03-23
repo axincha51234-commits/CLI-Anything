@@ -168,6 +168,9 @@ currently local-ready and exposes the matching cooldown reason.
 - `doctor` now aggregates `health`, self-hosted GitHub runtime status, and
   task/operator snapshots into one read-only operator report, with an optional
   `--brief` summary when you only need the short triage version.
+- By default, `doctor` now emphasizes active work plus recent failures and
+  suppresses older failed backlog into summary counts. Use `doctor --all-tasks`
+  or `doctor --task-window-hours N` when you want broader history.
 - `status`, `recover-running`, and `reconcile-github-running` now also support
   `--brief` for plain-text operator summaries when JSON is more noise than
   signal, and `doctor` offers that same brief mode for whole-system triage.

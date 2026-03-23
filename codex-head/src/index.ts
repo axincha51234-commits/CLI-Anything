@@ -160,13 +160,37 @@ function parseReconcileArgs(args: string[]): {
 
 function parseDoctorArgs(args: string[]): {
   brief: boolean;
+  includeAllTaskHistory: boolean;
+  taskWindowHours?: number;
 } {
-  const stripped = stripFlag(args, "--brief");
-  if (stripped.values.length > 0) {
-    throw new Error("doctor does not accept positional arguments");
+  let brief = false;
+  let includeAllTaskHistory = false;
+  let taskWindowHours: number | undefined;
+
+  for (let index = 0; index < args.length; index += 1) {
+    const current = args[index];
+    if (current === "--brief") {
+      brief = true;
+      continue;
+    }
+    if (current === "--all-tasks") {
+      includeAllTaskHistory = true;
+      continue;
+    }
+    if (current === "--task-window-hours") {
+      taskWindowHours = Number(args[index + 1]);
+      if (!Number.isFinite(taskWindowHours) || taskWindowHours < 0) {
+        throw new Error("--task-window-hours must be a non-negative number");
+      }
+      index += 1;
+      continue;
+    }
+    throw new Error("doctor only accepts --brief, --all-tasks, and --task-window-hours N");
   }
   return {
-    brief: stripped.present
+    brief,
+    includeAllTaskHistory,
+    taskWindowHours
   };
 }
 
@@ -187,7 +211,7 @@ function usage(): void {
       "  node dist/src/index.js reconcile-github-running [timeout-sec] [interval-sec] [--brief]",
       "  node dist/src/index.js recover-running [timeout-sec] [interval-sec] [--requeue-local] [--brief]",
       "  node dist/src/index.js status [task-id] [--brief]",
-      "  node dist/src/index.js doctor [--brief]",
+      "  node dist/src/index.js doctor [--brief] [--all-tasks] [--task-window-hours N]",
       "  node dist/src/index.js dispatch <task-id>",
       "  node dist/src/index.js dispatch-and-wait <task-id> [timeout-sec] [interval-sec]",
       "  node dist/src/index.js dispatch-next",
@@ -472,7 +496,11 @@ async function main(): Promise<void> {
     const parsed = parseDoctorArgs(rest);
     const result = buildDoctorReport(
       await orchestrator.smokeAdapters(),
-      buildTaskStatusSnapshots(orchestrator.listTasks(), orchestrator.artifactStore)
+      buildTaskStatusSnapshots(orchestrator.listTasks(), orchestrator.artifactStore),
+      {
+        include_all_task_history: parsed.includeAllTaskHistory,
+        task_window_hours: parsed.taskWindowHours
+      }
     );
     if (parsed.brief) {
       printText(renderDoctorBrief(result));

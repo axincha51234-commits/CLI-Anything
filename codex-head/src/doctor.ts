@@ -50,6 +50,12 @@ export interface DoctorReport {
   ok: boolean;
   generated_at: string;
   summary: string;
+  task_filter: {
+    include_all_task_history: boolean;
+    task_window_hours: number | null;
+    cutoff_at: string | null;
+    suppressed_task_findings: number;
+  };
   counts: {
     total_tasks: number;
     task_states: Partial<Record<TaskState, number>>;
@@ -57,6 +63,7 @@ export interface DoctorReport {
     workers_needing_attention: number;
     github_findings: number;
     tasks_needing_attention: number;
+    suppressed_task_findings: number;
     blocking_findings: number;
     informational_findings: number;
   };
@@ -67,6 +74,12 @@ export interface DoctorReport {
     tasks: DoctorTaskFinding[];
   };
   actions: string[];
+}
+
+export interface DoctorOptions {
+  include_all_task_history?: boolean;
+  task_window_hours?: number;
+  now?: number;
 }
 
 function hasText(value: string | null | undefined): value is string {
@@ -308,14 +321,50 @@ function deriveTaskActions(task: TaskStatusSnapshot): string[] {
   return [...actions];
 }
 
-function summarizeTaskFinding(task: TaskStatusSnapshot): DoctorTaskFinding | null {
+function isActiveTask(task: TaskStatusSnapshot): boolean {
+  return task.state === "running" || task.state === "queued" || task.state === "awaiting_review";
+}
+
+function resolveTaskFreshnessTimestamp(task: TaskStatusSnapshot): number {
+  return task.updated_at
+    || task.finished_at
+    || task.started_at
+    || task.created_at
+    || 0;
+}
+
+function shouldIncludeTaskFinding(
+  task: TaskStatusSnapshot,
+  includeAllTaskHistory: boolean,
+  cutoffTimestamp: number | null
+): boolean {
+  if (isActiveTask(task)) {
+    return true;
+  }
+  if (task.operator.manual_intervention_required) {
+    return true;
+  }
+  if (task.state !== "failed") {
+    return false;
+  }
+  if (includeAllTaskHistory || cutoffTimestamp === null) {
+    return true;
+  }
+  return resolveTaskFreshnessTimestamp(task) >= cutoffTimestamp;
+}
+
+function summarizeTaskFinding(
+  task: TaskStatusSnapshot,
+  includeAllTaskHistory: boolean,
+  cutoffTimestamp: number | null
+): DoctorTaskFinding | null {
   const activeState = task.state === "running" || task.state === "queued" || task.state === "awaiting_review";
   const needsAttention = task.operator.manual_intervention_required
     || task.operator.actions.length > 0
     || task.state === "failed"
     || activeState;
 
-  if (!needsAttention) {
+  if (!needsAttention || !shouldIncludeTaskFinding(task, includeAllTaskHistory, cutoffTimestamp)) {
     return null;
   }
 
@@ -339,9 +388,16 @@ function summarizeTaskFinding(task: TaskStatusSnapshot): DoctorTaskFinding | nul
   };
 }
 
-function buildTaskFindings(tasks: TaskStatusSnapshot[]): DoctorTaskFinding[] {
-  return tasks
-    .map((task) => summarizeTaskFinding(task))
+function buildTaskFindings(
+  tasks: TaskStatusSnapshot[],
+  includeAllTaskHistory: boolean,
+  cutoffTimestamp: number | null
+): {
+  findings: DoctorTaskFinding[];
+  suppressedCount: number;
+} {
+  const findings = tasks
+    .map((task) => summarizeTaskFinding(task, includeAllTaskHistory, cutoffTimestamp))
     .filter((entry): entry is DoctorTaskFinding => Boolean(entry))
     .sort((left, right) => {
       const severityDelta = severityRank(left.severity) - severityRank(right.severity);
@@ -350,6 +406,19 @@ function buildTaskFindings(tasks: TaskStatusSnapshot[]): DoctorTaskFinding[] {
       }
       return left.task_id.localeCompare(right.task_id);
     });
+
+  const suppressedCount = tasks.filter((task) => {
+    const needsAttention = task.operator.manual_intervention_required
+      || task.operator.actions.length > 0
+      || task.state === "failed"
+      || isActiveTask(task);
+    return needsAttention && !shouldIncludeTaskFinding(task, includeAllTaskHistory, cutoffTimestamp);
+  }).length;
+
+  return {
+    findings,
+    suppressedCount
+  };
 }
 
 function buildSummary(
@@ -382,11 +451,18 @@ function buildSummary(
 
 export function buildDoctorReport(
   health: DoctorHealthSnapshot,
-  tasks: TaskStatusSnapshot[]
+  tasks: TaskStatusSnapshot[],
+  options: DoctorOptions = {}
 ): DoctorReport {
+  const includeAllTaskHistory = options.include_all_task_history ?? false;
+  const taskWindowHours = options.task_window_hours ?? 6;
+  const cutoffTimestamp = includeAllTaskHistory
+    ? null
+    : (options.now ?? Date.now()) - taskWindowHours * 60 * 60 * 1000;
   const workerFindings = buildWorkerFindings(health);
   const githubFindings = buildGitHubFindings(health.github);
-  const taskFindings = buildTaskFindings(tasks);
+  const taskFindingSummary = buildTaskFindings(tasks, includeAllTaskHistory, cutoffTimestamp);
+  const taskFindings = taskFindingSummary.findings;
   const findings = [
     ...workerFindings,
     ...githubFindings,
@@ -408,6 +484,12 @@ export function buildDoctorReport(
       githubFindings,
       taskFindings
     ),
+    task_filter: {
+      include_all_task_history: includeAllTaskHistory,
+      task_window_hours: includeAllTaskHistory ? null : taskWindowHours,
+      cutoff_at: cutoffTimestamp === null ? null : new Date(cutoffTimestamp).toISOString(),
+      suppressed_task_findings: taskFindingSummary.suppressedCount
+    },
     counts: {
       total_tasks: tasks.length,
       task_states: buildStateCounts(tasks),
@@ -415,6 +497,7 @@ export function buildDoctorReport(
       workers_needing_attention: workerFindings.length,
       github_findings: githubFindings.length,
       tasks_needing_attention: taskFindings.length,
+      suppressed_task_findings: taskFindingSummary.suppressedCount,
       blocking_findings: blockingFindings,
       informational_findings: informationalFindings
     },

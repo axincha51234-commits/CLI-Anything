@@ -79,7 +79,7 @@ node dist/src/index.js wait-github-callback <task-id> [timeout-sec] [interval-se
 node dist/src/index.js reconcile-github-running [timeout-sec] [interval-sec] [--brief]
 node dist/src/index.js recover-running [timeout-sec] [interval-sec] [--requeue-local] [--brief]
 node dist/src/index.js status [task-id] [--brief]
-node dist/src/index.js doctor [--brief]
+node dist/src/index.js doctor [--brief] [--all-tasks] [--task-window-hours N]
 node dist/src/index.js dispatch <task-id>
 node dist/src/index.js dispatch-and-wait <task-id> [timeout-sec] [interval-sec]
 node dist/src/index.js dispatch-next
@@ -144,6 +144,11 @@ inspection. The JSON form keeps the full `health` payload and categorized
 attention lists for workers, GitHub/runtime, and tasks. `doctor --brief`
 renders the same report as a short checklist when you only need the operator
 summary and next actions.
+
+By default, `doctor` highlights active tasks plus recent failures and suppresses
+older failed backlog into summary counts so the operator view stays current.
+Use `--all-tasks` to include the full backlog, or `--task-window-hours N` to
+change the recency window used for failed-task triage.
 
 ## Runtime Paths
 

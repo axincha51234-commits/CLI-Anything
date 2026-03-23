@@ -147,6 +147,12 @@ test("renderDoctorBrief summarizes operator findings and next actions", () => {
     ok: false,
     generated_at: new Date().toISOString(),
     summary: "Found 3 blocking item(s) across 1 worker, 1 GitHub, 1 task.",
+    task_filter: {
+      include_all_task_history: false,
+      task_window_hours: 6,
+      cutoff_at: "2026-03-23T00:00:00.000Z",
+      suppressed_task_findings: 2
+    },
     counts: {
       total_tasks: 2,
       task_states: {
@@ -157,6 +163,7 @@ test("renderDoctorBrief summarizes operator findings and next actions", () => {
       workers_needing_attention: 1,
       github_findings: 1,
       tasks_needing_attention: 2,
+      suppressed_task_findings: 2,
       blocking_findings: 3,
       informational_findings: 1
     },
@@ -228,6 +235,7 @@ test("renderDoctorBrief summarizes operator findings and next actions", () => {
 
   const rendered = renderDoctorBrief(report);
   assert.match(rendered, /^doctor: needs attention/im);
+  assert.match(rendered, /history: hidden 2 older task finding\(s\) outside the 6h window/i);
   assert.match(rendered, /workers:\n- claude-code \[error\] Worker claude-code health check failed/i);
   assert.match(rendered, /github:\n- \[error\] GitHub dispatch is enabled but gh is not authenticated/i);
   assert.match(rendered, /tasks:\n- task-brief-doctor \[failed\/error\] Review the latest PR in GitHub/i);

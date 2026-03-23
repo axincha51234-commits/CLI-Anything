@@ -116,6 +116,13 @@ export function renderDoctorBrief(report: DoctorReport): string {
     `summary: ${compactText(report.summary)}`
   ];
 
+  if (report.task_filter.suppressed_task_findings > 0) {
+    const windowLabel = report.task_filter.task_window_hours === null
+      ? "current filter"
+      : `${report.task_filter.task_window_hours}h window`;
+    lines.push(`history: hidden ${report.task_filter.suppressed_task_findings} older task finding(s) outside the ${windowLabel}`);
+  }
+
   pushLimitedSection(
     lines,
     "workers:",
