@@ -25,8 +25,9 @@ import { GitHubControlPlane } from "./github/controlPlane";
 import { CodexHeadPlanner } from "./planner";
 import { TaskRouter } from "./router";
 import { computeRetryBackoffMs } from "./retry";
-import { buildTaskOperatorStatus, type TaskOperatorStatus } from "./status";
+import { buildTaskOperatorStatus, buildTaskStatusSnapshots, type TaskOperatorStatus } from "./status";
 import { SqliteTaskStore } from "./state-store/sqliteTaskStore";
+import { buildDoctorReport, type DoctorCommandHint, type DoctorOptions, type DoctorReport } from "./doctor";
 
 function toCliPrompt(lines: string[]): string {
   return lines
@@ -157,6 +158,12 @@ export interface SweepTasksResult {
   matched: number;
   changed: number;
   tasks: SweepTasksEntry[];
+}
+
+export interface RunDoctorHintResult {
+  report: DoctorReport;
+  hint: DoctorCommandHint;
+  result: SweepTasksResult;
 }
 
 interface WorkerPenalty {
@@ -1169,6 +1176,40 @@ export class CodexHeadOrchestrator {
       matched: entries.length,
       changed: entries.filter((entry) => entry.changed).length,
       tasks: entries
+    };
+  }
+
+  async createDoctorReport(options: DoctorOptions = {}): Promise<DoctorReport> {
+    return buildDoctorReport(
+      await this.smokeAdapters(),
+      buildTaskStatusSnapshots(this.listTasks(), this.artifactStore),
+      options
+    );
+  }
+
+  async runDoctorHint(
+    hintId: string,
+    options: DoctorOptions & { apply?: boolean } = {}
+  ): Promise<RunDoctorHintResult> {
+    const report = await this.createDoctorReport(options);
+    const hint = report.command_hints.find((entry) => entry.id === hintId);
+    if (!hint) {
+      throw new Error(`doctor hint ${hintId} was not found`);
+    }
+
+    return {
+      report,
+      hint,
+      result: this.sweepTasks({
+        action: hint.sweep.action,
+        states: hint.sweep.states,
+        older_than_hours: hint.sweep.older_than_hours,
+        goal_contains: hint.sweep.goal_contains,
+        worker_target: hint.sweep.worker_target,
+        task_ids: hint.sweep.task_ids,
+        limit: hint.sweep.limit,
+        dry_run: !options.apply
+      })
     };
   }
 

@@ -3,7 +3,6 @@ import { resolve } from "node:path";
 import { renderDoctorBrief, renderOutcomeBrief, renderStatusBrief, renderSweepBrief } from "./brief";
 import { normalizeGitHubRepository, updateGitHubConfig } from "./config";
 import { REVIEW_VERDICTS, TASK_STATES, WORKER_TARGETS } from "./contracts";
-import { buildDoctorReport } from "./doctor";
 import { executeGitHubPayloadFile } from "./github/workflowRunner";
 import { CodexHeadOrchestrator } from "./orchestrator";
 import { buildTaskStatusSnapshot, buildTaskStatusSnapshots } from "./status";
@@ -315,6 +314,57 @@ function parseSweepArgs(args: string[]): {
   };
 }
 
+function parseRunDoctorHintArgs(args: string[]): {
+  hintId: string;
+  apply: boolean;
+  brief: boolean;
+  includeAllTaskHistory: boolean;
+  taskWindowHours?: number;
+} {
+  const hintId = args[0];
+  if (!hintId) {
+    throw new Error("run-doctor-hint requires a hint id");
+  }
+
+  let apply = false;
+  let brief = false;
+  let includeAllTaskHistory = false;
+  let taskWindowHours: number | undefined;
+
+  for (let index = 1; index < args.length; index += 1) {
+    const current = args[index];
+    if (current === "--apply") {
+      apply = true;
+      continue;
+    }
+    if (current === "--brief") {
+      brief = true;
+      continue;
+    }
+    if (current === "--all-tasks") {
+      includeAllTaskHistory = true;
+      continue;
+    }
+    if (current === "--task-window-hours") {
+      taskWindowHours = Number(args[index + 1]);
+      if (!Number.isFinite(taskWindowHours) || taskWindowHours < 0) {
+        throw new Error("--task-window-hours must be a non-negative number");
+      }
+      index += 1;
+      continue;
+    }
+    throw new Error("run-doctor-hint only accepts --apply, --brief, --all-tasks, and --task-window-hours N");
+  }
+
+  return {
+    hintId,
+    apply,
+    brief,
+    includeAllTaskHistory,
+    taskWindowHours
+  };
+}
+
 function usage(): void {
   process.stdout.write(
     [
@@ -333,6 +383,7 @@ function usage(): void {
       "  node dist/src/index.js recover-running [timeout-sec] [interval-sec] [--requeue-local] [--brief]",
       "  node dist/src/index.js status [task-id] [--brief]",
       "  node dist/src/index.js doctor [--brief] [--all-tasks] [--task-window-hours N]",
+      "  node dist/src/index.js run-doctor-hint <hint-id> [--apply] [--brief] [--all-tasks] [--task-window-hours N]",
       "  node dist/src/index.js sweep-tasks <cancel|requeue> [--state a,b] [--older-than-hours N] [--goal-contains TEXT] [--worker-target TARGET] [--task-id ID] [--limit N] [--all] [--dry-run] [--brief]",
       "  node dist/src/index.js dispatch <task-id>",
       "  node dist/src/index.js dispatch-and-wait <task-id> [timeout-sec] [interval-sec]",
@@ -616,16 +667,32 @@ async function main(): Promise<void> {
 
   if (command === "doctor") {
     const parsed = parseDoctorArgs(rest);
-    const result = buildDoctorReport(
-      await orchestrator.smokeAdapters(),
-      buildTaskStatusSnapshots(orchestrator.listTasks(), orchestrator.artifactStore),
-      {
-        include_all_task_history: parsed.includeAllTaskHistory,
-        task_window_hours: parsed.taskWindowHours
-      }
-    );
+    const result = await orchestrator.createDoctorReport({
+      include_all_task_history: parsed.includeAllTaskHistory,
+      task_window_hours: parsed.taskWindowHours
+    });
     if (parsed.brief) {
       printText(renderDoctorBrief(result));
+      return;
+    }
+    printJson(result);
+    return;
+  }
+
+  if (command === "run-doctor-hint") {
+    const parsed = parseRunDoctorHintArgs(rest);
+    const result = await orchestrator.runDoctorHint(parsed.hintId, {
+      apply: parsed.apply,
+      include_all_task_history: parsed.includeAllTaskHistory,
+      task_window_hours: parsed.taskWindowHours
+    });
+    if (parsed.brief) {
+      printText(
+        [
+          `hint: ${result.hint.id} [${result.hint.kind}] ${result.hint.reason}`,
+          renderSweepBrief(result.result)
+        ].join("\n")
+      );
       return;
     }
     printJson(result);

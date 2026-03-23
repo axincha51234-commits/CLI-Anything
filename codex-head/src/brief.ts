@@ -151,7 +151,7 @@ export function renderDoctorBrief(report: DoctorReport): string {
   pushLimitedSection(
     lines,
     "commands:",
-    report.command_hints.map((hint) => `- ${hint.command}`),
+    report.command_hints.map((hint) => `- [${hint.id}] ${hint.command}`),
     6
   );
 

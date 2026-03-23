@@ -46,10 +46,22 @@ export interface DoctorTaskFinding {
   manual_intervention_required: boolean;
 }
 
+export interface DoctorSweepPayload {
+  action: "cancel" | "requeue";
+  states?: TaskState[];
+  older_than_hours?: number;
+  goal_contains?: string;
+  worker_target?: WorkerTarget;
+  task_ids?: string[];
+  limit?: number;
+}
+
 export interface DoctorCommandHint {
+  id: string;
   kind: "queued_backlog" | "suppressed_failed_backlog";
   reason: string;
   command: string;
+  sweep: DoctorSweepPayload;
 }
 
 export interface DoctorReport {
@@ -463,19 +475,30 @@ function buildCommandHints(
 ): DoctorCommandHint[] {
   const hints: DoctorCommandHint[] = [];
 
-  for (const entry of taskFindings.filter((task) => task.state === "queued").slice(0, 3)) {
+  for (const [index, entry] of taskFindings.filter((task) => task.state === "queued").slice(0, 3).entries()) {
     hints.push({
+      id: `queued-backlog-${index + 1}`,
       kind: "queued_backlog",
       reason: `Inspect queued task ${entry.task_id} before canceling it from the backlog.`,
-      command: `node dist/src/index.js sweep-tasks cancel --task-id ${entry.task_id} --dry-run --brief`
+      command: `node dist/src/index.js sweep-tasks cancel --task-id ${entry.task_id} --dry-run --brief`,
+      sweep: {
+        action: "cancel",
+        task_ids: [entry.task_id]
+      }
     });
   }
 
   if (suppressedTaskFindings > 0 && taskWindowHours !== null) {
     hints.push({
+      id: "suppressed-failed-backlog",
       kind: "suppressed_failed_backlog",
       reason: "Inspect older failed tasks hidden by the current doctor window before canceling them in bulk.",
-      command: `node dist/src/index.js sweep-tasks cancel --state failed --older-than-hours ${taskWindowHours} --dry-run --brief`
+      command: `node dist/src/index.js sweep-tasks cancel --state failed --older-than-hours ${taskWindowHours} --dry-run --brief`,
+      sweep: {
+        action: "cancel",
+        states: ["failed"],
+        older_than_hours: taskWindowHours
+      }
     });
   }
 

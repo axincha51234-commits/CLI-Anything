@@ -1938,6 +1938,43 @@ test("sweepTasks can requeue planned and failed tasks while skipping unsupported
   );
 });
 
+test("runDoctorHint defaults to dry-run and applies the selected structured sweep hint", async () => {
+  const root = createTempDir("codex-head-run-doctor-hint-");
+  const registry = new AdapterRegistry();
+  const orchestrator = createAppWithRegistry(root, registry);
+
+  const queuedTask = orchestrator.submitTask(createTaskSpec({
+    task_id: "task-doctor-hint-queued",
+    goal: "Summarize the current orchestration state",
+    repo: root,
+    worker_target: "codex-cli",
+    expected_output: { kind: "analysis", format: "markdown", code_change: false }
+  }));
+  orchestrator.enqueueTask(queuedTask.task.task_id);
+
+  const dryRun = await orchestrator.runDoctorHint("queued-backlog-1");
+  assert.equal(dryRun.hint.id, "queued-backlog-1");
+  assert.equal(dryRun.result.dry_run, true);
+  assert.equal(dryRun.result.changed, 1);
+  assert.equal(orchestrator.getTask(queuedTask.task.task_id).state, "queued");
+
+  const applied = await orchestrator.runDoctorHint("queued-backlog-1", { apply: true });
+  assert.equal(applied.result.dry_run, false);
+  assert.equal(applied.result.changed, 1);
+  assert.equal(orchestrator.getTask(queuedTask.task.task_id).state, "canceled");
+});
+
+test("runDoctorHint fails fast when the requested hint id does not exist", async () => {
+  const root = createTempDir("codex-head-run-doctor-hint-missing-");
+  const registry = new AdapterRegistry();
+  const orchestrator = createAppWithRegistry(root, registry);
+
+  await assert.rejects(
+    () => orchestrator.runDoctorHint("missing-hint"),
+    /doctor hint missing-hint was not found/i
+  );
+});
+
 test("fallback execution accepts the actual routed worker target", async () => {
   const root = createTempDir("codex-head-fallback-worker-");
   const registry = new AdapterRegistry();

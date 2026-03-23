@@ -80,6 +80,7 @@ node dist/src/index.js reconcile-github-running [timeout-sec] [interval-sec] [--
 node dist/src/index.js recover-running [timeout-sec] [interval-sec] [--requeue-local] [--brief]
 node dist/src/index.js status [task-id] [--brief]
 node dist/src/index.js doctor [--brief] [--all-tasks] [--task-window-hours N]
+node dist/src/index.js run-doctor-hint <hint-id> [--apply] [--brief] [--all-tasks] [--task-window-hours N]
 node dist/src/index.js sweep-tasks <cancel|requeue> [--state a,b] [--older-than-hours N] [--goal-contains TEXT] [--worker-target TARGET] [--task-id ID] [--limit N] [--all] [--dry-run] [--brief]
 node dist/src/index.js dispatch <task-id>
 node dist/src/index.js dispatch-and-wait <task-id> [timeout-sec] [interval-sec]
@@ -120,9 +121,11 @@ node dist/src/index.js complete-from-file <worker-result.json>
     worker health, self-hosted GitHub runtime, and task/operator guidance.
 15. Run `sweep-tasks` when you want to bulk-cancel stale backlog or requeue a
     filtered set of planned/failed tasks without touching task history.
-16. Run `clear-penalties` when a local provider recovered and you want to stop
+16. Run `run-doctor-hint` when you want to execute one of `doctor`'s
+    structured dry-run sweep suggestions without copying the command by hand.
+17. Run `clear-penalties` when a local provider recovered and you want to stop
     honoring remembered cooldowns immediately.
-17. Run `complete-from-file` to ingest an external callback artifact such as
+18. Run `complete-from-file` to ingest an external callback artifact such as
     `github-callback.json`.
 
 `status [task-id]` now returns an enriched JSON snapshot. For GitHub queue
@@ -155,6 +158,14 @@ change the recency window used for failed-task triage.
 It now also emits dry-run `sweep-tasks` command hints for queued backlog and
 suppressed failed backlog, so the report can point straight at the next safe
 operator command instead of only describing the problem.
+
+`run-doctor-hint` is the safest way to follow those suggestions:
+
+- `run-doctor-hint <hint-id> --brief` keeps the hint in dry-run mode
+- `run-doctor-hint <hint-id> --apply --brief` executes the same structured
+  sweep payload for real
+- it never shells out through the hint's preview string; it reuses the
+  structured sweep payload from the current doctor report
 
 `sweep-tasks` is intentionally conservative:
 

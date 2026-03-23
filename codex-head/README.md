@@ -174,6 +174,9 @@ currently local-ready and exposes the matching cooldown reason.
 - `doctor` now also emits structured dry-run sweep hints for queued backlog and
   suppressed failed backlog, so operators can jump straight into a safe
   `sweep-tasks ... --dry-run --brief` command.
+- `run-doctor-hint` now lets operators execute one of those structured hints
+  directly. It stays in dry-run mode by default and only mutates state when
+  `--apply` is passed explicitly.
 - `sweep-tasks` now gives operators a filtered bulk action for backlog triage.
   It can dry-run or apply `cancel` and `requeue` across selected tasks without
   deleting history from SQLite.

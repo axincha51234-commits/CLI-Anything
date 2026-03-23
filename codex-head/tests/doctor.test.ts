@@ -374,6 +374,10 @@ test("buildDoctorReport hides older failed backlog by default but can include al
     filtered.command_hints.some((entry) => entry.kind === "suppressed_failed_backlog"),
     true
   );
+  assert.equal(
+    filtered.command_hints.some((entry) => entry.id === "suppressed-failed-backlog"),
+    true
+  );
 
   const allTasks = buildDoctorReport(
     health,
@@ -437,4 +441,9 @@ test("buildDoctorReport emits task-specific queued backlog command hints", () =>
     report.command_hints.some((entry) => /--task-id task-doctor-queued-hint --dry-run --brief/i.test(entry.command)),
     true
   );
+  assert.equal(report.command_hints[0]?.id, "queued-backlog-1");
+  assert.deepEqual(report.command_hints[0]?.sweep, {
+    action: "cancel",
+    task_ids: ["task-doctor-queued-hint"]
+  });
 });

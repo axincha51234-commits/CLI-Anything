@@ -234,9 +234,15 @@ test("renderDoctorBrief summarizes operator findings and next actions", () => {
     ],
     command_hints: [
       {
+        id: "suppressed-failed-backlog",
         kind: "suppressed_failed_backlog",
         reason: "Inspect older failed tasks hidden by the current doctor window before canceling them in bulk.",
-        command: "node dist/src/index.js sweep-tasks cancel --state failed --older-than-hours 6 --dry-run --brief"
+        command: "node dist/src/index.js sweep-tasks cancel --state failed --older-than-hours 6 --dry-run --brief",
+        sweep: {
+          action: "cancel",
+          states: ["failed"],
+          older_than_hours: 6
+        }
       }
     ]
   };
@@ -248,7 +254,7 @@ test("renderDoctorBrief summarizes operator findings and next actions", () => {
   assert.match(rendered, /github:\n- \[error\] GitHub dispatch is enabled but gh is not authenticated/i);
   assert.match(rendered, /tasks:\n- task-brief-doctor \[failed\/error\] Review the latest PR in GitHub/i);
   assert.match(rendered, /next:\n- Inspect the claude-code health command and local runtime\./i);
-  assert.match(rendered, /commands:\n- node dist\/src\/index\.js sweep-tasks cancel --state failed --older-than-hours 6 --dry-run --brief/i);
+  assert.match(rendered, /commands:\n- \[suppressed-failed-backlog\] node dist\/src\/index\.js sweep-tasks cancel --state failed --older-than-hours 6 --dry-run --brief/i);
 });
 
 test("renderSweepBrief summarizes bulk task actions", () => {
