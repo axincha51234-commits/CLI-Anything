@@ -119,6 +119,16 @@ node dist/src/index.js complete-from-file <worker-result.json>
 15. Run `complete-from-file` to ingest an external callback artifact such as
     `github-callback.json`.
 
+`status [task-id]` now returns an enriched JSON snapshot. For GitHub queue
+problems, look under `operator` for:
+
+- `queue_diagnosis_path`
+- `queue_diagnosis`
+- `queue_recycle_path`
+- `queue_recycle`
+- `manual_intervention_required`
+- `summary`
+
 ## Runtime Paths
 
 Defaults come from [`src/config.ts`](../src/config.ts):

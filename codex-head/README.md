@@ -156,6 +156,10 @@ currently local-ready and exposes the matching cooldown reason.
   visible, so operator triage no longer depends on ad hoc `gh api` calls.
   It also shows whether stale-runner auto-recycle is enabled and whether the
   recycle script is present on disk.
+- `status` now also surfaces operator-only queue artifacts directly in JSON
+  output under `operator`, including `github-queue-diagnosis.json`,
+  `github-queue-recycle.json`, and whether manual intervention is already
+  required.
 - Self-hosted queue-stall handling now writes `github-queue-diagnosis.json`,
   and an opt-in `github.auto_recycle_stale_runner` flag can automatically call
   the Windows recycle helper for stale broker sessions.

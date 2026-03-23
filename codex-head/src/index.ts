@@ -4,6 +4,7 @@ import { normalizeGitHubRepository, updateGitHubConfig } from "./config";
 import { REVIEW_VERDICTS, WORKER_TARGETS } from "./contracts";
 import { executeGitHubPayloadFile } from "./github/workflowRunner";
 import { CodexHeadOrchestrator } from "./orchestrator";
+import { buildTaskStatusSnapshot, buildTaskStatusSnapshots } from "./status";
 
 function printJson(value: unknown): void {
   process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
@@ -379,7 +380,11 @@ async function main(): Promise<void> {
 
   if (command === "status") {
     const taskId = rest[0];
-    printJson(taskId ? orchestrator.getTask(taskId) : orchestrator.listTasks());
+    printJson(
+      taskId
+        ? buildTaskStatusSnapshot(orchestrator.getTask(taskId), orchestrator.artifactStore)
+        : buildTaskStatusSnapshots(orchestrator.listTasks(), orchestrator.artifactStore)
+    );
     return;
   }
 

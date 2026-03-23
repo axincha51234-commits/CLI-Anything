@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 export class FileArtifactStore {
@@ -12,10 +12,22 @@ export class FileArtifactStore {
     return taskDir;
   }
 
+  resolveTaskArtifactPath(taskId: string, name: string): string {
+    return join(this.rootDir, taskId, name);
+  }
+
   writeJson(taskId: string, name: string, value: unknown): string {
     const filePath = join(this.getTaskDir(taskId), name);
     writeFileSync(filePath, JSON.stringify(value, null, 2), "utf8");
     return filePath;
+  }
+
+  readJsonIfExists<T>(taskId: string, name: string): T | null {
+    const filePath = this.resolveTaskArtifactPath(taskId, name);
+    if (!existsSync(filePath)) {
+      return null;
+    }
+    return JSON.parse(readFileSync(filePath, "utf8")) as T;
   }
 
   writeText(taskId: string, name: string, value: string): string {

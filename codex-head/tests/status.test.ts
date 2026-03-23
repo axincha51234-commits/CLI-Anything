@@ -1,0 +1,139 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
+
+import { FileArtifactStore } from "../src/artifacts/fileArtifactStore";
+import { buildTaskStatusSnapshot, buildTaskStatusSnapshots } from "../src/status";
+import { createTaskSpec } from "../src/schema";
+import type { TaskRecord, WorkerResult } from "../src/contracts";
+import { createTempDir } from "./helpers";
+
+function createRecord(overrides: Partial<TaskRecord> = {}): TaskRecord {
+  const task = overrides.task ?? createTaskSpec({
+    goal: "Review the latest PR in GitHub",
+    repo: "C:/repo",
+    worker_target: "gemini-cli",
+    expected_output: { kind: "review", format: "markdown", code_change: false },
+    requires_github: true
+  });
+  const now = Date.now();
+  const defaultResult: WorkerResult = {
+    task_id: task.task_id,
+    worker_target: task.worker_target,
+    status: "failed",
+    review_verdict: null,
+    summary: "GitHub callback reconciliation failed",
+    artifacts: [],
+    patch_ref: null,
+    log_ref: null,
+    cost: 0,
+    duration_ms: 0,
+    next_action: "manual",
+    review_notes: []
+  };
+
+  return {
+    task,
+    state: "failed",
+    attempts: 1,
+    max_attempts: task.budget.max_attempts,
+    next_run_at: now,
+    created_at: now,
+    updated_at: now,
+    started_at: now,
+    finished_at: now,
+    last_error: null,
+    result: defaultResult,
+    routing: {
+      worker_target: task.worker_target,
+      mode: "github",
+      reason: "test",
+      fallback_from: null
+    },
+    github_run: null,
+    github_mirror: null,
+    reviews: [],
+    ...overrides
+  };
+}
+
+test("buildTaskStatusSnapshot surfaces queue diagnosis and recycle state", () => {
+  const root = createTempDir("codex-head-status-");
+  const artifactStore = new FileArtifactStore(resolve(root, "artifacts"));
+  const record = createRecord({
+    last_error: "Automatic stale-runner recovery was already attempted and manual intervention is now required.",
+    result: {
+      task_id: "unused",
+      worker_target: "gemini-cli",
+      status: "failed",
+      review_verdict: null,
+      summary: "Recovered unresolved GitHub task",
+      artifacts: [],
+      patch_ref: null,
+      log_ref: null,
+      cost: 0,
+      duration_ms: 0,
+      next_action: "manual",
+      review_notes: [
+        "Fallback callback sync also failed after queue recovery."
+      ]
+    }
+  });
+
+  artifactStore.writeJson(record.task.task_id, "github-queue-diagnosis.json", {
+    task_id: record.task.task_id,
+    run_id: 321,
+    likely_stalled: true,
+    reason: "The run is still queued even though a matching self-hosted runner appears online and idle; a stale broker session is likely.",
+    suggested_action: "Consider recycling the self-hosted runner before retrying."
+  });
+  artifactStore.writeJson(record.task.task_id, "github-queue-recycle.json", {
+    task_id: record.task.task_id,
+    run_id: 321,
+    ok: true,
+    skipped: false,
+    detail: "Automatic self-hosted runner recycle completed successfully."
+  });
+
+  const snapshot = buildTaskStatusSnapshot(record, artifactStore);
+  assert.equal(snapshot.operator.queue_diagnosis?.likely_stalled, true);
+  assert.match(snapshot.operator.queue_diagnosis_path ?? "", /github-queue-diagnosis\.json$/i);
+  assert.equal(snapshot.operator.queue_recycle?.ok, true);
+  assert.match(snapshot.operator.queue_recycle_path ?? "", /github-queue-recycle\.json$/i);
+  assert.equal(snapshot.operator.manual_intervention_required, true);
+  assert.match(snapshot.operator.summary ?? "", /manual intervention is now required/i);
+});
+
+test("buildTaskStatusSnapshots stays read-only when queue artifacts do not exist", () => {
+  const root = createTempDir("codex-head-status-clean-");
+  const artifactStore = new FileArtifactStore(resolve(root, "artifacts"));
+  const record = createRecord({
+    state: "completed",
+    last_error: null,
+    result: {
+      task_id: "unused",
+      worker_target: "gemini-cli",
+      status: "completed",
+      review_verdict: "commented",
+      summary: "GitHub task completed normally",
+      artifacts: [],
+      patch_ref: null,
+      log_ref: null,
+      cost: 0,
+      duration_ms: 0,
+      next_action: "none",
+      review_notes: []
+    }
+  });
+  const taskDir = resolve(root, "artifacts", record.task.task_id);
+
+  assert.equal(existsSync(taskDir), false);
+  const [snapshot] = buildTaskStatusSnapshots([record], artifactStore);
+
+  assert.equal(existsSync(taskDir), false);
+  assert.equal(snapshot?.operator.queue_diagnosis, null);
+  assert.equal(snapshot?.operator.queue_recycle, null);
+  assert.equal(snapshot?.operator.manual_intervention_required, false);
+  assert.equal(snapshot?.operator.summary, null);
+});

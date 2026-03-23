@@ -17,6 +17,7 @@
     "src/contracts.ts",
     "src/schema.ts",
     "src/index.ts",
+    "src/status.ts",
     "src/retry.ts",
     "src/orchestrator.ts",
     "src/adapter-registry/**/*.ts",
