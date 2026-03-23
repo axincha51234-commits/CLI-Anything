@@ -123,6 +123,12 @@ test("buildTaskStatusSnapshot surfaces queue diagnosis and recycle state", () =>
   assert.equal(snapshot.operator.latest_receipt_path, latestReceiptPath);
   assert.equal(snapshot.operator.latest_receipt_command, "run-doctor-hint");
   assert.equal(snapshot.operator.latest_receipt_created_at, "2026-03-23T09:00:00.000Z");
+  assert.deepEqual(snapshot.artifact_refs, {
+    worker_result_path: null,
+    execution_attempts_path: null,
+    primary_output_path: null,
+    primary_log_path: null
+  });
   assert.equal(snapshot.operator.manual_intervention_required, true);
   assert.match(snapshot.operator.summary ?? "", /manual intervention is now required/i);
   assert.equal(snapshot.operator.actions.some((value) => /inspect .*github-queue-recycle\.json/i.test(value)), true);
@@ -164,12 +170,18 @@ test("buildTaskStatusSnapshots stays read-only when queue artifacts do not exist
   assert.equal(snapshot?.operator.latest_receipt_path, null);
   assert.equal(snapshot?.operator.latest_receipt_command, null);
   assert.equal(snapshot?.operator.latest_receipt_created_at, null);
+  assert.deepEqual(snapshot?.artifact_refs, {
+    worker_result_path: null,
+    execution_attempts_path: null,
+    primary_output_path: null,
+    primary_log_path: null
+  });
   assert.equal(snapshot?.operator.manual_intervention_required, false);
   assert.equal(snapshot?.operator.summary, null);
   assert.deepEqual(snapshot?.operator.actions, []);
 });
 
-test("buildTaskStatusSnapshot prefers the newest matching operator receipt", () => {
+test("buildTaskStatusSnapshot prefers the newest matching operator receipt", async () => {
   const root = createTempDir("codex-head-status-latest-receipt-");
   const artifactStore = new FileArtifactStore(resolve(root, "artifacts"));
   const record = createRecord();
@@ -189,6 +201,7 @@ test("buildTaskStatusSnapshot prefers the newest matching operator receipt", () 
       changed: 0
     }
   });
+  await new Promise((resolveDelay) => setTimeout(resolveDelay, 5));
   const latestReceiptPath = artifactStore.writeOperatorReceipt("run-doctor-hint", {
     schema_version: 1,
     command: "run-doctor-hint",
@@ -208,6 +221,39 @@ test("buildTaskStatusSnapshot prefers the newest matching operator receipt", () 
   const snapshot = buildTaskStatusSnapshot(record, artifactStore);
   assert.equal(snapshot.operator.latest_receipt_path, latestReceiptPath);
   assert.equal(snapshot.operator.latest_receipt_command, "run-doctor-hint");
+});
+
+test("buildTaskStatusSnapshot surfaces canonical artifact refs when present", () => {
+  const root = createTempDir("codex-head-status-artifact-refs-");
+  const artifactStore = new FileArtifactStore(resolve(root, "artifacts"));
+  const record = createRecord({
+    result: {
+      task_id: "unused",
+      worker_target: "gemini-cli",
+      status: "completed",
+      review_verdict: "commented",
+      summary: "Worker completed successfully",
+      artifacts: [
+        resolve(root, "artifacts", "task-output", "worker-output.md")
+      ],
+      patch_ref: null,
+      log_ref: resolve(root, "artifacts", "task-output", "gemini-cli-local.combined.log"),
+      cost: 0,
+      duration_ms: 0,
+      next_action: "none",
+      review_notes: []
+    }
+  });
+  const taskId = record.task.task_id;
+
+  artifactStore.writeJson(taskId, "worker-result.json", { ok: true });
+  artifactStore.writeJson(taskId, "execution-attempts.json", { attempts: [] });
+
+  const snapshot = buildTaskStatusSnapshot(record, artifactStore);
+  assert.match(snapshot.artifact_refs.worker_result_path ?? "", /worker-result\.json$/i);
+  assert.match(snapshot.artifact_refs.execution_attempts_path ?? "", /execution-attempts\.json$/i);
+  assert.match(snapshot.artifact_refs.primary_output_path ?? "", /worker-output\.md$/i);
+  assert.match(snapshot.artifact_refs.primary_log_path ?? "", /gemini-cli-local\.combined\.log$/i);
 });
 
 test("buildTaskStatusSnapshot recommends concrete actions for busy runners and gh auth failures", () => {

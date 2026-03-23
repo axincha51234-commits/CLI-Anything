@@ -1,6 +1,6 @@
 import type { AdapterHealth, AdapterRuntimeReadiness, TaskState, WorkerTarget } from "./contracts";
 import type { GitHubRuntimeStatus } from "./github/controlPlane";
-import type { TaskStatusSnapshot } from "./status";
+import type { TaskArtifactRefs, TaskStatusSnapshot } from "./status";
 
 export type DoctorFindingSeverity = "error" | "warning" | "info";
 export const DOCTOR_COMMAND_HINT_KINDS = [
@@ -46,6 +46,7 @@ export interface DoctorTaskFinding {
   worker_target: WorkerTarget;
   routing_mode: "local" | "github" | null;
   artifact_dir_path: string;
+  artifact_refs: TaskArtifactRefs;
   github_run_url: string | null;
   severity: DoctorFindingSeverity;
   summary: string;
@@ -411,6 +412,7 @@ function summarizeTaskFinding(
     worker_target: task.task.worker_target,
     routing_mode: task.routing?.mode ?? null,
     artifact_dir_path: task.artifact_dir_path,
+    artifact_refs: task.artifact_refs,
     github_run_url: task.github_run?.run_url ?? null,
     severity,
     summary: deriveTaskSummary(task),

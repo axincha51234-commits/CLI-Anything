@@ -217,11 +217,17 @@ operator command instead of only describing the problem.
 receipt path for a task when one exists, so operators can jump directly into
 `show-operator-receipt` without listing history first.
 - `status --brief` prints `open-receipt: node dist/src/index.js show-operator-receipt ... --brief`
-- `status --brief` also prints `artifacts: ...` and `github-url: ...` when the
-  task has a persisted workflow run URL
+- `status --brief` also prints `artifacts: ...` plus canonical refs like
+  `worker-result: ...`, `attempts: ...`, `output: ...`, and `log: ...` when
+  those paths are known
+- `status --brief` prints `github-url: ...` when the task has a persisted
+  workflow run URL
 - `doctor --brief` adds a `receipt-commands:` section for task-level receipt jumps
 - `doctor --brief` also adds a `task-links:` section so the visible task rows
   expose `artifacts=...` and `github=...` pointers without reopening JSON
+- `doctor --brief` also adds an `artifact-files:` section for visible task rows
+  when `worker-result.json`, `execution-attempts.json`, primary output, or the
+  primary log can be resolved
 
 `sweep-tasks` is intentionally conservative:
 

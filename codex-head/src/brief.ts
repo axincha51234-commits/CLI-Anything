@@ -48,6 +48,30 @@ function buildShowOperatorReceiptCommand(receiptPath: string): string {
   return `node dist/src/index.js show-operator-receipt ${receiptPath} --brief`;
 }
 
+function renderArtifactRefLines(refs: {
+  worker_result_path: string | null;
+  execution_attempts_path: string | null;
+  primary_output_path: string | null;
+  primary_log_path: string | null;
+}): string[] {
+  const lines: string[] = [];
+
+  if (refs.worker_result_path) {
+    lines.push(`worker-result: ${refs.worker_result_path}`);
+  }
+  if (refs.execution_attempts_path) {
+    lines.push(`attempts: ${refs.execution_attempts_path}`);
+  }
+  if (refs.primary_output_path) {
+    lines.push(`output: ${refs.primary_output_path}`);
+  }
+  if (refs.primary_log_path) {
+    lines.push(`log: ${refs.primary_log_path}`);
+  }
+
+  return lines;
+}
+
 function renderOperatorLines(operator: TaskOperatorStatus | null): string[] {
   if (!operator) {
     return [];
@@ -92,6 +116,7 @@ function renderStatusBlock(snapshot: TaskStatusSnapshot): string {
 
   return [
     ...lines,
+    ...renderArtifactRefLines(snapshot.artifact_refs),
     ...renderOperatorLines(snapshot.operator)
   ].join("\n");
 }
@@ -188,6 +213,27 @@ export function renderDoctorBrief(report: DoctorReport): string {
       }
       return segments.join(" :: ");
     }),
+    8
+  );
+  pushLimitedSection(
+    lines,
+    "artifact-files:",
+    visibleTaskFindings
+      .map((finding) => {
+        const segments = [
+          finding.artifact_refs.worker_result_path ? `result=${finding.artifact_refs.worker_result_path}` : null,
+          finding.artifact_refs.execution_attempts_path ? `attempts=${finding.artifact_refs.execution_attempts_path}` : null,
+          finding.artifact_refs.primary_output_path ? `output=${finding.artifact_refs.primary_output_path}` : null,
+          finding.artifact_refs.primary_log_path ? `log=${finding.artifact_refs.primary_log_path}` : null
+        ].filter((value): value is string => Boolean(value));
+
+        if (segments.length === 0) {
+          return null;
+        }
+
+        return `- ${finding.task_id} :: ${segments.join(" :: ")}`;
+      })
+      .filter((value): value is string => Boolean(value)),
     8
   );
   pushLimitedSection(

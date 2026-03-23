@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+
 import type { TaskRecord } from "./contracts";
 import { FileArtifactStore } from "./artifacts/fileArtifactStore";
 
@@ -36,8 +38,16 @@ export interface TaskOperatorStatus {
   actions: string[];
 }
 
+export interface TaskArtifactRefs {
+  worker_result_path: string | null;
+  execution_attempts_path: string | null;
+  primary_output_path: string | null;
+  primary_log_path: string | null;
+}
+
 export interface TaskStatusSnapshot extends TaskRecord {
   artifact_dir_path: string;
+  artifact_refs: TaskArtifactRefs;
   operator: TaskOperatorStatus;
 }
 
@@ -185,6 +195,27 @@ function findLatestOperatorReceipt(
   return null;
 }
 
+function resolveExistingArtifactPath(
+  artifactStore: FileArtifactStore,
+  taskId: string,
+  name: string
+): string | null {
+  const artifactPath = artifactStore.resolveTaskArtifactPath(taskId, name);
+  return existsSync(artifactPath) ? artifactPath : null;
+}
+
+function buildTaskArtifactRefs(
+  record: TaskRecord,
+  artifactStore: FileArtifactStore
+): TaskArtifactRefs {
+  return {
+    worker_result_path: resolveExistingArtifactPath(artifactStore, record.task.task_id, "worker-result.json"),
+    execution_attempts_path: resolveExistingArtifactPath(artifactStore, record.task.task_id, "execution-attempts.json"),
+    primary_output_path: record.result?.patch_ref ?? record.result?.artifacts[0] ?? null,
+    primary_log_path: record.result?.log_ref ?? null
+  };
+}
+
 export function buildTaskOperatorStatus(
   record: TaskRecord,
   artifactStore: FileArtifactStore,
@@ -234,6 +265,7 @@ export function buildTaskStatusSnapshot(
   return {
     ...record,
     artifact_dir_path: artifactStore.resolveTaskDir(record.task.task_id),
+    artifact_refs: buildTaskArtifactRefs(record, artifactStore),
     operator: buildTaskOperatorStatus(record, artifactStore)
   };
 }
