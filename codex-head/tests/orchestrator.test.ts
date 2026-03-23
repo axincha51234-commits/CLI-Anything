@@ -2001,9 +2001,14 @@ test("runDoctorHints defaults to dry-run and can filter queued backlog hints wit
   });
 
   assert.equal(result.apply, false);
+  assert.equal(result.allow_multi_task_apply, false);
+  assert.match(result.confirm_token, /^[a-f0-9]{12}$/i);
   assert.equal(result.kind, "queued_backlog");
   assert.equal(result.limit, 2);
+  assert.equal(result.total_matched, 2);
+  assert.equal(result.total_actionable, 2);
   assert.equal(result.results.length, 2);
+  assert.equal(result.preview.length, 2);
   assert.deepEqual(
     result.results.map((entry) => entry.hint.id),
     ["queued-backlog-1", "queued-backlog-2"]
@@ -2043,19 +2048,146 @@ test("runDoctorHints can apply a filtered suppressed backlog hint", async () => 
     review_notes: ["failure"]
   }, routing("codex-cli", "local"));
 
+  const preview = await orchestrator.runDoctorHints({
+    kind: "suppressed_failed_backlog",
+    task_window_hours: 0,
+    now: Date.now() + 1000
+  });
+  assert.match(preview.confirm_token, /^[a-f0-9]{12}$/i);
+
+  await assert.rejects(
+    () => orchestrator.runDoctorHints({
+      kind: "suppressed_failed_backlog",
+      apply: true,
+      task_window_hours: 0,
+      now: Date.now() + 1000
+    }),
+    /requires --confirm-token/i
+  );
+
   const result = await orchestrator.runDoctorHints({
     kind: "suppressed_failed_backlog",
     apply: true,
+    confirm_token: preview.confirm_token,
     task_window_hours: 0,
     now: Date.now() + 1000
   });
 
   assert.equal(result.apply, true);
+  assert.equal(result.allow_multi_task_apply, false);
+  assert.equal(result.confirm_token, preview.confirm_token);
+  assert.equal(result.total_matched, 1);
+  assert.equal(result.total_actionable, 1);
   assert.equal(result.results.length, 1);
   assert.equal(result.results[0]?.hint.id, "suppressed-failed-backlog");
   assert.equal(result.results[0]?.result.dry_run, false);
   assert.equal(result.results[0]?.result.changed, 1);
   assert.equal(orchestrator.getTask(failedTask.task.task_id).state, "canceled");
+});
+
+test("runDoctorHints blocks multi-task apply until it is explicitly allowed", async () => {
+  const root = createTempDir("codex-head-run-doctor-hints-guard-");
+  const registry = new AdapterRegistry();
+  const orchestrator = createAppWithRegistry(root, registry);
+
+  for (const taskId of [
+    "task-doctor-hints-guard-1",
+    "task-doctor-hints-guard-2"
+  ]) {
+    const queuedTask = orchestrator.submitTask(createTaskSpec({
+      task_id: taskId,
+      goal: `Queued task ${taskId}`,
+      repo: root,
+      worker_target: "codex-cli",
+      expected_output: { kind: "analysis", format: "markdown", code_change: false }
+    }));
+    orchestrator.enqueueTask(queuedTask.task.task_id);
+  }
+
+  await assert.rejects(
+    () => orchestrator.runDoctorHints({
+      kind: "queued_backlog",
+      limit: 2,
+      apply: true
+    }),
+    /rerun with --allow-multi-task-apply/i
+  );
+  assert.equal(orchestrator.getTask("task-doctor-hints-guard-1").state, "queued");
+  assert.equal(orchestrator.getTask("task-doctor-hints-guard-2").state, "queued");
+});
+
+test("runDoctorHints blocks apply when the confirm token does not match the current preview", async () => {
+  const root = createTempDir("codex-head-run-doctor-hints-confirm-mismatch-");
+  const registry = new AdapterRegistry();
+  const orchestrator = createAppWithRegistry(root, registry);
+
+  const queuedTask = orchestrator.submitTask(createTaskSpec({
+    task_id: "task-doctor-hints-confirm-mismatch",
+    goal: "Queued task",
+    repo: root,
+    worker_target: "codex-cli",
+    expected_output: { kind: "analysis", format: "markdown", code_change: false }
+  }));
+  orchestrator.enqueueTask(queuedTask.task.task_id);
+
+  const preview = await orchestrator.runDoctorHints({
+    kind: "queued_backlog",
+    limit: 1
+  });
+
+  await assert.rejects(
+    () => orchestrator.runDoctorHints({
+      kind: "queued_backlog",
+      limit: 1,
+      apply: true,
+      confirm_token: "deadbeefcafe"
+    }),
+    /confirm token mismatch/i
+  );
+  assert.equal(preview.total_actionable, 1);
+  assert.equal(orchestrator.getTask(queuedTask.task.task_id).state, "queued");
+});
+
+test("runDoctorHints can apply a multi-task batch after the explicit guard is provided", async () => {
+  const root = createTempDir("codex-head-run-doctor-hints-guard-apply-");
+  const registry = new AdapterRegistry();
+  const orchestrator = createAppWithRegistry(root, registry);
+
+  for (const taskId of [
+    "task-doctor-hints-guard-apply-1",
+    "task-doctor-hints-guard-apply-2"
+  ]) {
+    const queuedTask = orchestrator.submitTask(createTaskSpec({
+      task_id: taskId,
+      goal: `Queued task ${taskId}`,
+      repo: root,
+      worker_target: "codex-cli",
+      expected_output: { kind: "analysis", format: "markdown", code_change: false }
+    }));
+    orchestrator.enqueueTask(queuedTask.task.task_id);
+  }
+
+  const preview = await orchestrator.runDoctorHints({
+    kind: "queued_backlog",
+    limit: 2
+  });
+
+  const result = await orchestrator.runDoctorHints({
+    kind: "queued_backlog",
+    limit: 2,
+    apply: true,
+    allow_multi_task_apply: true,
+    confirm_token: preview.confirm_token
+  });
+
+  assert.equal(result.apply, true);
+  assert.equal(result.allow_multi_task_apply, true);
+  assert.equal(result.confirm_token, preview.confirm_token);
+  assert.equal(result.total_actionable, 2);
+  assert.equal(result.results.length, 2);
+  assert.equal(result.results.every((entry) => entry.result.dry_run === false), true);
+  assert.equal(orchestrator.getTask("task-doctor-hints-guard-apply-1").state, "canceled");
+  assert.equal(orchestrator.getTask("task-doctor-hints-guard-apply-2").state, "canceled");
 });
 
 test("runDoctorHints fails fast when no hints match the requested kind", async () => {

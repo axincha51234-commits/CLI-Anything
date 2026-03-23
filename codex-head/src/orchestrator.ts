@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -182,6 +183,11 @@ export interface RunDoctorHintsResult {
   kind: DoctorCommandHintKind | null;
   limit: number | null;
   apply: boolean;
+  allow_multi_task_apply: boolean;
+  confirm_token: string;
+  total_matched: number;
+  total_actionable: number;
+  preview: RunDoctorHintsEntryResult[];
   results: RunDoctorHintsEntryResult[];
 }
 
@@ -1228,6 +1234,8 @@ export class CodexHeadOrchestrator {
       kind?: DoctorCommandHintKind;
       limit?: number;
       apply?: boolean;
+      allow_multi_task_apply?: boolean;
+      confirm_token?: string;
     } = {}
   ): Promise<RunDoctorHintsResult> {
     const report = await this.createDoctorReport(options);
@@ -1247,15 +1255,48 @@ export class CodexHeadOrchestrator {
       throw new Error("doctor report does not contain any runnable hints");
     }
 
+    const preview = selectedHints.map((hint) => ({
+      hint,
+      result: this.executeDoctorHintSweep(hint, false)
+    }));
+    const previewSummary = summarizeRunDoctorHints(preview);
+    const confirmToken = this.createRunDoctorHintsConfirmToken(options.kind ?? null, limit, preview);
+    if (options.apply && previewSummary.totalActionable > 1 && !options.allow_multi_task_apply) {
+      throw new Error(
+        `run-doctor-hints would change ${previewSummary.totalActionable} tasks across `
+        + `${selectedHints.length} hints; rerun with --allow-multi-task-apply after reviewing the dry-run preview`
+      );
+    }
+    if (options.apply && !options.confirm_token) {
+      throw new Error(
+        `run-doctor-hints --apply requires --confirm-token ${confirmToken}; `
+        + "rerun without --apply to refresh the current dry-run preview first"
+      );
+    }
+    if (options.apply && options.confirm_token !== confirmToken) {
+      throw new Error(
+        `run-doctor-hints confirm token mismatch: expected ${confirmToken}, received ${options.confirm_token}; `
+        + "rerun without --apply to refresh the current dry-run preview"
+      );
+    }
+    const apply = Boolean(options.apply);
+
     return {
       report,
       kind: options.kind ?? null,
       limit,
-      apply: Boolean(options.apply),
-      results: selectedHints.map((hint) => ({
-        hint,
-        result: this.executeDoctorHintSweep(hint, Boolean(options.apply))
-      }))
+      apply,
+      allow_multi_task_apply: Boolean(options.allow_multi_task_apply),
+      confirm_token: confirmToken,
+      total_matched: previewSummary.totalMatched,
+      total_actionable: previewSummary.totalActionable,
+      preview,
+      results: apply
+        ? selectedHints.map((hint) => ({
+          hint,
+          result: this.executeDoctorHintSweep(hint, true)
+        }))
+        : preview
     };
   }
 
@@ -1286,6 +1327,33 @@ export class CodexHeadOrchestrator {
       limit: hint.sweep.limit,
       dry_run: !apply
     });
+  }
+
+  private createRunDoctorHintsConfirmToken(
+    kind: DoctorCommandHintKind | null,
+    limit: number | null,
+    preview: RunDoctorHintsEntryResult[]
+  ): string {
+    const payload = {
+      kind,
+      limit,
+      preview: preview.map((entry) => ({
+        hint_id: entry.hint.id,
+        hint_kind: entry.hint.kind,
+        sweep: entry.hint.sweep,
+        tasks: entry.result.tasks.map((task) => ({
+          task_id: task.task_id,
+          previous_state: task.previous_state,
+          next_state: task.next_state,
+          changed: task.changed
+        }))
+      }))
+    };
+
+    return createHash("sha256")
+      .update(JSON.stringify(payload))
+      .digest("hex")
+      .slice(0, 12);
   }
 
   private tryResolveGitHubRun(task: TaskSpec): TaskRecord["github_run"] | null {
@@ -1393,4 +1461,26 @@ export class CodexHeadOrchestrator {
       artifacts_dir: this.config.artifacts_dir
     };
   }
+}
+
+function summarizeRunDoctorHints(results: RunDoctorHintsEntryResult[]): {
+  totalMatched: number;
+  totalActionable: number;
+} {
+  const matchedTaskIds = new Set<string>();
+  const actionableTaskIds = new Set<string>();
+
+  for (const entry of results) {
+    for (const task of entry.result.tasks) {
+      matchedTaskIds.add(task.task_id);
+      if (task.changed) {
+        actionableTaskIds.add(task.task_id);
+      }
+    }
+  }
+
+  return {
+    totalMatched: matchedTaskIds.size,
+    totalActionable: actionableTaskIds.size
+  };
 }

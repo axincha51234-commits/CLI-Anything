@@ -81,7 +81,7 @@ node dist/src/index.js recover-running [timeout-sec] [interval-sec] [--requeue-l
 node dist/src/index.js status [task-id] [--brief]
 node dist/src/index.js doctor [--brief] [--all-tasks] [--task-window-hours N]
 node dist/src/index.js run-doctor-hint <hint-id> [--apply] [--brief] [--all-tasks] [--task-window-hours N]
-node dist/src/index.js run-doctor-hints [--kind KIND] [--limit N] [--apply] [--brief] [--all-tasks] [--task-window-hours N]
+node dist/src/index.js run-doctor-hints [--kind KIND] [--limit N] [--apply] [--allow-multi-task-apply] [--brief] [--all-tasks] [--task-window-hours N]
 node dist/src/index.js sweep-tasks <cancel|requeue> [--state a,b] [--older-than-hours N] [--goal-contains TEXT] [--worker-target TARGET] [--task-id ID] [--limit N] [--all] [--dry-run] [--brief]
 node dist/src/index.js dispatch <task-id>
 node dist/src/index.js dispatch-and-wait <task-id> [timeout-sec] [interval-sec]
@@ -177,6 +177,8 @@ operator command instead of only describing the problem.
   first two visible queued backlog hints
 - `run-doctor-hints --kind suppressed_failed_backlog --apply --brief` applies
   the matching backlog sweep for real
+- if the preview would mutate more than one task, `--apply` now requires
+  `--allow-multi-task-apply` as an explicit batch guard
 - it still rebuilds the doctor report first and only executes each hint's
   structured sweep payload
 

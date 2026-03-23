@@ -377,6 +377,8 @@ function parseRunDoctorHintsArgs(args: string[]): {
   kind?: typeof DOCTOR_COMMAND_HINT_KINDS[number];
   limit?: number;
   apply: boolean;
+  allowMultiTaskApply: boolean;
+  confirmToken?: string;
   brief: boolean;
   includeAllTaskHistory: boolean;
   taskWindowHours?: number;
@@ -384,6 +386,8 @@ function parseRunDoctorHintsArgs(args: string[]): {
   let kind: typeof DOCTOR_COMMAND_HINT_KINDS[number] | undefined;
   let limit: number | undefined;
   let apply = false;
+  let allowMultiTaskApply = false;
+  let confirmToken: string | undefined;
   let brief = false;
   let includeAllTaskHistory = false;
   let taskWindowHours: number | undefined;
@@ -411,6 +415,18 @@ function parseRunDoctorHintsArgs(args: string[]): {
       apply = true;
       continue;
     }
+    if (current === "--allow-multi-task-apply") {
+      allowMultiTaskApply = true;
+      continue;
+    }
+    if (current === "--confirm-token") {
+      confirmToken = args[index + 1];
+      if (!confirmToken) {
+        throw new Error("--confirm-token requires a value");
+      }
+      index += 1;
+      continue;
+    }
     if (current === "--brief") {
       brief = true;
       continue;
@@ -428,7 +444,7 @@ function parseRunDoctorHintsArgs(args: string[]): {
       continue;
     }
     throw new Error(
-      "run-doctor-hints only accepts --kind, --limit, --apply, --brief, --all-tasks, and --task-window-hours N"
+      "run-doctor-hints only accepts --kind, --limit, --apply, --allow-multi-task-apply, --confirm-token, --brief, --all-tasks, and --task-window-hours N"
     );
   }
 
@@ -436,6 +452,8 @@ function parseRunDoctorHintsArgs(args: string[]): {
     kind,
     limit,
     apply,
+    allowMultiTaskApply,
+    confirmToken,
     brief,
     includeAllTaskHistory,
     taskWindowHours
@@ -461,7 +479,7 @@ function usage(): void {
       "  node dist/src/index.js status [task-id] [--brief]",
       "  node dist/src/index.js doctor [--brief] [--all-tasks] [--task-window-hours N]",
       "  node dist/src/index.js run-doctor-hint <hint-id> [--apply] [--brief] [--all-tasks] [--task-window-hours N]",
-      "  node dist/src/index.js run-doctor-hints [--kind KIND] [--limit N] [--apply] [--brief] [--all-tasks] [--task-window-hours N]",
+      "  node dist/src/index.js run-doctor-hints [--kind KIND] [--limit N] [--apply] [--allow-multi-task-apply] [--confirm-token TOKEN] [--brief] [--all-tasks] [--task-window-hours N]",
       "  node dist/src/index.js sweep-tasks <cancel|requeue> [--state a,b] [--older-than-hours N] [--goal-contains TEXT] [--worker-target TARGET] [--task-id ID] [--limit N] [--all] [--dry-run] [--brief]",
       "  node dist/src/index.js dispatch <task-id>",
       "  node dist/src/index.js dispatch-and-wait <task-id> [timeout-sec] [interval-sec]",
@@ -778,6 +796,8 @@ async function main(): Promise<void> {
       kind: parsed.kind,
       limit: parsed.limit,
       apply: parsed.apply,
+      allow_multi_task_apply: parsed.allowMultiTaskApply,
+      confirm_token: parsed.confirmToken,
       include_all_task_history: parsed.includeAllTaskHistory,
       task_window_hours: parsed.taskWindowHours
     });

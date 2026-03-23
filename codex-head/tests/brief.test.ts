@@ -367,6 +367,65 @@ test("renderRunDoctorHintsBrief summarizes batch doctor hint execution", () => {
     kind: "queued_backlog",
     limit: 2,
     apply: false,
+    allow_multi_task_apply: false,
+    total_matched: 2,
+    total_actionable: 2,
+    preview: [
+      {
+        hint: {
+          id: "queued-backlog-1",
+          kind: "queued_backlog",
+          reason: "Inspect queued task task-1 before canceling it from the backlog.",
+          command: "node dist/src/index.js sweep-tasks cancel --task-id task-1 --dry-run --brief",
+          sweep: {
+            action: "cancel",
+            task_ids: ["task-1"]
+          }
+        },
+        result: {
+          action: "cancel",
+          dry_run: true,
+          filters: {
+            states: ["planned", "queued", "failed"],
+            older_than_hours: null,
+            goal_contains: null,
+            worker_target: null,
+            task_ids: ["task-1"],
+            limit: null
+          },
+          matched: 1,
+          changed: 1,
+          tasks: []
+        }
+      },
+      {
+        hint: {
+          id: "queued-backlog-2",
+          kind: "queued_backlog",
+          reason: "Inspect queued task task-2 before canceling it from the backlog.",
+          command: "node dist/src/index.js sweep-tasks cancel --task-id task-2 --dry-run --brief",
+          sweep: {
+            action: "cancel",
+            task_ids: ["task-2"]
+          }
+        },
+        result: {
+          action: "cancel",
+          dry_run: true,
+          filters: {
+            states: ["planned", "queued", "failed"],
+            older_than_hours: null,
+            goal_contains: null,
+            worker_target: null,
+            task_ids: ["task-2"],
+            limit: null
+          },
+          matched: 1,
+          changed: 1,
+          tasks: []
+        }
+      }
+    ],
     results: [
       {
         hint: {
@@ -429,5 +488,6 @@ test("renderRunDoctorHintsBrief summarizes batch doctor hint execution", () => {
   assert.match(rendered, /summary: matched 2, actionable 2/i);
   assert.match(rendered, /kind: queued_backlog/i);
   assert.match(rendered, /limit: 2/i);
+  assert.match(rendered, /next: review this preview, then rerun with --apply --allow-multi-task-apply/i);
   assert.match(rendered, /hints:\n- queued-backlog-1 \[queued_backlog\]/i);
 });

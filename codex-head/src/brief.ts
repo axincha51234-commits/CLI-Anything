@@ -181,11 +181,10 @@ export function renderRunDoctorHintBrief(result: RunDoctorHintResult): string {
 }
 
 export function renderRunDoctorHintsBrief(result: RunDoctorHintsResult): string {
-  const totalMatched = result.results.reduce((sum, entry) => sum + entry.result.matched, 0);
-  const totalChanged = result.results.reduce((sum, entry) => sum + entry.result.changed, 0);
   const lines = [
     `doctor-hints: ${result.results.length} selected${result.apply ? "" : " (dry-run)"}`,
-    `summary: matched ${totalMatched}, actionable ${totalChanged}`
+    `summary: matched ${result.total_matched}, actionable ${result.total_actionable}`,
+    `confirm-token: ${result.confirm_token}`
   ];
 
   if (result.kind) {
@@ -193,6 +192,18 @@ export function renderRunDoctorHintsBrief(result: RunDoctorHintsResult): string 
   }
   if (result.limit !== null) {
     lines.push(`limit: ${result.limit}`);
+  }
+  if (!result.apply && result.total_actionable > 1) {
+    lines.push(
+      `next: rerun with --apply --allow-multi-task-apply --confirm-token ${result.confirm_token} `
+      + "only if this preview still matches intent."
+    );
+  } else if (!result.apply) {
+    lines.push(`next: rerun with --apply --confirm-token ${result.confirm_token} if this preview still matches intent.`);
+  } else if (result.apply && result.total_actionable > 1 && result.allow_multi_task_apply) {
+    lines.push(`guard: applied with confirm-token ${result.confirm_token} and explicit multi-task approval.`);
+  } else if (result.apply) {
+    lines.push(`guard: applied with confirm-token ${result.confirm_token}.`);
   }
 
   pushLimitedSection(

@@ -178,7 +178,8 @@ currently local-ready and exposes the matching cooldown reason.
   directly. It stays in dry-run mode by default and only mutates state when
   `--apply` is passed explicitly.
 - `run-doctor-hints` now batches the currently visible doctor hints by `kind`
-  and `limit`, while keeping dry-run as the default safety rail.
+  and `limit`, while keeping dry-run as the default safety rail. Multi-task
+  batch apply now also requires an explicit `--allow-multi-task-apply` guard.
 - `sweep-tasks` now gives operators a filtered bulk action for backlog triage.
   It can dry-run or apply `cancel` and `requeue` across selected tasks without
   deleting history from SQLite.
