@@ -8,6 +8,7 @@ export const DOCTOR_COMMAND_HINT_KINDS = [
   "suppressed_failed_backlog"
 ] as const;
 export type DoctorCommandHintKind = (typeof DOCTOR_COMMAND_HINT_KINDS)[number];
+const CLI_BRIEF_PREFIX = "node --disable-warning=ExperimentalWarning dist/src/index.js";
 
 export interface DoctorPenaltySnapshot {
   worker_target: WorkerTarget;
@@ -499,7 +500,7 @@ function buildCommandHints(
       id: `queued-backlog-${index + 1}`,
       kind: "queued_backlog",
       reason: `Inspect queued task ${entry.task_id} before canceling it from the backlog.`,
-      command: `node dist/src/index.js sweep-tasks cancel --task-id ${entry.task_id} --dry-run --brief`,
+      command: `${CLI_BRIEF_PREFIX} sweep-tasks cancel --task-id ${entry.task_id} --dry-run --brief`,
       sweep: {
         action: "cancel",
         task_ids: [entry.task_id]
@@ -512,7 +513,7 @@ function buildCommandHints(
       id: "suppressed-failed-backlog",
       kind: "suppressed_failed_backlog",
       reason: "Inspect older failed tasks hidden by the current doctor window before canceling them in bulk.",
-      command: `node dist/src/index.js sweep-tasks cancel --state failed --older-than-hours ${taskWindowHours} --dry-run --brief`,
+      command: `${CLI_BRIEF_PREFIX} sweep-tasks cancel --state failed --older-than-hours ${taskWindowHours} --dry-run --brief`,
       sweep: {
         action: "cancel",
         states: ["failed"],

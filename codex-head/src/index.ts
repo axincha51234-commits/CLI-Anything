@@ -25,6 +25,8 @@ function printText(value: string): void {
   process.stdout.write(`${value}\n`);
 }
 
+const CLI_USAGE_PREFIX = "node --disable-warning=ExperimentalWarning dist/src/index.js";
+
 function stripFlag(args: string[], flag: string): {
   values: string[];
   present: boolean;
@@ -613,32 +615,32 @@ function usage(): void {
   process.stdout.write(
     [
       "Usage:",
-      "  node dist/src/index.js health",
-      "  node dist/src/index.js run-goal [--repo OWNER/REPO] [--dispatch-mode gh_cli|artifacts_only] [--timeout-sec N] [--interval-sec N] [--no-mirror] <goal>",
-      "  node dist/src/index.js plan <goal>",
-      "  node dist/src/index.js configure-github-repo <owner/repo> [dispatch-mode]",
-      "  node dist/src/index.js enqueue <task-id>",
-      "  node dist/src/index.js publish-github-mirror <task-id>",
-      "  node dist/src/index.js review <task-id> <reviewer> <verdict> [summary]",
-      "  node dist/src/index.js run-github-payload <payload-json>",
-      "  node dist/src/index.js sync-github-callback <task-id>",
-      "  node dist/src/index.js wait-github-callback <task-id> [timeout-sec] [interval-sec]",
-      "  node dist/src/index.js reconcile-github-running [timeout-sec] [interval-sec] [--brief]",
-      "  node dist/src/index.js recover-running [timeout-sec] [interval-sec] [--requeue-local] [--brief]",
-      "  node dist/src/index.js status [task-id] [--brief]",
-      "  node dist/src/index.js doctor [--brief] [--all-tasks] [--task-window-hours N]",
-      "  node dist/src/index.js operator-history [--brief] [--limit N] [--command NAME] [--apply-only] [--dry-run-only]",
-      "  node dist/src/index.js show-operator-receipt <receipt-path> [--brief]",
-      "  node dist/src/index.js show-operator-receipt --latest [--command NAME] [--apply-only|--dry-run-only] [--brief]",
-      "  node dist/src/index.js show-operator-receipt --task-id ID [--command NAME] [--apply-only|--dry-run-only] [--brief]",
-      "  node dist/src/index.js run-doctor-hint <hint-id> [--apply] [--brief] [--all-tasks] [--task-window-hours N]",
-      "  node dist/src/index.js run-doctor-hints [--kind KIND] [--limit N] [--apply] [--allow-multi-task-apply] [--confirm-token TOKEN] [--brief] [--all-tasks] [--task-window-hours N]",
-      "  node dist/src/index.js sweep-tasks <cancel|requeue> [--state a,b] [--older-than-hours N] [--goal-contains TEXT] [--worker-target TARGET] [--task-id ID] [--limit N] [--all] [--dry-run] [--brief]",
-      "  node dist/src/index.js dispatch <task-id>",
-      "  node dist/src/index.js dispatch-and-wait <task-id> [timeout-sec] [interval-sec]",
-      "  node dist/src/index.js dispatch-next",
-      "  node dist/src/index.js clear-penalties [worker-target|all]",
-      "  node dist/src/index.js complete-from-file <worker-result.json>"
+      `  ${CLI_USAGE_PREFIX} health`,
+      `  ${CLI_USAGE_PREFIX} run-goal [--repo OWNER/REPO] [--dispatch-mode gh_cli|artifacts_only] [--timeout-sec N] [--interval-sec N] [--no-mirror] <goal>`,
+      `  ${CLI_USAGE_PREFIX} plan <goal>`,
+      `  ${CLI_USAGE_PREFIX} configure-github-repo <owner/repo> [dispatch-mode]`,
+      `  ${CLI_USAGE_PREFIX} enqueue <task-id>`,
+      `  ${CLI_USAGE_PREFIX} publish-github-mirror <task-id>`,
+      `  ${CLI_USAGE_PREFIX} review <task-id> <reviewer> <verdict> [summary]`,
+      `  ${CLI_USAGE_PREFIX} run-github-payload <payload-json>`,
+      `  ${CLI_USAGE_PREFIX} sync-github-callback <task-id>`,
+      `  ${CLI_USAGE_PREFIX} wait-github-callback <task-id> [timeout-sec] [interval-sec]`,
+      `  ${CLI_USAGE_PREFIX} reconcile-github-running [timeout-sec] [interval-sec] [--brief]`,
+      `  ${CLI_USAGE_PREFIX} recover-running [timeout-sec] [interval-sec] [--requeue-local] [--brief]`,
+      `  ${CLI_USAGE_PREFIX} status [task-id] [--brief]`,
+      `  ${CLI_USAGE_PREFIX} doctor [--brief] [--all-tasks] [--task-window-hours N]`,
+      `  ${CLI_USAGE_PREFIX} operator-history [--brief] [--limit N] [--command NAME] [--apply-only] [--dry-run-only]`,
+      `  ${CLI_USAGE_PREFIX} show-operator-receipt <receipt-path> [--brief]`,
+      `  ${CLI_USAGE_PREFIX} show-operator-receipt --latest [--command NAME] [--apply-only|--dry-run-only] [--brief]`,
+      `  ${CLI_USAGE_PREFIX} show-operator-receipt --task-id ID [--command NAME] [--apply-only|--dry-run-only] [--brief]`,
+      `  ${CLI_USAGE_PREFIX} run-doctor-hint <hint-id> [--apply] [--brief] [--all-tasks] [--task-window-hours N]`,
+      `  ${CLI_USAGE_PREFIX} run-doctor-hints [--kind KIND] [--limit N] [--apply] [--allow-multi-task-apply] [--confirm-token TOKEN] [--brief] [--all-tasks] [--task-window-hours N]`,
+      `  ${CLI_USAGE_PREFIX} sweep-tasks <cancel|requeue> [--state a,b] [--older-than-hours N] [--goal-contains TEXT] [--worker-target TARGET] [--task-id ID] [--limit N] [--all] [--dry-run] [--brief]`,
+      `  ${CLI_USAGE_PREFIX} dispatch <task-id>`,
+      `  ${CLI_USAGE_PREFIX} dispatch-and-wait <task-id> [timeout-sec] [interval-sec]`,
+      `  ${CLI_USAGE_PREFIX} dispatch-next`,
+      `  ${CLI_USAGE_PREFIX} clear-penalties [worker-target|all]`,
+      `  ${CLI_USAGE_PREFIX} complete-from-file <worker-result.json>`
     ].join("\n") + "\n"
   );
 }

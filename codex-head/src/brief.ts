@@ -17,6 +17,8 @@ type ReconcileOrRecoveryEntry = {
   operator: TaskOperatorStatus | null;
 };
 
+const CLI_BRIEF_PREFIX = "node --disable-warning=ExperimentalWarning dist/src/index.js";
+
 function compactText(value: string, maxLength = 220): string {
   const normalized = value.replace(/\s+/g, " ").trim();
   if (normalized.length <= maxLength) {
@@ -45,11 +47,11 @@ function pushLimitedSection(
 }
 
 function buildShowOperatorReceiptCommand(receiptPath: string): string {
-  return `node dist/src/index.js show-operator-receipt ${receiptPath} --brief`;
+  return `${CLI_BRIEF_PREFIX} show-operator-receipt ${receiptPath} --brief`;
 }
 
 function buildStatusCommand(taskId: string): string {
-  return `node dist/src/index.js status ${taskId} --brief`;
+  return `${CLI_BRIEF_PREFIX} status ${taskId} --brief`;
 }
 
 function shouldRenderDoctorArtifactFiles(finding: DoctorReport["attention"]["tasks"][number]): boolean {
