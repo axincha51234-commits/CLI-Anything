@@ -77,6 +77,16 @@ function renderDoctorTaskLine(finding: DoctorReport["attention"]["tasks"][number
   return `- ${finding.task_id} [${finding.state}/${finding.severity}] ${compactText(finding.goal, 90)} :: ${compactText(finding.summary, 180)}${receiptSuffix}`;
 }
 
+function filterDoctorNextActions(report: DoctorReport): string[] {
+  const queuedHintPresent = report.command_hints.some((hint) => hint.kind === "queued_backlog");
+  return report.actions.filter((action) => {
+    if (!queuedHintPresent) {
+      return true;
+    }
+    return action !== "Dispatch the queued task when the workspace and workers are ready.";
+  });
+}
+
 type DoctorRoutineTaskGroupInfo = {
   count: number;
   state: string;
@@ -266,6 +276,7 @@ export function renderDoctorBrief(report: DoctorReport): string {
   ];
   const visibleTaskFindings = report.attention.tasks.slice(0, 8);
   const taskSummary = summarizeDoctorTaskLines(visibleTaskFindings);
+  const nextActions = filterDoctorNextActions(report);
 
   if (report.task_filter.suppressed_task_findings > 0) {
     const windowLabel = report.task_filter.task_window_hours === null
@@ -347,7 +358,7 @@ export function renderDoctorBrief(report: DoctorReport): string {
   pushLimitedSection(
     lines,
     "next:",
-    report.actions.map((action) => `- ${compactText(action, 180)}`),
+    nextActions.map((action) => `- ${compactText(action, 180)}`),
     8
   );
   pushLimitedSection(

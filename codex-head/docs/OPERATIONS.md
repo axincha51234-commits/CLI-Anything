@@ -233,6 +233,8 @@ receipt path for a task when one exists, so operators can jump directly into
 - `doctor --brief` also adds an `artifact-files:` section only for the higher-
   signal visible task rows when `worker-result.json`,
   `execution-attempts.json`, primary output, or the primary log can be resolved
+- when queued backlog command hints are present, `next:` keeps the higher-signal
+  actions and omits the redundant generic dispatch reminder
 - those artifact refs now include freshness labels so queued/running tasks do
   not present stale output as if it were the current attempt
 

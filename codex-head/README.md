@@ -208,6 +208,9 @@ currently local-ready and exposes the matching cooldown reason.
 - `doctor --brief` also adds an `artifact-files:` section only for the higher-
   signal visible task rows when canonical refs like `worker-result.json`,
   `execution-attempts.json`, primary output, or primary log are known.
+- when `commands:` already includes queued backlog sweeps, `next:` drops the
+  redundant generic "Dispatch the queued task..." reminder and keeps the higher-
+  signal actions instead.
   - those refs carry the same freshness labels, so a queued/running task does
     not look like it already produced a new current result.
 - `sweep-tasks` now gives operators a filtered bulk action for backlog triage.

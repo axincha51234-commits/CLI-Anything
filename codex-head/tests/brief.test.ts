@@ -445,6 +445,7 @@ test("renderDoctorBrief keeps receipt commands aligned with visible task rows", 
   assert.doesNotMatch(rendered, /receipt-commands:[\s\S]*task-brief-visible-9/i);
   assert.doesNotMatch(rendered, /^artifact-files:/im);
   assert.match(rendered, /commands:[\s\S]*\[queued-backlog-3\] node dist\/src\/index\.js sweep-tasks cancel --task-id task-brief-visible-3 --dry-run --brief :: representative of 6 similar queued\/warning task\(s\)/i);
+  assert.doesNotMatch(rendered, /next:[\s\S]*Dispatch the queued task when the workspace and workers are ready\./i);
 });
 
 test("renderSweepBrief summarizes bulk task actions", () => {
