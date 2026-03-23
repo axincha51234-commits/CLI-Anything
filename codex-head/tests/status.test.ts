@@ -103,6 +103,7 @@ test("buildTaskStatusSnapshot surfaces queue diagnosis and recycle state", () =>
   assert.match(snapshot.operator.queue_recycle_path ?? "", /github-queue-recycle\.json$/i);
   assert.equal(snapshot.operator.manual_intervention_required, true);
   assert.match(snapshot.operator.summary ?? "", /manual intervention is now required/i);
+  assert.equal(snapshot.operator.actions.some((value) => /inspect .*github-queue-recycle\.json/i.test(value)), true);
 });
 
 test("buildTaskStatusSnapshots stays read-only when queue artifacts do not exist", () => {
@@ -136,4 +137,46 @@ test("buildTaskStatusSnapshots stays read-only when queue artifacts do not exist
   assert.equal(snapshot?.operator.queue_recycle, null);
   assert.equal(snapshot?.operator.manual_intervention_required, false);
   assert.equal(snapshot?.operator.summary, null);
+  assert.deepEqual(snapshot?.operator.actions, []);
+});
+
+test("buildTaskStatusSnapshot recommends concrete actions for busy runners and gh auth failures", () => {
+  const root = createTempDir("codex-head-status-actions-");
+  const artifactStore = new FileArtifactStore(resolve(root, "artifacts"));
+  const record = createRecord({
+    last_error: "GitHub callback sync requires gh authentication",
+    result: {
+      task_id: "unused",
+      worker_target: "gemini-cli",
+      status: "failed",
+      review_verdict: null,
+      summary: "GitHub callback sync requires gh authentication",
+      artifacts: [],
+      patch_ref: null,
+      log_ref: null,
+      cost: 0,
+      duration_ms: 0,
+      next_action: "manual",
+      review_notes: []
+    }
+  });
+
+  artifactStore.writeJson(record.task.task_id, "github-queue-diagnosis.json", {
+    task_id: record.task.task_id,
+    run_id: 654,
+    likely_stalled: true,
+    reason: "Matching self-hosted runners are all busy.",
+    suggested_action: "Wait for a runner slot or free one of the matching runners."
+  });
+
+  const snapshot = buildTaskStatusSnapshot(record, artifactStore);
+  assert.equal(snapshot.operator.manual_intervention_required, false);
+  assert.equal(
+    snapshot.operator.actions.some((value) => /wait for a runner slot/i.test(value)),
+    true
+  );
+  assert.equal(
+    snapshot.operator.actions.some((value) => /gh auth login/i.test(value)),
+    true
+  );
 });

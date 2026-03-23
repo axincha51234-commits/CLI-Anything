@@ -30,6 +30,7 @@ export interface TaskOperatorStatus {
   queue_recycle: QueueRecycleArtifact | null;
   manual_intervention_required: boolean;
   summary: string | null;
+  actions: string[];
 }
 
 export interface TaskStatusSnapshot extends TaskRecord {
@@ -47,6 +48,56 @@ function collectTaskTexts(record: TaskRecord): string[] {
     record.result?.summary,
     ...notes
   ].filter(hasText);
+}
+
+function buildOperatorActions(
+  record: TaskRecord,
+  diagnosis: QueueDiagnosisArtifact | null,
+  recycle: QueueRecycleArtifact | null,
+  artifactStore: FileArtifactStore,
+  manualInterventionRequired: boolean
+): string[] {
+  const actions = new Set<string>();
+  const taskTexts = collectTaskTexts(record).join("\n");
+  const diagnosisReason = diagnosis?.reason ?? "";
+  const diagnosisPath = artifactStore.resolveTaskArtifactPath(record.task.task_id, "github-queue-diagnosis.json");
+  const recyclePath = artifactStore.resolveTaskArtifactPath(record.task.task_id, "github-queue-recycle.json");
+
+  if (hasText(diagnosis?.suggested_action)) {
+    actions.add(diagnosis.suggested_action);
+  }
+
+  if (/no self-hosted runner currently matches labels/i.test(diagnosisReason)) {
+    actions.add("Check CODEX_HEAD_RUNS_ON_JSON and the self-hosted runner labels so at least one runner matches the workflow.");
+  } else if (/offline/i.test(diagnosisReason)) {
+    actions.add("Bring one matching self-hosted runner back online or restart the runner listener cleanly.");
+  } else if (/all busy/i.test(diagnosisReason)) {
+    actions.add("Wait for a runner slot or free one of the matching self-hosted runners.");
+  } else if (/stale broker session/i.test(diagnosisReason)) {
+    actions.add("Run the self-hosted runner recycle helper or restart the runner cleanly before retrying the GitHub wait path.");
+  }
+
+  if (/requires gh authentication|gh auth/i.test(taskTexts)) {
+    actions.add("Run gh auth login on the machine that dispatches or reconciles GitHub workflows.");
+  }
+
+  if (/github\.repository to be configured|does not have a resolved GitHub workflow run yet/i.test(taskTexts)) {
+    actions.add("Set github.repository or dispatch the task again so Codex Head can resolve the workflow run.");
+  }
+
+  if (/callback download failed:.*artifact not found/i.test(taskTexts)) {
+    actions.add(`Inspect ${diagnosisPath} before retrying GitHub callback download.`);
+  }
+
+  if (/quota|usage limit|rate.?limit|too many requests|resource[_\s-]*exhausted|\b429\b/i.test(taskTexts)) {
+    actions.add("Wait for the provider reset window or route the task to another healthy worker.");
+  }
+
+  if (manualInterventionRequired && recycle?.ok === true) {
+    actions.add(`Inspect ${recyclePath} and the runner _diag logs before retrying this GitHub task.`);
+  }
+
+  return [...actions];
 }
 
 function summarizeOperatorState(
@@ -99,7 +150,14 @@ export function buildTaskStatusSnapshot(
         : null,
       queue_recycle: queueRecycle,
       manual_intervention_required: manualInterventionRequired,
-      summary: summarizeOperatorState(queueDiagnosis, queueRecycle, manualInterventionRequired)
+      summary: summarizeOperatorState(queueDiagnosis, queueRecycle, manualInterventionRequired),
+      actions: buildOperatorActions(
+        record,
+        queueDiagnosis,
+        queueRecycle,
+        artifactStore,
+        manualInterventionRequired
+      )
     }
   };
 }

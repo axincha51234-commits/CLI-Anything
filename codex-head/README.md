@@ -158,8 +158,8 @@ currently local-ready and exposes the matching cooldown reason.
   recycle script is present on disk.
 - `status` now also surfaces operator-only queue artifacts directly in JSON
   output under `operator`, including `github-queue-diagnosis.json`,
-  `github-queue-recycle.json`, and whether manual intervention is already
-  required.
+  `github-queue-recycle.json`, whether manual intervention is already
+  required, and concrete action hints for common queue-stall failure modes.
 - Self-hosted queue-stall handling now writes `github-queue-diagnosis.json`,
   and an opt-in `github.auto_recycle_stale_runner` flag can automatically call
   the Windows recycle helper for stale broker sessions.
