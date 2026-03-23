@@ -3,6 +3,11 @@ import type { GitHubRuntimeStatus } from "./github/controlPlane";
 import type { TaskStatusSnapshot } from "./status";
 
 export type DoctorFindingSeverity = "error" | "warning" | "info";
+export const DOCTOR_COMMAND_HINT_KINDS = [
+  "queued_backlog",
+  "suppressed_failed_backlog"
+] as const;
+export type DoctorCommandHintKind = (typeof DOCTOR_COMMAND_HINT_KINDS)[number];
 
 export interface DoctorPenaltySnapshot {
   worker_target: WorkerTarget;
@@ -58,7 +63,7 @@ export interface DoctorSweepPayload {
 
 export interface DoctorCommandHint {
   id: string;
-  kind: "queued_backlog" | "suppressed_failed_backlog";
+  kind: DoctorCommandHintKind;
   reason: string;
   command: string;
   sweep: DoctorSweepPayload;

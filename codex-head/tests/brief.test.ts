@@ -1,7 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { renderDoctorBrief, renderOutcomeBrief, renderStatusBrief, renderSweepBrief } from "../src/brief";
+import {
+  renderDoctorBrief,
+  renderOutcomeBrief,
+  renderRunDoctorHintsBrief,
+  renderStatusBrief,
+  renderSweepBrief
+} from "../src/brief";
 import type { DoctorReport } from "../src/doctor";
 import type { SweepTasksResult } from "../src/orchestrator";
 import { createTaskSpec } from "../src/schema";
@@ -296,4 +302,132 @@ test("renderSweepBrief summarizes bulk task actions", () => {
   assert.match(rendered, /^sweep: cancel \(dry-run\)$/im);
   assert.match(rendered, /summary: matched 2, actionable 2/i);
   assert.match(rendered, /tasks:\n- task-sweep-1 \[queued -> canceled\]/i);
+});
+
+test("renderRunDoctorHintsBrief summarizes batch doctor hint execution", () => {
+  const rendered = renderRunDoctorHintsBrief({
+    report: {
+      ok: false,
+      generated_at: new Date().toISOString(),
+      summary: "Found blocking items.",
+      task_filter: {
+        include_all_task_history: false,
+        task_window_hours: 6,
+        cutoff_at: "2026-03-23T00:00:00.000Z",
+        suppressed_task_findings: 1
+      },
+      counts: {
+        total_tasks: 3,
+        task_states: { queued: 2, failed: 1 },
+        enabled_workers: 2,
+        workers_needing_attention: 0,
+        github_findings: 0,
+        tasks_needing_attention: 3,
+        suppressed_task_findings: 1,
+        blocking_findings: 2,
+        informational_findings: 1
+      },
+      health: {
+        adapters: [],
+        readiness: [],
+        recent_penalties: [],
+        github: {
+          enabled: false,
+          dispatch_mode: "gh_cli",
+          execution_preference: "local_preferred",
+          auto_recycle_stale_runner: false,
+          repository: "example/repo",
+          workflow: "codex-head-worker.yml",
+          review_workflow: "codex-head-gemini-review.yml",
+          cli_binary: "gh",
+          gh_cli_available: true,
+          gh_cli_path: "gh",
+          gh_authenticated: true,
+          machine_config_path: null,
+          machine_config_exists: false,
+          runs_on_json: null,
+          runs_on_labels: [],
+          self_hosted_targeted: false,
+          recycle_script_path: null,
+          recycle_script_available: false,
+          matching_runners: [],
+          runner_lookup_detail: null
+        },
+        database_path: "C:/repo/codex-head/runtime/codex-head.sqlite",
+        artifacts_dir: "C:/repo/codex-head/runtime/artifacts"
+      },
+      attention: {
+        workers: [],
+        github: [],
+        tasks: []
+      },
+      actions: [],
+      command_hints: []
+    },
+    kind: "queued_backlog",
+    limit: 2,
+    apply: false,
+    results: [
+      {
+        hint: {
+          id: "queued-backlog-1",
+          kind: "queued_backlog",
+          reason: "Inspect queued task task-1 before canceling it from the backlog.",
+          command: "node dist/src/index.js sweep-tasks cancel --task-id task-1 --dry-run --brief",
+          sweep: {
+            action: "cancel",
+            task_ids: ["task-1"]
+          }
+        },
+        result: {
+          action: "cancel",
+          dry_run: true,
+          filters: {
+            states: ["planned", "queued", "failed"],
+            older_than_hours: null,
+            goal_contains: null,
+            worker_target: null,
+            task_ids: ["task-1"],
+            limit: null
+          },
+          matched: 1,
+          changed: 1,
+          tasks: []
+        }
+      },
+      {
+        hint: {
+          id: "queued-backlog-2",
+          kind: "queued_backlog",
+          reason: "Inspect queued task task-2 before canceling it from the backlog.",
+          command: "node dist/src/index.js sweep-tasks cancel --task-id task-2 --dry-run --brief",
+          sweep: {
+            action: "cancel",
+            task_ids: ["task-2"]
+          }
+        },
+        result: {
+          action: "cancel",
+          dry_run: true,
+          filters: {
+            states: ["planned", "queued", "failed"],
+            older_than_hours: null,
+            goal_contains: null,
+            worker_target: null,
+            task_ids: ["task-2"],
+            limit: null
+          },
+          matched: 1,
+          changed: 1,
+          tasks: []
+        }
+      }
+    ]
+  });
+
+  assert.match(rendered, /^doctor-hints: 2 selected \(dry-run\)$/im);
+  assert.match(rendered, /summary: matched 2, actionable 2/i);
+  assert.match(rendered, /kind: queued_backlog/i);
+  assert.match(rendered, /limit: 2/i);
+  assert.match(rendered, /hints:\n- queued-backlog-1 \[queued_backlog\]/i);
 });

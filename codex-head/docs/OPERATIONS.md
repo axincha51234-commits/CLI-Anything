@@ -81,6 +81,7 @@ node dist/src/index.js recover-running [timeout-sec] [interval-sec] [--requeue-l
 node dist/src/index.js status [task-id] [--brief]
 node dist/src/index.js doctor [--brief] [--all-tasks] [--task-window-hours N]
 node dist/src/index.js run-doctor-hint <hint-id> [--apply] [--brief] [--all-tasks] [--task-window-hours N]
+node dist/src/index.js run-doctor-hints [--kind KIND] [--limit N] [--apply] [--brief] [--all-tasks] [--task-window-hours N]
 node dist/src/index.js sweep-tasks <cancel|requeue> [--state a,b] [--older-than-hours N] [--goal-contains TEXT] [--worker-target TARGET] [--task-id ID] [--limit N] [--all] [--dry-run] [--brief]
 node dist/src/index.js dispatch <task-id>
 node dist/src/index.js dispatch-and-wait <task-id> [timeout-sec] [interval-sec]
@@ -123,9 +124,11 @@ node dist/src/index.js complete-from-file <worker-result.json>
     filtered set of planned/failed tasks without touching task history.
 16. Run `run-doctor-hint` when you want to execute one of `doctor`'s
     structured dry-run sweep suggestions without copying the command by hand.
-17. Run `clear-penalties` when a local provider recovered and you want to stop
+17. Run `run-doctor-hints` when you want to batch the currently visible doctor
+    hints by `kind` or `limit` while staying in dry-run mode by default.
+18. Run `clear-penalties` when a local provider recovered and you want to stop
     honoring remembered cooldowns immediately.
-18. Run `complete-from-file` to ingest an external callback artifact such as
+19. Run `complete-from-file` to ingest an external callback artifact such as
     `github-callback.json`.
 
 `status [task-id]` now returns an enriched JSON snapshot. For GitHub queue
@@ -166,6 +169,16 @@ operator command instead of only describing the problem.
   sweep payload for real
 - it never shells out through the hint's preview string; it reuses the
   structured sweep payload from the current doctor report
+
+`run-doctor-hints` extends that same flow to the whole visible report:
+
+- `run-doctor-hints --brief` dry-runs every current hint in report order
+- `run-doctor-hints --kind queued_backlog --limit 2 --brief` dry-runs only the
+  first two visible queued backlog hints
+- `run-doctor-hints --kind suppressed_failed_backlog --apply --brief` applies
+  the matching backlog sweep for real
+- it still rebuilds the doctor report first and only executes each hint's
+  structured sweep payload
 
 `sweep-tasks` is intentionally conservative:
 

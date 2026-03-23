@@ -27,7 +27,13 @@ import { TaskRouter } from "./router";
 import { computeRetryBackoffMs } from "./retry";
 import { buildTaskOperatorStatus, buildTaskStatusSnapshots, type TaskOperatorStatus } from "./status";
 import { SqliteTaskStore } from "./state-store/sqliteTaskStore";
-import { buildDoctorReport, type DoctorCommandHint, type DoctorOptions, type DoctorReport } from "./doctor";
+import {
+  buildDoctorReport,
+  type DoctorCommandHint,
+  type DoctorCommandHintKind,
+  type DoctorOptions,
+  type DoctorReport
+} from "./doctor";
 
 function toCliPrompt(lines: string[]): string {
   return lines
@@ -164,6 +170,19 @@ export interface RunDoctorHintResult {
   report: DoctorReport;
   hint: DoctorCommandHint;
   result: SweepTasksResult;
+}
+
+export interface RunDoctorHintsEntryResult {
+  hint: DoctorCommandHint;
+  result: SweepTasksResult;
+}
+
+export interface RunDoctorHintsResult {
+  report: DoctorReport;
+  kind: DoctorCommandHintKind | null;
+  limit: number | null;
+  apply: boolean;
+  results: RunDoctorHintsEntryResult[];
 }
 
 interface WorkerPenalty {
@@ -1200,16 +1219,43 @@ export class CodexHeadOrchestrator {
     return {
       report,
       hint,
-      result: this.sweepTasks({
-        action: hint.sweep.action,
-        states: hint.sweep.states,
-        older_than_hours: hint.sweep.older_than_hours,
-        goal_contains: hint.sweep.goal_contains,
-        worker_target: hint.sweep.worker_target,
-        task_ids: hint.sweep.task_ids,
-        limit: hint.sweep.limit,
-        dry_run: !options.apply
-      })
+      result: this.executeDoctorHintSweep(hint, Boolean(options.apply))
+    };
+  }
+
+  async runDoctorHints(
+    options: DoctorOptions & {
+      kind?: DoctorCommandHintKind;
+      limit?: number;
+      apply?: boolean;
+    } = {}
+  ): Promise<RunDoctorHintsResult> {
+    const report = await this.createDoctorReport(options);
+    const limit = options.limit === undefined
+      ? null
+      : (!Number.isFinite(options.limit) || options.limit <= 0)
+        ? (() => { throw new Error("doctor hint limit must be a positive number"); })()
+        : Math.floor(options.limit);
+    const selectedHints = report.command_hints
+      .filter((entry) => !options.kind || entry.kind === options.kind)
+      .slice(0, limit ?? undefined);
+
+    if (selectedHints.length === 0) {
+      if (options.kind) {
+        throw new Error(`doctor hints for kind ${options.kind} were not found`);
+      }
+      throw new Error("doctor report does not contain any runnable hints");
+    }
+
+    return {
+      report,
+      kind: options.kind ?? null,
+      limit,
+      apply: Boolean(options.apply),
+      results: selectedHints.map((hint) => ({
+        hint,
+        result: this.executeDoctorHintSweep(hint, Boolean(options.apply))
+      }))
     };
   }
 
@@ -1227,6 +1273,19 @@ export class CodexHeadOrchestrator {
     } catch {
       return null;
     }
+  }
+
+  private executeDoctorHintSweep(hint: DoctorCommandHint, apply: boolean): SweepTasksResult {
+    return this.sweepTasks({
+      action: hint.sweep.action,
+      states: hint.sweep.states,
+      older_than_hours: hint.sweep.older_than_hours,
+      goal_contains: hint.sweep.goal_contains,
+      worker_target: hint.sweep.worker_target,
+      task_ids: hint.sweep.task_ids,
+      limit: hint.sweep.limit,
+      dry_run: !apply
+    });
   }
 
   private tryResolveGitHubRun(task: TaskSpec): TaskRecord["github_run"] | null {

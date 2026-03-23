@@ -1,6 +1,6 @@
 import type { DispatchOutcome } from "./contracts";
 import type { DoctorReport } from "./doctor";
-import type { SweepTasksResult } from "./orchestrator";
+import type { RunDoctorHintResult, RunDoctorHintsResult, SweepTasksResult } from "./orchestrator";
 import type { TaskOperatorStatus, TaskStatusSnapshot } from "./status";
 
 type ReconcileOrRecoveryEntry = {
@@ -169,6 +169,41 @@ export function renderSweepBrief(result: SweepTasksResult): string {
     return `- ${entry.task_id} [${marker}] ${compactText(entry.goal, 100)} :: ${compactText(entry.reason, 140)}`;
   });
   pushLimitedSection(lines, "tasks:", taskLines, 8);
+
+  return lines.join("\n");
+}
+
+export function renderRunDoctorHintBrief(result: RunDoctorHintResult): string {
+  return [
+    `hint: ${result.hint.id} [${result.hint.kind}] ${result.hint.reason}`,
+    renderSweepBrief(result.result)
+  ].join("\n");
+}
+
+export function renderRunDoctorHintsBrief(result: RunDoctorHintsResult): string {
+  const totalMatched = result.results.reduce((sum, entry) => sum + entry.result.matched, 0);
+  const totalChanged = result.results.reduce((sum, entry) => sum + entry.result.changed, 0);
+  const lines = [
+    `doctor-hints: ${result.results.length} selected${result.apply ? "" : " (dry-run)"}`,
+    `summary: matched ${totalMatched}, actionable ${totalChanged}`
+  ];
+
+  if (result.kind) {
+    lines.push(`kind: ${result.kind}`);
+  }
+  if (result.limit !== null) {
+    lines.push(`limit: ${result.limit}`);
+  }
+
+  pushLimitedSection(
+    lines,
+    "hints:",
+    result.results.map((entry) => (
+      `- ${entry.hint.id} [${entry.hint.kind}] ${compactText(entry.hint.reason, 120)} :: `
+      + `matched ${entry.result.matched}, actionable ${entry.result.changed}`
+    )),
+    8
+  );
 
   return lines.join("\n");
 }

@@ -1,8 +1,16 @@
 import { resolve } from "node:path";
 
-import { renderDoctorBrief, renderOutcomeBrief, renderStatusBrief, renderSweepBrief } from "./brief";
+import {
+  renderDoctorBrief,
+  renderOutcomeBrief,
+  renderRunDoctorHintBrief,
+  renderRunDoctorHintsBrief,
+  renderStatusBrief,
+  renderSweepBrief
+} from "./brief";
 import { normalizeGitHubRepository, updateGitHubConfig } from "./config";
 import { REVIEW_VERDICTS, TASK_STATES, WORKER_TARGETS } from "./contracts";
+import { DOCTOR_COMMAND_HINT_KINDS } from "./doctor";
 import { executeGitHubPayloadFile } from "./github/workflowRunner";
 import { CodexHeadOrchestrator } from "./orchestrator";
 import { buildTaskStatusSnapshot, buildTaskStatusSnapshots } from "./status";
@@ -365,6 +373,75 @@ function parseRunDoctorHintArgs(args: string[]): {
   };
 }
 
+function parseRunDoctorHintsArgs(args: string[]): {
+  kind?: typeof DOCTOR_COMMAND_HINT_KINDS[number];
+  limit?: number;
+  apply: boolean;
+  brief: boolean;
+  includeAllTaskHistory: boolean;
+  taskWindowHours?: number;
+} {
+  let kind: typeof DOCTOR_COMMAND_HINT_KINDS[number] | undefined;
+  let limit: number | undefined;
+  let apply = false;
+  let brief = false;
+  let includeAllTaskHistory = false;
+  let taskWindowHours: number | undefined;
+
+  for (let index = 0; index < args.length; index += 1) {
+    const current = args[index];
+    if (current === "--kind") {
+      const next = args[index + 1];
+      if (!next || !DOCTOR_COMMAND_HINT_KINDS.includes(next as typeof DOCTOR_COMMAND_HINT_KINDS[number])) {
+        throw new Error(`--kind must be one of: ${DOCTOR_COMMAND_HINT_KINDS.join(", ")}`);
+      }
+      kind = next as typeof DOCTOR_COMMAND_HINT_KINDS[number];
+      index += 1;
+      continue;
+    }
+    if (current === "--limit") {
+      limit = Number(args[index + 1]);
+      if (!Number.isFinite(limit) || limit <= 0) {
+        throw new Error("--limit must be a positive number");
+      }
+      index += 1;
+      continue;
+    }
+    if (current === "--apply") {
+      apply = true;
+      continue;
+    }
+    if (current === "--brief") {
+      brief = true;
+      continue;
+    }
+    if (current === "--all-tasks") {
+      includeAllTaskHistory = true;
+      continue;
+    }
+    if (current === "--task-window-hours") {
+      taskWindowHours = Number(args[index + 1]);
+      if (!Number.isFinite(taskWindowHours) || taskWindowHours < 0) {
+        throw new Error("--task-window-hours must be a non-negative number");
+      }
+      index += 1;
+      continue;
+    }
+    throw new Error(
+      "run-doctor-hints only accepts --kind, --limit, --apply, --brief, --all-tasks, and --task-window-hours N"
+    );
+  }
+
+  return {
+    kind,
+    limit,
+    apply,
+    brief,
+    includeAllTaskHistory,
+    taskWindowHours
+  };
+}
+
 function usage(): void {
   process.stdout.write(
     [
@@ -384,6 +461,7 @@ function usage(): void {
       "  node dist/src/index.js status [task-id] [--brief]",
       "  node dist/src/index.js doctor [--brief] [--all-tasks] [--task-window-hours N]",
       "  node dist/src/index.js run-doctor-hint <hint-id> [--apply] [--brief] [--all-tasks] [--task-window-hours N]",
+      "  node dist/src/index.js run-doctor-hints [--kind KIND] [--limit N] [--apply] [--brief] [--all-tasks] [--task-window-hours N]",
       "  node dist/src/index.js sweep-tasks <cancel|requeue> [--state a,b] [--older-than-hours N] [--goal-contains TEXT] [--worker-target TARGET] [--task-id ID] [--limit N] [--all] [--dry-run] [--brief]",
       "  node dist/src/index.js dispatch <task-id>",
       "  node dist/src/index.js dispatch-and-wait <task-id> [timeout-sec] [interval-sec]",
@@ -687,12 +765,24 @@ async function main(): Promise<void> {
       task_window_hours: parsed.taskWindowHours
     });
     if (parsed.brief) {
-      printText(
-        [
-          `hint: ${result.hint.id} [${result.hint.kind}] ${result.hint.reason}`,
-          renderSweepBrief(result.result)
-        ].join("\n")
-      );
+      printText(renderRunDoctorHintBrief(result));
+      return;
+    }
+    printJson(result);
+    return;
+  }
+
+  if (command === "run-doctor-hints") {
+    const parsed = parseRunDoctorHintsArgs(rest);
+    const result = await orchestrator.runDoctorHints({
+      kind: parsed.kind,
+      limit: parsed.limit,
+      apply: parsed.apply,
+      include_all_task_history: parsed.includeAllTaskHistory,
+      task_window_hours: parsed.taskWindowHours
+    });
+    if (parsed.brief) {
+      printText(renderRunDoctorHintsBrief(result));
       return;
     }
     printJson(result);

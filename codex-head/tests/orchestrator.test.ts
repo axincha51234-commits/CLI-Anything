@@ -1975,6 +1975,100 @@ test("runDoctorHint fails fast when the requested hint id does not exist", async
   );
 });
 
+test("runDoctorHints defaults to dry-run and can filter queued backlog hints with a limit", async () => {
+  const root = createTempDir("codex-head-run-doctor-hints-");
+  const registry = new AdapterRegistry();
+  const orchestrator = createAppWithRegistry(root, registry);
+
+  for (const taskId of [
+    "task-doctor-hints-queued-1",
+    "task-doctor-hints-queued-2",
+    "task-doctor-hints-queued-3"
+  ]) {
+    const queuedTask = orchestrator.submitTask(createTaskSpec({
+      task_id: taskId,
+      goal: `Queued task ${taskId}`,
+      repo: root,
+      worker_target: "codex-cli",
+      expected_output: { kind: "analysis", format: "markdown", code_change: false }
+    }));
+    orchestrator.enqueueTask(queuedTask.task.task_id);
+  }
+
+  const result = await orchestrator.runDoctorHints({
+    kind: "queued_backlog",
+    limit: 2
+  });
+
+  assert.equal(result.apply, false);
+  assert.equal(result.kind, "queued_backlog");
+  assert.equal(result.limit, 2);
+  assert.equal(result.results.length, 2);
+  assert.deepEqual(
+    result.results.map((entry) => entry.hint.id),
+    ["queued-backlog-1", "queued-backlog-2"]
+  );
+  assert.equal(result.results.every((entry) => entry.result.dry_run), true);
+  assert.equal(orchestrator.getTask("task-doctor-hints-queued-1").state, "queued");
+  assert.equal(orchestrator.getTask("task-doctor-hints-queued-2").state, "queued");
+  assert.equal(orchestrator.getTask("task-doctor-hints-queued-3").state, "queued");
+});
+
+test("runDoctorHints can apply a filtered suppressed backlog hint", async () => {
+  const root = createTempDir("codex-head-run-doctor-hints-suppressed-");
+  const registry = new AdapterRegistry();
+  const orchestrator = createAppWithRegistry(root, registry);
+
+  const failedTask = orchestrator.submitTask(createTaskSpec({
+    task_id: "task-doctor-hints-failed",
+    goal: "Old failed task",
+    repo: root,
+    worker_target: "codex-cli",
+    expected_output: { kind: "analysis", format: "markdown", code_change: false }
+  }));
+  orchestrator.enqueueTask(failedTask.task.task_id);
+  orchestrator.taskStore.claimTask(failedTask.task.task_id);
+  orchestrator.acceptWorkerResult({
+    task_id: failedTask.task.task_id,
+    worker_target: "codex-cli",
+    status: "failed",
+    review_verdict: null,
+    summary: "The task failed",
+    artifacts: [],
+    patch_ref: null,
+    log_ref: null,
+    cost: 0,
+    duration_ms: 10,
+    next_action: "manual",
+    review_notes: ["failure"]
+  }, routing("codex-cli", "local"));
+
+  const result = await orchestrator.runDoctorHints({
+    kind: "suppressed_failed_backlog",
+    apply: true,
+    task_window_hours: 0,
+    now: Date.now() + 1000
+  });
+
+  assert.equal(result.apply, true);
+  assert.equal(result.results.length, 1);
+  assert.equal(result.results[0]?.hint.id, "suppressed-failed-backlog");
+  assert.equal(result.results[0]?.result.dry_run, false);
+  assert.equal(result.results[0]?.result.changed, 1);
+  assert.equal(orchestrator.getTask(failedTask.task.task_id).state, "canceled");
+});
+
+test("runDoctorHints fails fast when no hints match the requested kind", async () => {
+  const root = createTempDir("codex-head-run-doctor-hints-missing-kind-");
+  const registry = new AdapterRegistry();
+  const orchestrator = createAppWithRegistry(root, registry);
+
+  await assert.rejects(
+    () => orchestrator.runDoctorHints({ kind: "suppressed_failed_backlog" }),
+    /doctor hints for kind suppressed_failed_backlog were not found/i
+  );
+});
+
 test("fallback execution accepts the actual routed worker target", async () => {
   const root = createTempDir("codex-head-fallback-worker-");
   const registry = new AdapterRegistry();

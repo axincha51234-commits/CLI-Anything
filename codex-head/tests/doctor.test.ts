@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { buildDoctorReport, type DoctorHealthSnapshot } from "../src/doctor";
+import { buildDoctorReport, DOCTOR_COMMAND_HINT_KINDS, type DoctorHealthSnapshot } from "../src/doctor";
 import { createTaskSpec } from "../src/schema";
 import type { TaskStatusSnapshot } from "../src/status";
 
@@ -446,4 +446,81 @@ test("buildDoctorReport emits task-specific queued backlog command hints", () =>
     action: "cancel",
     task_ids: ["task-doctor-queued-hint"]
   });
+});
+
+test("buildDoctorReport only emits supported command hint kinds", () => {
+  const health: DoctorHealthSnapshot = {
+    adapters: [
+      { worker_target: "codex-cli", healthy: true, reason: "ok", detected_binary: "codex.exe" }
+    ],
+    readiness: [
+      {
+        worker_target: "codex-cli",
+        healthy: true,
+        feature_enabled: true,
+        supports_local: true,
+        supports_github: false,
+        has_local_template: true,
+        local_ready: true,
+        github_ready: false,
+        cooldown_until: null,
+        cooldown_reason: null
+      }
+    ],
+    recent_penalties: [],
+    github: createGitHubRuntime({ enabled: false, self_hosted_targeted: false, matching_runners: [] }),
+    database_path: "C:/repo/codex-head/runtime/codex-head.sqlite",
+    artifacts_dir: "C:/repo/codex-head/runtime/artifacts"
+  };
+
+  const queuedTask = createStatusSnapshot({
+    task: createTaskSpec({
+      task_id: "task-doctor-kind-queued",
+      goal: "Queued task",
+      repo: "C:/repo",
+      worker_target: "codex-cli",
+      expected_output: { kind: "analysis", format: "markdown", code_change: false }
+    }),
+    state: "queued",
+    updated_at: Date.UTC(2026, 2, 23, 5, 59, 0),
+    routing: {
+      worker_target: "codex-cli",
+      mode: "local",
+      reason: "test",
+      fallback_from: null
+    }
+  });
+
+  const staleFailed = createStatusSnapshot({
+    task: createTaskSpec({
+      task_id: "task-doctor-kind-stale",
+      goal: "Old failed task",
+      repo: "C:/repo",
+      worker_target: "codex-cli",
+      expected_output: { kind: "analysis", format: "markdown", code_change: false }
+    }),
+    state: "failed",
+    updated_at: Date.UTC(2026, 2, 22, 1, 0, 0),
+    last_error: "Old failure",
+    routing: {
+      worker_target: "codex-cli",
+      mode: "local",
+      reason: "test",
+      fallback_from: null
+    }
+  });
+
+  const report = buildDoctorReport(
+    health,
+    [queuedTask, staleFailed],
+    {
+      now: Date.UTC(2026, 2, 23, 6, 0, 0),
+      task_window_hours: 6
+    }
+  );
+
+  assert.deepEqual(
+    [...new Set(report.command_hints.map((entry) => entry.kind))].sort(),
+    [...DOCTOR_COMMAND_HINT_KINDS].sort()
+  );
 });
