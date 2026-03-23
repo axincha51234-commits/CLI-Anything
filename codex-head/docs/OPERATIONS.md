@@ -216,6 +216,8 @@ operator command instead of only describing the problem.
 `status --brief` and `doctor --brief` now surface the newest matching operator
 receipt path for a task when one exists, so operators can jump directly into
 `show-operator-receipt` without listing history first.
+- `status --brief` prints `open-receipt: node dist/src/index.js show-operator-receipt ... --brief`
+- `doctor --brief` adds a `receipt-commands:` section for task-level receipt jumps
 
 `sweep-tasks` is intentionally conservative:
 

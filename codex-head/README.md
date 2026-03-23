@@ -191,6 +191,8 @@ currently local-ready and exposes the matching cooldown reason.
   human-readable summary.
 - `status --brief` and `doctor --brief` now surface the newest matching
   operator receipt for task-level triage when one exists.
+- those views also print a ready-to-run `show-operator-receipt ... --brief`
+  command so operators can jump straight into the latest receipt.
 - `sweep-tasks` now gives operators a filtered bulk action for backlog triage.
   It can dry-run or apply `cancel` and `requeue` across selected tasks without
   deleting history from SQLite.

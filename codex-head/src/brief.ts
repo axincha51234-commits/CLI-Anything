@@ -44,6 +44,10 @@ function pushLimitedSection(
   }
 }
 
+function buildShowOperatorReceiptCommand(receiptPath: string): string {
+  return `node dist/src/index.js show-operator-receipt ${receiptPath} --brief`;
+}
+
 function renderOperatorLines(operator: TaskOperatorStatus | null): string[] {
   if (!operator) {
     return [];
@@ -61,6 +65,7 @@ function renderOperatorLines(operator: TaskOperatorStatus | null): string[] {
       ? `${operator.latest_receipt_path} [${operator.latest_receipt_command}]`
       : operator.latest_receipt_path;
     lines.push(`receipt: ${receiptLabel}`);
+    lines.push(`open-receipt: ${buildShowOperatorReceiptCommand(operator.latest_receipt_path)}`);
   }
 
   if (operator.actions.length > 0) {
@@ -129,6 +134,7 @@ export function renderDoctorBrief(report: DoctorReport): string {
     `doctor: ${report.ok ? "healthy" : "needs attention"}`,
     `summary: ${compactText(report.summary)}`
   ];
+  const visibleTaskFindings = report.attention.tasks.slice(0, 8);
 
   if (report.task_filter.suppressed_task_findings > 0) {
     const windowLabel = report.task_filter.task_window_hours === null
@@ -152,12 +158,20 @@ export function renderDoctorBrief(report: DoctorReport): string {
   pushLimitedSection(
     lines,
     "tasks:",
-    report.attention.tasks.map((finding) => {
+    visibleTaskFindings.map((finding) => {
       const receiptSuffix = finding.operator_receipt_path
         ? ` :: receipt=${finding.operator_receipt_path}${finding.operator_receipt_command ? ` [${finding.operator_receipt_command}]` : ""}`
         : "";
       return `- ${finding.task_id} [${finding.state}/${finding.severity}] ${compactText(finding.goal, 90)} :: ${compactText(finding.summary, 180)}${receiptSuffix}`;
     }),
+    8
+  );
+  pushLimitedSection(
+    lines,
+    "receipt-commands:",
+    visibleTaskFindings
+      .filter((finding) => Boolean(finding.operator_receipt_path))
+      .map((finding) => `- ${finding.task_id} :: ${buildShowOperatorReceiptCommand(finding.operator_receipt_path!)}`),
     8
   );
   pushLimitedSection(

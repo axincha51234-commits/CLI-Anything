@@ -73,6 +73,7 @@ test("renderStatusBrief summarizes one task with operator guidance", () => {
   assert.match(rendered, /worker: gemini-cli via github/i);
   assert.match(rendered, /operator: Automatic stale-runner recovery was already attempted/i);
   assert.match(rendered, /receipt: operator-actions\/2026-03-23T08-09-05\.877Z-run-doctor-hint\.json \[run-doctor-hint\]/i);
+  assert.match(rendered, /open-receipt: node dist\/src\/index\.js show-operator-receipt operator-actions\/2026-03-23T08-09-05\.877Z-run-doctor-hint\.json --brief/i);
   assert.match(rendered, /next: Inspect C:\/artifacts\/task-brief-1\/github-queue-recycle\.json/i);
 });
 
@@ -275,8 +276,90 @@ test("renderDoctorBrief summarizes operator findings and next actions", () => {
   assert.match(rendered, /github:\n- \[error\] GitHub dispatch is enabled but gh is not authenticated/i);
   assert.match(rendered, /tasks:\n- task-brief-doctor \[failed\/error\] Review the latest PR in GitHub/i);
   assert.match(rendered, /receipt=operator-actions\/2026-03-23T08-09-05\.877Z-run-doctor-hint\.json \[run-doctor-hint\]/i);
+  assert.match(rendered, /receipt-commands:\n- task-brief-doctor :: node dist\/src\/index\.js show-operator-receipt operator-actions\/2026-03-23T08-09-05\.877Z-run-doctor-hint\.json --brief/i);
   assert.match(rendered, /next:\n- Inspect the claude-code health command and local runtime\./i);
   assert.match(rendered, /commands:\n- \[suppressed-failed-backlog\] node dist\/src\/index\.js sweep-tasks cancel --state failed --older-than-hours 6 --dry-run --brief/i);
+});
+
+test("renderDoctorBrief keeps receipt commands aligned with visible task rows", () => {
+  const tasks: DoctorReport["attention"]["tasks"] = Array.from({ length: 9 }, (_, index) => ({
+    task_id: `task-brief-visible-${index + 1}`,
+    state: "queued",
+    goal: `Queued task ${index + 1}`,
+    worker_target: "codex-cli",
+    routing_mode: "local",
+    severity: "warning",
+    summary: "Task is queued and waiting for dispatch.",
+    actions: ["Dispatch the queued task when the workspace and workers are ready."],
+    operator_receipt_path: `operator-actions/2026-03-23T08-09-0${index}.000Z-run-doctor-hint.json`,
+    operator_receipt_command: "run-doctor-hint",
+    operator_receipt_created_at: `2026-03-23T08:09:0${index}.000Z`,
+    manual_intervention_required: false
+  }));
+  const report: DoctorReport = {
+    ok: false,
+    generated_at: new Date().toISOString(),
+    summary: "Found blocking items.",
+    task_filter: {
+      include_all_task_history: false,
+      task_window_hours: 6,
+      cutoff_at: "2026-03-23T00:00:00.000Z",
+      suppressed_task_findings: 0
+    },
+    counts: {
+      total_tasks: 9,
+      task_states: { queued: 9 },
+      enabled_workers: 1,
+      workers_needing_attention: 0,
+      github_findings: 0,
+      tasks_needing_attention: 9,
+      suppressed_task_findings: 0,
+      blocking_findings: 9,
+      informational_findings: 0
+    },
+    health: {
+      adapters: [],
+      readiness: [],
+      recent_penalties: [],
+      github: {
+        enabled: false,
+        dispatch_mode: "gh_cli",
+        execution_preference: "local_preferred",
+        auto_recycle_stale_runner: false,
+        repository: "example/repo",
+        workflow: "codex-head-worker.yml",
+        review_workflow: "codex-head-gemini-review.yml",
+        cli_binary: "gh",
+        gh_cli_available: true,
+        gh_cli_path: "gh",
+        gh_authenticated: true,
+        machine_config_path: null,
+        machine_config_exists: false,
+        runs_on_json: null,
+        runs_on_labels: [],
+        self_hosted_targeted: false,
+        recycle_script_path: null,
+        recycle_script_available: false,
+        matching_runners: [],
+        runner_lookup_detail: null
+      },
+      database_path: "C:/repo/codex-head/runtime/codex-head.sqlite",
+      artifacts_dir: "C:/repo/codex-head/runtime/artifacts"
+    },
+    attention: {
+      workers: [],
+      github: [],
+      tasks
+    },
+    actions: ["Dispatch the queued task when the workspace and workers are ready."],
+    command_hints: []
+  };
+
+  const rendered = renderDoctorBrief(report);
+  assert.match(rendered, /tasks:\n- task-brief-visible-1/i);
+  assert.doesNotMatch(rendered, /task-brief-visible-9/i);
+  assert.match(rendered, /receipt-commands:\n- task-brief-visible-1 :: node dist\/src\/index\.js show-operator-receipt operator-actions\/2026-03-23T08-09-00\.000Z-run-doctor-hint\.json --brief/i);
+  assert.doesNotMatch(rendered, /receipt-commands:[\s\S]*task-brief-visible-9/i);
 });
 
 test("renderSweepBrief summarizes bulk task actions", () => {
