@@ -1789,10 +1789,12 @@ export class CodexHeadOrchestrator {
     );
     return resolvedHealthEntries.map((entry) => {
       const adapter = this.registry.get(entry.worker_target);
-      const featureEnabled = adapter.capability.feature_flag
+      const featureFlagEnabled = adapter.capability.feature_flag
         ? Boolean(this.config.feature_flags[adapter.capability.feature_flag])
         : true;
-      const hasLocalTemplate = Boolean(this.config.command_templates[entry.worker_target].local);
+      const templateConfig = this.config.command_templates[entry.worker_target];
+      const featureEnabled = featureFlagEnabled && templateConfig.enabled;
+      const hasLocalTemplate = Boolean(templateConfig.local);
       const penalty = penaltiesByWorker.get(entry.worker_target);
 
       return {

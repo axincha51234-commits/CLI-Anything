@@ -99,6 +99,18 @@ test("SqliteTaskStore archives incompatible legacy task tables and recreates sch
   assert.equal(store.getTaskOrThrow(task.task_id).state, "planned");
 });
 
+test("SqliteTaskStore configures sqlite for short concurrent-write waits", () => {
+  const root = createTempDir("codex-head-store-pragmas-");
+  const store = new SqliteTaskStore(`${root}/codex-head.sqlite`);
+  const db = (store as unknown as { db: DatabaseSync }).db;
+
+  const busyTimeout = Object.values(db.prepare("PRAGMA busy_timeout").get() as Record<string, unknown>)[0];
+  const journalMode = Object.values(db.prepare("PRAGMA journal_mode").get() as Record<string, unknown>)[0];
+
+  assert.equal(busyTimeout, 5000);
+  assert.equal(journalMode, "wal");
+});
+
 test("claimTask claims only the requested queued task", () => {
   const root = createTempDir("codex-head-store-claim-");
   const store = new SqliteTaskStore(`${root}/codex-head.sqlite`);

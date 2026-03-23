@@ -65,6 +65,8 @@ export class SqliteTaskStore {
   constructor(dbPath: string) {
     mkdirSync(dirname(dbPath), { recursive: true });
     this.db = new DatabaseSync(dbPath);
+    this.db.exec("PRAGMA journal_mode = WAL");
+    this.db.exec("PRAGMA busy_timeout = 5000");
     this.ensureCompatibleSchema();
     this.db.exec(TASK_STORE_SCHEMA);
   }

@@ -2747,6 +2747,55 @@ test("smokeAdapters separates binary health from local readiness", async () => {
   assert.equal(geminiReadiness.github_ready, true);
 });
 
+test("smokeAdapters treats template-disabled workers as opted out", async () => {
+  const root = createTempDir("codex-head-readiness-disabled-");
+  const registry = new AdapterRegistry();
+
+  registry.register(new FakeAdapter(
+    makeCapability("codex-cli"),
+    createHealthyHealth("codex-cli"),
+    async () => {
+      throw new Error("should not execute");
+    }
+  ));
+
+  registry.register(new FakeAdapter(
+    makeCapability("gemini-cli"),
+    createHealthyHealth("gemini-cli"),
+    async () => {
+      throw new Error("should not execute");
+    }
+  ));
+
+  registry.register(new FakeAdapter(
+    makeCapability("claude-code"),
+    { worker_target: "claude-code", healthy: false, reason: "disabled", detected_binary: null },
+    async () => {
+      throw new Error("should not execute");
+    }
+  ));
+
+  registry.register(new FakeAdapter(
+    makeCapability("antigravity", { supports_local: false, supports_github: false }),
+    { worker_target: "antigravity", healthy: false, reason: "disabled", detected_binary: null },
+    async () => {
+      throw new Error("should not execute");
+    }
+  ));
+
+  const config = createTestConfig(root);
+  config.command_templates["claude-code"].enabled = false;
+
+  const orchestrator = createAppWithRegistry(root, registry, config);
+  const health = await orchestrator.smokeAdapters();
+
+  const claudeReadiness = health.readiness.find((entry: any) => entry.worker_target === "claude-code");
+  assert.ok(claudeReadiness);
+  assert.equal(claudeReadiness.healthy, false);
+  assert.equal(claudeReadiness.feature_enabled, false);
+  assert.equal(claudeReadiness.local_ready, false);
+});
+
 test("required reviews can complete a task through reviewer verdict aggregation", async () => {
   const root = createTempDir("codex-head-review-aggregation-");
   const registry = new AdapterRegistry();
