@@ -3,13 +3,14 @@ import assert from "node:assert/strict";
 
 import {
   renderDoctorBrief,
+  renderOperatorHistoryBrief,
   renderOutcomeBrief,
   renderRunDoctorHintsBrief,
   renderStatusBrief,
   renderSweepBrief
 } from "../src/brief";
 import type { DoctorReport } from "../src/doctor";
-import type { SweepTasksResult } from "../src/orchestrator";
+import type { OperatorHistoryResult, SweepTasksResult } from "../src/orchestrator";
 import { createTaskSpec } from "../src/schema";
 import type { TaskStatusSnapshot } from "../src/status";
 
@@ -500,4 +501,58 @@ test("renderRunDoctorHintsBrief summarizes batch doctor hint execution", () => {
   assert.match(rendered, /next: rerun with --apply --allow-multi-task-apply --confirm-token abc123def456/i);
   assert.match(rendered, /hints:\n- queued-backlog-1 \[queued_backlog\]/i);
   assert.match(rendered, /receipt: operator-actions\/2026-03-23T12-05-00\.000Z-run-doctor-hints\.json/i);
+});
+
+test("renderOperatorHistoryBrief summarizes recent operator receipts", () => {
+  const rendered = renderOperatorHistoryBrief({
+    filters: {
+      command: "run-doctor-hints",
+      apply_only: false,
+      dry_run_only: true,
+      limit: 5
+    },
+    scanned: 8,
+    returned: 2,
+    receipts: [
+      {
+        receipt_path: "operator-actions/2026-03-23T08-09-05.875Z-run-doctor-hints.json",
+        receipt: {
+          schema_version: 1,
+          command: "run-doctor-hints",
+          created_at: "2026-03-23T08:09:05.875Z",
+          dry_run: true,
+          apply: false,
+          selection: {},
+          summary: {
+            matched: 2,
+            actionable: 2,
+            changed: 0
+          }
+        }
+      },
+      {
+        receipt_path: "operator-actions/2026-03-23T08-08-00.000Z-run-doctor-hints.json",
+        receipt: {
+          schema_version: 1,
+          command: "run-doctor-hints",
+          created_at: "2026-03-23T08:08:00.000Z",
+          dry_run: true,
+          apply: false,
+          selection: {},
+          summary: {
+            matched: 1,
+            actionable: 1,
+            changed: 0
+          }
+        }
+      }
+    ]
+  } satisfies OperatorHistoryResult);
+
+  assert.match(rendered, /^operator-history: 2 receipt\(s\)$/im);
+  assert.match(rendered, /scanned: 8/i);
+  assert.match(rendered, /command: run-doctor-hints/i);
+  assert.match(rendered, /mode: dry-run-only/i);
+  assert.match(rendered, /limit: 5/i);
+  assert.match(rendered, /receipts:\n- 2026-03-23T08:09:05.875Z run-doctor-hints dry-run matched=2 actionable=2 changed=0 receipt=operator-actions/i);
 });

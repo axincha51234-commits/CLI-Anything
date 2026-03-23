@@ -1964,6 +1964,61 @@ test("runSweepTasks writes an operator receipt under artifacts/operator-actions"
   assert.equal(existsSync(`${root}/artifacts/${result.receipt_path}`), true);
 });
 
+test("listOperatorHistory returns recent receipts and supports command plus mode filters", async () => {
+  const root = createTempDir("codex-head-operator-history-");
+  const registry = new AdapterRegistry();
+  const orchestrator = createAppWithRegistry(root, registry);
+
+  const firstQueuedTask = orchestrator.submitTask(createTaskSpec({
+    task_id: "task-operator-history-1",
+    goal: "Summarize the current orchestration state",
+    repo: root,
+    worker_target: "codex-cli",
+    expected_output: { kind: "analysis", format: "markdown", code_change: false }
+  }));
+  orchestrator.enqueueTask(firstQueuedTask.task.task_id);
+  const secondQueuedTask = orchestrator.submitTask(createTaskSpec({
+    task_id: "task-operator-history-2",
+    goal: "Summarize the current orchestration state",
+    repo: root,
+    worker_target: "codex-cli",
+    expected_output: { kind: "analysis", format: "markdown", code_change: false }
+  }));
+  orchestrator.enqueueTask(secondQueuedTask.task.task_id);
+
+  const sweep = orchestrator.runSweepTasks({
+    action: "cancel",
+    task_ids: [firstQueuedTask.task.task_id],
+    dry_run: true
+  });
+  assert.match(sweep.receipt_path ?? "", /^operator-actions\/.+-sweep-tasks\.json$/i);
+
+  await new Promise((resolve) => setTimeout(resolve, 5));
+
+  const doctorHints = await orchestrator.runDoctorHints({
+    kind: "queued_backlog",
+    limit: 1
+  });
+  assert.match(doctorHints.receipt_path ?? "", /^operator-actions\/.+-run-doctor-hints\.json$/i);
+
+  const history = orchestrator.listOperatorHistory();
+  assert.equal(history.returned, 2);
+  assert.equal(history.receipts[0]?.receipt.command, "run-doctor-hints");
+  assert.equal(history.receipts[1]?.receipt.command, "sweep-tasks");
+
+  const commandFiltered = orchestrator.listOperatorHistory({
+    command: "sweep-tasks"
+  });
+  assert.equal(commandFiltered.returned, 1);
+  assert.equal(commandFiltered.receipts[0]?.receipt.command, "sweep-tasks");
+
+  const dryRunOnly = orchestrator.listOperatorHistory({
+    dry_run_only: true
+  });
+  assert.equal(dryRunOnly.returned, 2);
+  assert.equal(dryRunOnly.receipts.every((entry) => entry.receipt.dry_run), true);
+});
+
 test("runDoctorHint defaults to dry-run and applies the selected structured sweep hint", async () => {
   const root = createTempDir("codex-head-run-doctor-hint-");
   const registry = new AdapterRegistry();

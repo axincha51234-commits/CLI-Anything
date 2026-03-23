@@ -194,6 +194,54 @@ export interface RunDoctorHintsResult {
   receipt_path: string | null;
 }
 
+export const OPERATOR_RECEIPT_COMMANDS = [
+  "sweep-tasks",
+  "run-doctor-hint",
+  "run-doctor-hints"
+] as const;
+
+export type OperatorReceiptCommand = typeof OPERATOR_RECEIPT_COMMANDS[number];
+
+export interface OperatorActionReceipt {
+  schema_version: 1;
+  command: OperatorReceiptCommand;
+  created_at: string;
+  dry_run: boolean;
+  apply: boolean;
+  selection: Record<string, unknown>;
+  summary: {
+    matched: number;
+    actionable: number;
+    changed: number;
+  };
+  hints?: Array<{
+    id: string;
+    kind: string;
+    reason: string;
+    matched: number;
+    actionable: number;
+    changed: number;
+  }>;
+  tasks?: SweepTasksEntry[];
+}
+
+export interface OperatorHistoryEntry {
+  receipt_path: string;
+  receipt: OperatorActionReceipt;
+}
+
+export interface OperatorHistoryResult {
+  filters: {
+    command: OperatorReceiptCommand | null;
+    apply_only: boolean;
+    dry_run_only: boolean;
+    limit: number;
+  };
+  scanned: number;
+  returned: number;
+  receipts: OperatorHistoryEntry[];
+}
+
 interface WorkerPenalty {
   worker_target: WorkerTarget;
   category: "rate_limited" | "timed_out" | "auth_failed";
@@ -1243,6 +1291,63 @@ export class CodexHeadOrchestrator {
       buildTaskStatusSnapshots(this.listTasks(), this.artifactStore),
       options
     );
+  }
+
+  listOperatorHistory(options: {
+    command?: OperatorReceiptCommand;
+    apply_only?: boolean;
+    dry_run_only?: boolean;
+    limit?: number;
+  } = {}): OperatorHistoryResult {
+    if (options.apply_only && options.dry_run_only) {
+      throw new Error("operator-history cannot combine --apply-only with --dry-run-only");
+    }
+
+    const limit = options.limit === undefined
+      ? 10
+      : (!Number.isFinite(options.limit) || options.limit <= 0)
+        ? (() => { throw new Error("operator-history limit must be a positive number"); })()
+        : Math.floor(options.limit);
+
+    const receiptPaths = this.artifactStore.listOperatorReceipts();
+    const receipts: OperatorHistoryEntry[] = [];
+
+    for (const receiptPath of receiptPaths) {
+      const receipt = this.artifactStore.readOperatorReceiptIfExists<OperatorActionReceipt>(receiptPath);
+      if (!receipt) {
+        continue;
+      }
+      if (options.command && receipt.command !== options.command) {
+        continue;
+      }
+      if (options.apply_only && !receipt.apply) {
+        continue;
+      }
+      if (options.dry_run_only && !receipt.dry_run) {
+        continue;
+      }
+
+      receipts.push({
+        receipt_path: receiptPath,
+        receipt
+      });
+
+      if (receipts.length >= limit) {
+        break;
+      }
+    }
+
+    return {
+      filters: {
+        command: options.command ?? null,
+        apply_only: Boolean(options.apply_only),
+        dry_run_only: Boolean(options.dry_run_only),
+        limit
+      },
+      scanned: receiptPaths.length,
+      returned: receipts.length,
+      receipts
+    };
   }
 
   async runDoctorHint(

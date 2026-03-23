@@ -1,6 +1,11 @@
 import type { DispatchOutcome } from "./contracts";
 import type { DoctorReport } from "./doctor";
-import type { RunDoctorHintResult, RunDoctorHintsResult, SweepTasksResult } from "./orchestrator";
+import type {
+  OperatorHistoryResult,
+  RunDoctorHintResult,
+  RunDoctorHintsResult,
+  SweepTasksResult
+} from "./orchestrator";
 import type { TaskOperatorStatus, TaskStatusSnapshot } from "./status";
 
 type ReconcileOrRecoveryEntry = {
@@ -221,6 +226,37 @@ export function renderRunDoctorHintsBrief(result: RunDoctorHintsResult): string 
   if (result.receipt_path) {
     lines.push(`receipt: ${result.receipt_path}`);
   }
+
+  return lines.join("\n");
+}
+
+export function renderOperatorHistoryBrief(result: OperatorHistoryResult): string {
+  const lines = [
+    `operator-history: ${result.returned} receipt(s)`,
+    `scanned: ${result.scanned}`
+  ];
+
+  if (result.filters.command) {
+    lines.push(`command: ${result.filters.command}`);
+  }
+  if (result.filters.apply_only) {
+    lines.push("mode: apply-only");
+  } else if (result.filters.dry_run_only) {
+    lines.push("mode: dry-run-only");
+  }
+  lines.push(`limit: ${result.filters.limit}`);
+
+  pushLimitedSection(
+    lines,
+    "receipts:",
+    result.receipts.map((entry) => {
+      const mode = entry.receipt.apply ? "apply" : "dry-run";
+      return `- ${entry.receipt.created_at} ${entry.receipt.command} ${mode} `
+        + `matched=${entry.receipt.summary.matched} actionable=${entry.receipt.summary.actionable} `
+        + `changed=${entry.receipt.summary.changed} receipt=${entry.receipt_path}`;
+    }),
+    10
+  );
 
   return lines.join("\n");
 }

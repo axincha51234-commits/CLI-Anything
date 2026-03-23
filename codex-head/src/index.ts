@@ -2,6 +2,7 @@ import { resolve } from "node:path";
 
 import {
   renderDoctorBrief,
+  renderOperatorHistoryBrief,
   renderOutcomeBrief,
   renderRunDoctorHintBrief,
   renderRunDoctorHintsBrief,
@@ -12,7 +13,7 @@ import { normalizeGitHubRepository, updateGitHubConfig } from "./config";
 import { REVIEW_VERDICTS, TASK_STATES, WORKER_TARGETS } from "./contracts";
 import { DOCTOR_COMMAND_HINT_KINDS } from "./doctor";
 import { executeGitHubPayloadFile } from "./github/workflowRunner";
-import { CodexHeadOrchestrator } from "./orchestrator";
+import { CodexHeadOrchestrator, OPERATOR_RECEIPT_COMMANDS } from "./orchestrator";
 import { buildTaskStatusSnapshot, buildTaskStatusSnapshots } from "./status";
 
 function printJson(value: unknown): void {
@@ -460,6 +461,66 @@ function parseRunDoctorHintsArgs(args: string[]): {
   };
 }
 
+function parseOperatorHistoryArgs(args: string[]): {
+  brief: boolean;
+  limit?: number;
+  command?: typeof OPERATOR_RECEIPT_COMMANDS[number];
+  applyOnly: boolean;
+  dryRunOnly: boolean;
+} {
+  let brief = false;
+  let limit: number | undefined;
+  let command: typeof OPERATOR_RECEIPT_COMMANDS[number] | undefined;
+  let applyOnly = false;
+  let dryRunOnly = false;
+
+  for (let index = 0; index < args.length; index += 1) {
+    const current = args[index];
+    if (current === "--brief") {
+      brief = true;
+      continue;
+    }
+    if (current === "--limit") {
+      limit = Number(args[index + 1]);
+      if (!Number.isFinite(limit) || limit <= 0) {
+        throw new Error("--limit must be a positive number");
+      }
+      index += 1;
+      continue;
+    }
+    if (current === "--command") {
+      const next = args[index + 1];
+      if (!next || !OPERATOR_RECEIPT_COMMANDS.includes(next as typeof OPERATOR_RECEIPT_COMMANDS[number])) {
+        throw new Error(`--command must be one of: ${OPERATOR_RECEIPT_COMMANDS.join(", ")}`);
+      }
+      command = next as typeof OPERATOR_RECEIPT_COMMANDS[number];
+      index += 1;
+      continue;
+    }
+    if (current === "--apply-only") {
+      applyOnly = true;
+      continue;
+    }
+    if (current === "--dry-run-only") {
+      dryRunOnly = true;
+      continue;
+    }
+    throw new Error("operator-history only accepts --brief, --limit N, --command NAME, --apply-only, and --dry-run-only");
+  }
+
+  if (applyOnly && dryRunOnly) {
+    throw new Error("operator-history cannot combine --apply-only with --dry-run-only");
+  }
+
+  return {
+    brief,
+    limit,
+    command,
+    applyOnly,
+    dryRunOnly
+  };
+}
+
 function usage(): void {
   process.stdout.write(
     [
@@ -478,6 +539,7 @@ function usage(): void {
       "  node dist/src/index.js recover-running [timeout-sec] [interval-sec] [--requeue-local] [--brief]",
       "  node dist/src/index.js status [task-id] [--brief]",
       "  node dist/src/index.js doctor [--brief] [--all-tasks] [--task-window-hours N]",
+      "  node dist/src/index.js operator-history [--brief] [--limit N] [--command NAME] [--apply-only] [--dry-run-only]",
       "  node dist/src/index.js run-doctor-hint <hint-id> [--apply] [--brief] [--all-tasks] [--task-window-hours N]",
       "  node dist/src/index.js run-doctor-hints [--kind KIND] [--limit N] [--apply] [--allow-multi-task-apply] [--confirm-token TOKEN] [--brief] [--all-tasks] [--task-window-hours N]",
       "  node dist/src/index.js sweep-tasks <cancel|requeue> [--state a,b] [--older-than-hours N] [--goal-contains TEXT] [--worker-target TARGET] [--task-id ID] [--limit N] [--all] [--dry-run] [--brief]",
@@ -769,6 +831,22 @@ async function main(): Promise<void> {
     });
     if (parsed.brief) {
       printText(renderDoctorBrief(result));
+      return;
+    }
+    printJson(result);
+    return;
+  }
+
+  if (command === "operator-history") {
+    const parsed = parseOperatorHistoryArgs(rest);
+    const result = orchestrator.listOperatorHistory({
+      limit: parsed.limit,
+      command: parsed.command,
+      apply_only: parsed.applyOnly,
+      dry_run_only: parsed.dryRunOnly
+    });
+    if (parsed.brief) {
+      printText(renderOperatorHistoryBrief(result));
       return;
     }
     printJson(result);

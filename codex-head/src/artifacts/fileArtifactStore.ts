@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 export class FileArtifactStore {
@@ -35,6 +35,28 @@ export class FileArtifactStore {
     const filePath = join(this.getOperatorActionsDir(), fileName);
     writeFileSync(filePath, JSON.stringify(value, null, 2), "utf8");
     return `operator-actions/${fileName}`;
+  }
+
+  listOperatorReceipts(): string[] {
+    return readdirSync(this.getOperatorActionsDir(), { withFileTypes: true })
+      .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
+      .map((entry) => `operator-actions/${entry.name}`)
+      .sort()
+      .reverse();
+  }
+
+  readOperatorReceiptIfExists<T>(receiptPath: string): T | null {
+    const normalized = receiptPath.replace(/\\/g, "/").replace(/^\/+/, "");
+    if (!normalized.startsWith("operator-actions/")) {
+      return null;
+    }
+
+    const filePath = join(this.rootDir, normalized);
+    if (!existsSync(filePath)) {
+      return null;
+    }
+
+    return JSON.parse(readFileSync(filePath, "utf8")) as T;
   }
 
   readJsonIfExists<T>(taskId: string, name: string): T | null {
