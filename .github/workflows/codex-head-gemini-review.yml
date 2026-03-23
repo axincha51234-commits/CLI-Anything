@@ -79,9 +79,17 @@ jobs:
 
           & git fetch origin "${{ github.event.inputs.work_branch }}" --depth=1 *> $null
           $workBranchRef = "origin/${{ github.event.inputs.work_branch }}"
-          & git rev-parse --verify $workBranchRef *> $null
-          if ($LASTEXITCODE -eq 0) {
+          $workBranchAvailable = $LASTEXITCODE -eq 0
+          if ($workBranchAvailable) {
+            & git rev-parse --verify $workBranchRef *> $null
+            $workBranchAvailable = $LASTEXITCODE -eq 0
+          }
+
+          if ($workBranchAvailable) {
             & git diff "origin/${{ github.event.inputs.base_branch }}...$workBranchRef" | Set-Content -Path runtime/review.diff -Encoding utf8NoBOM
+            if ($LASTEXITCODE -ne 0) {
+              throw "Failed to build review diff from $workBranchRef."
+            }
             "work_branch_available=true" | Add-Content -Path $env:GITHUB_OUTPUT
           } else {
             @(
@@ -89,6 +97,7 @@ jobs:
               "Falling back to base branch context only."
             ) | Set-Content -Path runtime/review.diff -Encoding utf8NoBOM
             "work_branch_available=false" | Add-Content -Path $env:GITHUB_OUTPUT
+            $global:LASTEXITCODE = 0
           }
 
       - name: Detect remote review auth

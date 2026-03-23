@@ -70,6 +70,83 @@ test("GitHubControlPlane can verify repository access through gh cli", () => {
   assert.equal(status.viewer_permission, "WRITE");
 });
 
+test("GitHubControlPlane can resolve the latest open pull request through gh cli", () => {
+  const root = createTempDir("codex-head-github-pr-status-");
+  const config = createTestConfig(root);
+  config.github.repository = "example/repo";
+
+  const artifactStore = new FileArtifactStore(config.artifacts_dir);
+  const github = new GitHubControlPlane(config, artifactStore, {
+    findBinary: () => "C:/Program Files/GitHub CLI/gh.exe",
+    runCli: (args) => {
+      if (args[0] === "auth") {
+        return {
+          ok: true,
+          exitCode: 0,
+          stdout: "Logged in to github.com",
+          stderr: "",
+          durationMs: 1,
+          timedOut: false
+        };
+      }
+      return {
+        ok: true,
+        exitCode: 0,
+        stdout: JSON.stringify([
+          {
+            number: 42,
+            url: "https://github.com/example/repo/pull/42",
+            title: "Fix the workflow routing"
+          }
+        ]),
+        stderr: "",
+        durationMs: 1,
+        timedOut: false
+      };
+    }
+  });
+
+  const status = github.findLatestPullRequest("example/repo");
+  assert.equal(status.found, true);
+  assert.equal(status.number, 42);
+  assert.equal(status.url, "https://github.com/example/repo/pull/42");
+});
+
+test("GitHubControlPlane reports when no open pull request is available", () => {
+  const root = createTempDir("codex-head-github-pr-empty-");
+  const config = createTestConfig(root);
+  config.github.repository = "example/repo";
+
+  const artifactStore = new FileArtifactStore(config.artifacts_dir);
+  const github = new GitHubControlPlane(config, artifactStore, {
+    findBinary: () => "C:/Program Files/GitHub CLI/gh.exe",
+    runCli: (args) => {
+      if (args[0] === "auth") {
+        return {
+          ok: true,
+          exitCode: 0,
+          stdout: "Logged in to github.com",
+          stderr: "",
+          durationMs: 1,
+          timedOut: false
+        };
+      }
+      return {
+        ok: true,
+        exitCode: 0,
+        stdout: "[]",
+        stderr: "",
+        durationMs: 1,
+        timedOut: false
+      };
+    }
+  });
+
+  const status = github.findLatestPullRequest("example/repo");
+  assert.equal(status.found, false);
+  assert.match(status.detail, /No open pull request is available in example\/repo/i);
+});
+
 test("GitHubControlPlane inspects targeted self-hosted runners from repository metadata", () => {
   const root = createTempDir("codex-head-github-runtime-");
   const config = createTestConfig(root);

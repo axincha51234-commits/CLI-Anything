@@ -111,6 +111,17 @@ export interface GitHubRepositoryStatus {
   detail: string;
 }
 
+export interface GitHubPullRequestStatus {
+  repository: string;
+  found: boolean;
+  number: number | null;
+  url: string | null;
+  title: string | null;
+  gh_cli_path: string | null;
+  gh_authenticated: boolean;
+  detail: string;
+}
+
 export interface GitHubControlPlaneDeps {
   runCli?: (args: string[], options?: { input?: string }) => GitHubCliRunResult;
   findBinary?: (bin: string) => string | null;
@@ -524,6 +535,115 @@ export class GitHubControlPlane {
       default_branch: parsed.defaultBranchRef?.name ?? null,
       viewer_permission: parsed.viewerPermission ?? null,
       is_private: parsed.isPrivate ?? null,
+      gh_cli_path: runtime.gh_cli_path,
+      gh_authenticated: runtime.gh_authenticated,
+      detail: "ok"
+    };
+  }
+
+  findLatestPullRequest(repository = this.config.github.repository): GitHubPullRequestStatus {
+    const runtime = this.inspectRuntime();
+    if (!runtime.enabled) {
+      return {
+        repository,
+        found: false,
+        number: null,
+        url: null,
+        title: null,
+        gh_cli_path: runtime.gh_cli_path,
+        gh_authenticated: runtime.gh_authenticated,
+        detail: "GitHub control plane is disabled"
+      };
+    }
+    if (!runtime.gh_cli_available) {
+      return {
+        repository,
+        found: false,
+        number: null,
+        url: null,
+        title: null,
+        gh_cli_path: runtime.gh_cli_path,
+        gh_authenticated: runtime.gh_authenticated,
+        detail: `GitHub pull request lookup requires ${this.config.github.cli_binary} to be installed`
+      };
+    }
+    if (!runtime.gh_authenticated) {
+      return {
+        repository,
+        found: false,
+        number: null,
+        url: null,
+        title: null,
+        gh_cli_path: runtime.gh_cli_path,
+        gh_authenticated: runtime.gh_authenticated,
+        detail: `GitHub pull request lookup requires ${this.config.github.cli_binary} authentication`
+      };
+    }
+    if (!repository || repository === "OWNER/REPO") {
+      return {
+        repository,
+        found: false,
+        number: null,
+        url: null,
+        title: null,
+        gh_cli_path: runtime.gh_cli_path,
+        gh_authenticated: runtime.gh_authenticated,
+        detail: "GitHub pull request lookup requires a real OWNER/REPO value"
+      };
+    }
+
+    const args = [
+      "pr",
+      "list",
+      "--repo",
+      repository,
+      "--state",
+      "open",
+      "--limit",
+      "1",
+      "--json",
+      "number,url,title"
+    ];
+    const result = this.runCli(args);
+    if (!result.ok) {
+      const detail = result.stderr.trim() || result.stdout.trim() || `exit code ${String(result.exitCode)}`;
+      return {
+        repository,
+        found: false,
+        number: null,
+        url: null,
+        title: null,
+        gh_cli_path: runtime.gh_cli_path,
+        gh_authenticated: runtime.gh_authenticated,
+        detail
+      };
+    }
+
+    const parsed = parseJsonOrNull<Array<{
+      number?: number;
+      url?: string | null;
+      title?: string | null;
+    }>>(result.stdout) ?? [];
+    const latest = Array.isArray(parsed) ? parsed[0] : null;
+    if (!latest) {
+      return {
+        repository,
+        found: false,
+        number: null,
+        url: null,
+        title: null,
+        gh_cli_path: runtime.gh_cli_path,
+        gh_authenticated: runtime.gh_authenticated,
+        detail: `No open pull request is available in ${repository}`
+      };
+    }
+
+    return {
+      repository,
+      found: true,
+      number: latest.number ?? null,
+      url: latest.url ?? null,
+      title: latest.title ?? null,
       gh_cli_path: runtime.gh_cli_path,
       gh_authenticated: runtime.gh_authenticated,
       detail: "ok"

@@ -438,6 +438,106 @@ test("runGoal can keep GitHub mirrors while executing a GitHub-shaped task local
   assert.equal(dispatchCalled, false);
 });
 
+test("runGoal fails fast when a latest PR review has no open pull request target", async () => {
+  const root = createTempDir("codex-head-run-goal-no-pr-");
+  const registry = new AdapterRegistry();
+
+  registry.register(new FakeAdapter(
+    makeCapability("gemini-cli"),
+    createHealthyHealth("gemini-cli"),
+    async () => {
+      throw new Error("should not execute");
+    }
+  ));
+
+  registry.register(new FakeAdapter(
+    makeCapability("codex-cli"),
+    createHealthyHealth("codex-cli"),
+    async () => {
+      throw new Error("should not execute");
+    }
+  ));
+
+  const config = createTestConfig(root);
+  config.github.repository = "example/repo";
+  config.github.execution_preference = "local_preferred";
+  config.github.dispatch_mode = "gh_cli";
+  const orchestrator = createAppWithRegistry(root, registry, config);
+  (orchestrator as any).github = {
+    shouldDispatchLive: () => true,
+    findLatestPullRequest: () => ({
+      repository: "example/repo",
+      found: false,
+      number: null,
+      url: null,
+      title: null,
+      gh_cli_path: "gh",
+      gh_authenticated: true,
+      detail: "No open pull request is available in example/repo"
+    })
+  };
+
+  await assert.rejects(
+    orchestrator.runGoal("Review the latest PR in GitHub"),
+    /No open pull request is available in example\/repo/i
+  );
+  assert.equal((orchestrator as any).taskStore.listTasks().length, 0);
+});
+
+test("dispatchNext fails a latest PR review task cleanly when no open pull request is available", async () => {
+  const root = createTempDir("codex-head-dispatch-no-pr-");
+  const registry = new AdapterRegistry();
+
+  registry.register(new FakeAdapter(
+    makeCapability("gemini-cli"),
+    createHealthyHealth("gemini-cli"),
+    async () => {
+      throw new Error("should not execute");
+    }
+  ));
+
+  registry.register(new FakeAdapter(
+    makeCapability("codex-cli"),
+    createHealthyHealth("codex-cli"),
+    async () => {
+      throw new Error("should not execute");
+    }
+  ));
+
+  const config = createTestConfig(root);
+  config.github.repository = "example/repo";
+  config.github.execution_preference = "local_preferred";
+  config.github.dispatch_mode = "gh_cli";
+  const orchestrator = createAppWithRegistry(root, registry, config);
+  (orchestrator as any).github = {
+    shouldDispatchLive: () => true,
+    findLatestPullRequest: () => ({
+      repository: "example/repo",
+      found: false,
+      number: null,
+      url: null,
+      title: null,
+      gh_cli_path: "gh",
+      gh_authenticated: true,
+      detail: "No open pull request is available in example/repo"
+    })
+  };
+
+  const task = orchestrator.submitTask(createTaskSpec({
+    goal: "Review the latest PR in GitHub",
+    repo: root,
+    worker_target: "gemini-cli",
+    expected_output: { kind: "review", format: "markdown", code_change: false },
+    requires_github: true
+  }));
+  orchestrator.enqueueTask(task.task.task_id);
+
+  const outcome = await orchestrator.dispatchNext();
+  assert.equal(outcome?.state, "failed");
+  assert.match(outcome?.detail ?? "", /No open pull request is available in example\/repo/i);
+  assert.equal(orchestrator.getTask(task.task.task_id).state, "failed");
+});
+
 test("GitHub live dispatch fails fast when gh authentication is missing", async () => {
   const root = createTempDir("codex-head-live-dispatch-fail-");
   const registry = new AdapterRegistry();

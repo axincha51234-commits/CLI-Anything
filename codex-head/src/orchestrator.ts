@@ -432,6 +432,9 @@ export class CodexHeadOrchestrator {
     outcome: DispatchOutcome;
   }> {
     const plan = this.planGoal(goal, options.repo ?? this.config.workspace_root);
+    for (const task of plan.tasks) {
+      this.assertRunPreconditions(task);
+    }
     const records = this.savePlannedTasks(plan);
     if (records.length !== 1) {
       throw new Error(`runGoal currently supports exactly one planned task, received ${records.length}`);
@@ -527,6 +530,39 @@ export class CodexHeadOrchestrator {
       task_id: taskId,
       attempts
     });
+  }
+
+  private needsOpenPullRequest(task: TaskSpec): boolean {
+    if (!task.requires_github || task.expected_output.kind !== "review") {
+      return false;
+    }
+    const normalized = task.goal.toLowerCase();
+    return /\b(latest|current|the)\s+(pr|pull request)\b/.test(normalized);
+  }
+
+  private assertRunPreconditions(task: TaskSpec): void {
+    if (!this.needsOpenPullRequest(task)) {
+      return;
+    }
+
+    const githubLookup = this.github as {
+      findLatestPullRequest?: () => {
+        found: boolean;
+        detail: string;
+      };
+      shouldDispatchLive?: () => boolean;
+    };
+    if (typeof githubLookup.findLatestPullRequest !== "function") {
+      return;
+    }
+    if (typeof githubLookup.shouldDispatchLive === "function" && !githubLookup.shouldDispatchLive()) {
+      return;
+    }
+
+    const latestPullRequest = githubLookup.findLatestPullRequest();
+    if (!latestPullRequest.found) {
+      throw new Error(latestPullRequest.detail);
+    }
   }
 
   private async resolveNextFallback(
@@ -708,6 +744,42 @@ export class CodexHeadOrchestrator {
 
   private async dispatchClaimedRecord(claimed: TaskRecord): Promise<DispatchOutcome> {
     const task = claimed.task;
+    try {
+      this.assertRunPreconditions(task);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const routing: RoutingDecision = {
+        worker_target: task.worker_target,
+        mode: task.requires_github ? "github" : "local",
+        reason: "dispatch preflight failed",
+        fallback_from: null
+      };
+      const result: WorkerResult = {
+        task_id: task.task_id,
+        worker_target: task.worker_target,
+        status: "failed",
+        review_verdict: null,
+        summary: message,
+        artifacts: [],
+        patch_ref: null,
+        log_ref: null,
+        cost: 0,
+        duration_ms: 0,
+        next_action: "manual",
+        review_notes: []
+      };
+      this.taskStore.finish(task.task_id, "failed", result, routing, message);
+      this.artifactStore.writeJson(task.task_id, "dispatch-outcome.json", {
+        mode: "preflight_failed",
+        error: message
+      });
+      return {
+        task_id: task.task_id,
+        state: "failed",
+        routing,
+        detail: message
+      };
+    }
     let routing = await this.router.resolve(task, {
       deprioritized_targets: this.getRecentWorkerPenalties().map((penalty) => penalty.worker_target)
     });
