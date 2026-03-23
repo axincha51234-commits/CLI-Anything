@@ -200,7 +200,7 @@ currently local-ready and exposes the matching cooldown reason.
   - retained refs from an older attempt are now labeled as `last-attempt`, and
     retry history is labeled as `history`.
   - if the task already has an operator receipt, brief mode shows the receipt
-    jump without the filler line `operator: no immediate action`.
+    jump as `next-command:` without the filler line `operator: no immediate action`.
 - `doctor --brief` now adds a `task-links:` section only for the visible task
   rows that already have a receipt, GitHub run URL, or other stronger triage
   signals, with each row exposing its artifact directory path plus GitHub run
@@ -213,6 +213,9 @@ currently local-ready and exposes the matching cooldown reason.
 - when `commands:` already includes queued backlog sweeps, `next:` drops the
   redundant generic "Dispatch the queued task..." reminder and keeps the higher-
   signal actions instead.
+- `doctor --brief`, `operator-history --brief`, and `show-operator-receipt --brief`
+  now also surface a standardized `next-command:` line for the safest follow-up
+  command available.
   - those refs carry the same freshness labels, so a queued/running task does
     not look like it already produced a new current result.
 - `sweep-tasks` now gives operators a filtered bulk action for backlog triage.

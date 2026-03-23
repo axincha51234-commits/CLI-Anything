@@ -225,7 +225,7 @@ receipt path for a task when one exists, so operators can jump directly into
 - `status --brief` prints `github-url: ...` when the task has a persisted
   workflow run URL
 - `status --brief` hides `operator: no immediate action` when the task already
-  has an operator receipt to open
+  has an operator receipt to open, and surfaces that jump as `next-command:`
 - `doctor --brief` adds a `receipt-commands:` section for task-level receipt jumps
 - `doctor --brief` also adds a `task-links:` section only for the visible task
   rows that already have a receipt, GitHub run URL, or other stronger triage
@@ -237,6 +237,9 @@ receipt path for a task when one exists, so operators can jump directly into
   `execution-attempts.json`, primary output, or the primary log can be resolved
 - when queued backlog command hints are present, `next:` keeps the higher-signal
   actions and omits the redundant generic dispatch reminder
+- `doctor --brief`, `operator-history --brief`, and `show-operator-receipt --brief`
+  also expose a standardized `next-command:` line for the safest follow-up
+  command available
 - those artifact refs now include freshness labels so queued/running tasks do
   not present stale output as if it were the current attempt
 

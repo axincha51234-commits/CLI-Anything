@@ -48,6 +48,10 @@ function buildShowOperatorReceiptCommand(receiptPath: string): string {
   return `node dist/src/index.js show-operator-receipt ${receiptPath} --brief`;
 }
 
+function buildStatusCommand(taskId: string): string {
+  return `node dist/src/index.js status ${taskId} --brief`;
+}
+
 function shouldRenderDoctorArtifactFiles(finding: DoctorReport["attention"]["tasks"][number]): boolean {
   return finding.severity === "error"
     || finding.manual_intervention_required
@@ -200,7 +204,7 @@ function renderOperatorLines(operator: TaskOperatorStatus | null): string[] {
       ? `${operator.latest_receipt_path} [${operator.latest_receipt_command}]`
       : operator.latest_receipt_path;
     lines.push(`receipt: ${receiptLabel}`);
-    lines.push(`open-receipt: ${buildShowOperatorReceiptCommand(operator.latest_receipt_path)}`);
+    lines.push(`next-command: ${buildShowOperatorReceiptCommand(operator.latest_receipt_path)}`);
   }
 
   if (operator.actions.length > 0) {
@@ -277,6 +281,11 @@ export function renderDoctorBrief(report: DoctorReport): string {
   const visibleTaskFindings = report.attention.tasks.slice(0, 8);
   const taskSummary = summarizeDoctorTaskLines(visibleTaskFindings);
   const nextActions = filterDoctorNextActions(report);
+  const nextCommand = report.command_hints[0]?.command
+    ?? (() => {
+      const receiptPath = visibleTaskFindings.find((finding) => finding.operator_receipt_path)?.operator_receipt_path ?? null;
+      return receiptPath ? buildShowOperatorReceiptCommand(receiptPath) : null;
+    })();
 
   if (report.task_filter.suppressed_task_findings > 0) {
     const windowLabel = report.task_filter.task_window_hours === null
@@ -311,6 +320,9 @@ export function renderDoctorBrief(report: DoctorReport): string {
       .map((finding) => `- ${finding.task_id} :: ${buildShowOperatorReceiptCommand(finding.operator_receipt_path!)}`),
     8
   );
+  if (nextCommand) {
+    lines.push(`next-command: ${nextCommand}`);
+  }
   pushLimitedSection(
     lines,
     "task-links:",
@@ -460,6 +472,9 @@ export function renderOperatorHistoryBrief(result: OperatorHistoryResult): strin
     lines.push("mode: dry-run-only");
   }
   lines.push(`limit: ${result.filters.limit}`);
+  if (result.receipts[0]) {
+    lines.push(`next-command: ${buildShowOperatorReceiptCommand(result.receipts[0].receipt_path)}`);
+  }
 
   pushLimitedSection(
     lines,
@@ -502,6 +517,9 @@ export function renderOperatorReceiptBrief(result: OperatorReceiptResult): strin
   }
   if (lookupFilters.length > 0) {
     lines.push(`lookup-filters: ${lookupFilters.join(", ")}`);
+  }
+  if ((result.receipt.tasks ?? [])[0]) {
+    lines.push(`next-command: ${buildStatusCommand(result.receipt.tasks![0]!.task_id)}`);
   }
 
   const selectionEntries = Object.entries(result.receipt.selection)

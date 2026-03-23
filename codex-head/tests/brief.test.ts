@@ -86,7 +86,7 @@ test("renderStatusBrief summarizes one task with operator guidance", () => {
   assert.match(rendered, /github-url: https:\/\/github\.com\/example\/repo\/actions\/runs\/321/i);
   assert.match(rendered, /operator: Automatic stale-runner recovery was already attempted/i);
   assert.match(rendered, /receipt: operator-actions\/2026-03-23T08-09-05\.877Z-run-doctor-hint\.json \[run-doctor-hint\]/i);
-  assert.match(rendered, /open-receipt: node dist\/src\/index\.js show-operator-receipt operator-actions\/2026-03-23T08-09-05\.877Z-run-doctor-hint\.json --brief/i);
+  assert.match(rendered, /next-command: node dist\/src\/index\.js show-operator-receipt operator-actions\/2026-03-23T08-09-05\.877Z-run-doctor-hint\.json --brief/i);
   assert.match(rendered, /next: Inspect C:\/artifacts\/task-brief-1\/github-queue-recycle\.json/i);
 });
 
@@ -231,7 +231,7 @@ test("renderStatusBrief omits the no-action line when a receipt is available", (
 
   assert.doesNotMatch(rendered, /operator: no immediate action/i);
   assert.match(rendered, /receipt: operator-actions\/2026-03-23T08-09-05\.877Z-run-doctor-hint\.json \[run-doctor-hint\]/i);
-  assert.match(rendered, /open-receipt: node dist\/src\/index\.js show-operator-receipt operator-actions\/2026-03-23T08-09-05\.877Z-run-doctor-hint\.json --brief/i);
+  assert.match(rendered, /next-command: node dist\/src\/index\.js show-operator-receipt operator-actions\/2026-03-23T08-09-05\.877Z-run-doctor-hint\.json --brief/i);
 });
 
 test("renderOutcomeBrief handles empty batches", () => {
@@ -362,6 +362,7 @@ test("renderDoctorBrief summarizes operator findings and next actions", () => {
   assert.match(rendered, /tasks:\n- task-brief-doctor \[failed\/error\] Review the latest PR in GitHub/i);
   assert.match(rendered, /receipt=operator-actions\/2026-03-23T08-09-05\.877Z-run-doctor-hint\.json \[run-doctor-hint\]/i);
   assert.match(rendered, /receipt-commands:\n- task-brief-doctor :: node dist\/src\/index\.js show-operator-receipt operator-actions\/2026-03-23T08-09-05\.877Z-run-doctor-hint\.json --brief/i);
+  assert.match(rendered, /next-command: node dist\/src\/index\.js sweep-tasks cancel --state failed --older-than-hours 6 --dry-run --brief/i);
   assert.match(rendered, /task-links:\n- task-brief-doctor :: artifacts=C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-doctor :: github=https:\/\/github\.com\/example\/repo\/actions\/runs\/321/i);
   assert.match(rendered, /artifact-files:\n- task-brief-doctor :: result=C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-doctor\/worker-result\.json :: attempts\(history\)=C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-doctor\/execution-attempts\.json :: output=C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-doctor\/worker-output\.md :: log=C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-doctor\/gemini-cli-local\.combined\.log/i);
   assert.match(rendered, /next:\n- Inspect the claude-code health command and local runtime\./i);
@@ -795,6 +796,7 @@ test("renderOperatorHistoryBrief summarizes recent operator receipts", () => {
   assert.match(rendered, /mode: dry-run-only/i);
   assert.match(rendered, /limit: 5/i);
   assert.match(rendered, /receipts:\n- 2026-03-23T08:09:05.875Z run-doctor-hints dry-run matched=2 actionable=2 changed=0 receipt=operator-actions/i);
+  assert.match(rendered, /next-command: node dist\/src\/index\.js show-operator-receipt operator-actions\/2026-03-23T08-09-05\.875Z-run-doctor-hints\.json --brief/i);
 });
 
 test("renderOperatorReceiptBrief summarizes one operator receipt", () => {
@@ -855,6 +857,7 @@ test("renderOperatorReceiptBrief summarizes one operator receipt", () => {
   assert.match(rendered, /summary: matched 2, actionable 2, changed 0/i);
   assert.match(rendered, /lookup: latest receipt for task task-1/i);
   assert.match(rendered, /lookup-filters: command=run-doctor-hints, mode=dry-run-only/i);
+  assert.match(rendered, /next-command: node dist\/src\/index\.js status task-1 --brief/i);
   assert.match(rendered, /selection:\n- kind=queued_backlog/i);
   assert.match(rendered, /hints:\n- queued-backlog-1 \[queued_backlog\]/i);
   assert.match(rendered, /tasks:\n- task-1 \[queued -> canceled\]/i);
