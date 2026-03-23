@@ -24,6 +24,7 @@ import { GitHubControlPlane } from "./github/controlPlane";
 import { CodexHeadPlanner } from "./planner";
 import { TaskRouter } from "./router";
 import { computeRetryBackoffMs } from "./retry";
+import { buildTaskStatusSnapshot, type TaskOperatorStatus } from "./status";
 import { SqliteTaskStore } from "./state-store/sqliteTaskStore";
 
 function toCliPrompt(lines: string[]): string {
@@ -116,6 +117,7 @@ interface RunningTaskRecovery {
   status: "reconciled" | "failed" | "requeued" | "error";
   detail: string;
   outcome: DispatchOutcome | null;
+  operator: TaskOperatorStatus | null;
 }
 
 interface WorkerPenalty {
@@ -910,7 +912,8 @@ export class CodexHeadOrchestrator {
             task_id: record.task.task_id,
             status: "reconciled",
             detail: outcome.detail,
-            outcome
+            outcome,
+            operator: this.buildOperatorStatus(record.task.task_id)
           });
         } catch (error) {
           const waitDetail = error instanceof Error ? error.message : String(error);
@@ -920,7 +923,8 @@ export class CodexHeadOrchestrator {
               task_id: record.task.task_id,
               status: "reconciled",
               detail: outcome.detail,
-              outcome
+              outcome,
+              operator: this.buildOperatorStatus(record.task.task_id)
             });
           } catch (syncError) {
             const syncDetail = syncError instanceof Error ? syncError.message : String(syncError);
@@ -952,7 +956,8 @@ export class CodexHeadOrchestrator {
               task_id: record.task.task_id,
               status: "failed",
               detail,
-              outcome: null
+              outcome: null,
+              operator: this.buildOperatorStatus(record.task.task_id)
             });
           }
         }
@@ -992,7 +997,8 @@ export class CodexHeadOrchestrator {
           task_id: record.task.task_id,
           status: "requeued",
           detail: "Recovered interrupted local task and requeued it",
-          outcome: null
+          outcome: null,
+          operator: this.buildOperatorStatus(record.task.task_id)
         });
         continue;
       }
@@ -1002,7 +1008,8 @@ export class CodexHeadOrchestrator {
         task_id: record.task.task_id,
         status: "failed",
         detail: result.summary,
-        outcome: null
+        outcome: null,
+        operator: this.buildOperatorStatus(record.task.task_id)
       });
     }
 
@@ -1015,6 +1022,14 @@ export class CodexHeadOrchestrator {
 
   listTasks(): TaskRecord[] {
     return this.taskStore.listTasks();
+  }
+
+  private buildOperatorStatus(taskId: string): TaskOperatorStatus | null {
+    try {
+      return buildTaskStatusSnapshot(this.taskStore.getTaskOrThrow(taskId), this.artifactStore).operator;
+    } catch {
+      return null;
+    }
   }
 
   private tryResolveGitHubRun(task: TaskSpec): TaskRecord["github_run"] | null {

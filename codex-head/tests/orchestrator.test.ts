@@ -1081,6 +1081,12 @@ test("recoverRunningTasks preserves queued wait detail when fallback sync also f
   assert.match(recovered[0]?.detail ?? "", /github-queue-diagnosis\.json/i);
   assert.match(recovered[0]?.detail ?? "", /manual intervention is now required/i);
   assert.match(recovered[0]?.detail ?? "", /github-queue-recycle\.json/i);
+  assert.equal(recovered[0]?.operator?.manual_intervention_required, true);
+  assert.match(recovered[0]?.operator?.summary ?? "", /manual intervention is now required/i);
+  assert.equal(
+    recovered[0]?.operator?.actions.some((value) => /inspect .*github-queue-recycle\.json/i.test(value)),
+    true
+  );
 
   const record = orchestrator.getTask(task.task.task_id);
   assert.equal(record.state, "failed");
@@ -1143,6 +1149,11 @@ test("recoverRunningTasks fails unresolved GitHub tasks when no run or callback 
   assert.equal(recovered.length, 1);
   assert.equal(recovered[0]?.status, "failed");
   assert.match(recovered[0]?.detail ?? "", /requires github\.repository to be configured|does not have a resolved GitHub workflow run yet/i);
+  assert.equal(recovered[0]?.operator?.manual_intervention_required, false);
+  assert.equal(
+    recovered[0]?.operator?.actions.some((value) => /set github\.repository or dispatch the task again/i.test(value)),
+    true
+  );
 
   const record = orchestrator.getTask(task.task.task_id);
   assert.equal(record.state, "failed");
@@ -1563,6 +1574,11 @@ test("recoverRunningTasks marks interrupted local tasks as failed", async () => 
   assert.equal(recovered.length, 1);
   assert.equal(recovered[0]?.status, "failed");
   assert.match(recovered[0]?.detail ?? "", /Recovered interrupted local task/i);
+  assert.equal(recovered[0]?.operator?.manual_intervention_required, false);
+  assert.equal(
+    recovered[0]?.operator?.actions.some((value) => /rerun it manually|inspect the interrupted local task/i.test(value)),
+    true
+  );
 
   const record = orchestrator.getTask(task.task.task_id);
   assert.equal(record.state, "failed");
@@ -1619,6 +1635,10 @@ test("recoverRunningTasks can requeue interrupted local tasks", async () => {
   const recovered = await orchestrator.recoverRunningTasks({ requeue_local: true });
   assert.equal(recovered.length, 1);
   assert.equal(recovered[0]?.status, "requeued");
+  assert.equal(
+    recovered[0]?.operator?.actions.some((value) => /dispatch the requeued local task/i.test(value)),
+    true
+  );
 
   const record = orchestrator.getTask(task.task.task_id);
   assert.equal(record.state, "queued");

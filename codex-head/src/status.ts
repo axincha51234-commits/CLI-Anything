@@ -93,6 +93,14 @@ function buildOperatorActions(
     actions.add("Wait for the provider reset window or route the task to another healthy worker.");
   }
 
+  if (/Recovered interrupted local task/i.test(taskTexts)) {
+    if (record.state === "queued") {
+      actions.add("Dispatch the requeued local task when the workspace is ready.");
+    } else {
+      actions.add("Inspect the interrupted local task state, then rerun it manually if the workspace is still safe.");
+    }
+  }
+
   if (manualInterventionRequired && recycle?.ok === true) {
     actions.add(`Inspect ${recyclePath} and the runner _diag logs before retrying this GitHub task.`);
   }

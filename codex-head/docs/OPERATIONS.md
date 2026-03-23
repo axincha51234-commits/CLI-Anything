@@ -626,6 +626,8 @@ This command:
 - reconciles GitHub-routed tasks the same way as `reconcile-github-running`
 - marks interrupted local tasks as `failed` by default
 - optionally requeues interrupted local tasks when `--requeue-local` is set
+- returns the same `operator` guidance block used by `status`, including
+  queue-artifact summaries and recommended follow-up actions when recovery fails
 - writes `recovery-result.json` for each recovered local task
 
 ## Direct Callback Ingestion
