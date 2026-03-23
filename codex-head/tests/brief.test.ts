@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   renderDoctorBrief,
+  renderOperatorReceiptBrief,
   renderOperatorHistoryBrief,
   renderOutcomeBrief,
   renderRunDoctorHintsBrief,
@@ -10,7 +11,7 @@ import {
   renderSweepBrief
 } from "../src/brief";
 import type { DoctorReport } from "../src/doctor";
-import type { OperatorHistoryResult, SweepTasksResult } from "../src/orchestrator";
+import type { OperatorHistoryResult, OperatorReceiptResult, SweepTasksResult } from "../src/orchestrator";
 import { createTaskSpec } from "../src/schema";
 import type { TaskStatusSnapshot } from "../src/status";
 
@@ -555,4 +556,56 @@ test("renderOperatorHistoryBrief summarizes recent operator receipts", () => {
   assert.match(rendered, /mode: dry-run-only/i);
   assert.match(rendered, /limit: 5/i);
   assert.match(rendered, /receipts:\n- 2026-03-23T08:09:05.875Z run-doctor-hints dry-run matched=2 actionable=2 changed=0 receipt=operator-actions/i);
+});
+
+test("renderOperatorReceiptBrief summarizes one operator receipt", () => {
+  const rendered = renderOperatorReceiptBrief({
+    receipt_path: "operator-actions/2026-03-23T08-09-05.875Z-run-doctor-hints.json",
+    receipt: {
+      schema_version: 1,
+      command: "run-doctor-hints",
+      created_at: "2026-03-23T08:09:05.875Z",
+      dry_run: true,
+      apply: false,
+      selection: {
+        kind: "queued_backlog",
+        limit: 2,
+        confirm_token: "abc123def456"
+      },
+      summary: {
+        matched: 2,
+        actionable: 2,
+        changed: 0
+      },
+      hints: [
+        {
+          id: "queued-backlog-1",
+          kind: "queued_backlog",
+          reason: "Inspect queued task task-1 before canceling it from the backlog.",
+          matched: 1,
+          actionable: 1,
+          changed: 0
+        }
+      ],
+      tasks: [
+        {
+          task_id: "task-1",
+          goal: "Summarize the current orchestration state",
+          worker_target: "codex-cli",
+          previous_state: "queued",
+          next_state: "canceled",
+          changed: true,
+          reason: "Would cancel the selected task."
+        }
+      ]
+    }
+  } satisfies OperatorReceiptResult);
+
+  assert.match(rendered, /^receipt: operator-actions\/2026-03-23T08-09-05.875Z-run-doctor-hints\.json$/im);
+  assert.match(rendered, /command: run-doctor-hints/i);
+  assert.match(rendered, /mode: dry-run/i);
+  assert.match(rendered, /summary: matched 2, actionable 2, changed 0/i);
+  assert.match(rendered, /selection:\n- kind=queued_backlog/i);
+  assert.match(rendered, /hints:\n- queued-backlog-1 \[queued_backlog\]/i);
+  assert.match(rendered, /tasks:\n- task-1 \[queued -> canceled\]/i);
 });

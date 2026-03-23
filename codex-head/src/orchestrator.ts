@@ -230,6 +230,11 @@ export interface OperatorHistoryEntry {
   receipt: OperatorActionReceipt;
 }
 
+export interface OperatorReceiptResult {
+  receipt_path: string;
+  receipt: OperatorActionReceipt;
+}
+
 export interface OperatorHistoryResult {
   filters: {
     command: OperatorReceiptCommand | null;
@@ -1347,6 +1352,18 @@ export class CodexHeadOrchestrator {
       scanned: receiptPaths.length,
       returned: receipts.length,
       receipts
+    };
+  }
+
+  showOperatorReceipt(receiptPath: string): OperatorReceiptResult {
+    const receipt = this.artifactStore.readOperatorReceiptIfExists<OperatorActionReceipt>(receiptPath);
+    if (!receipt) {
+      throw new Error(`operator receipt ${receiptPath} was not found`);
+    }
+
+    return {
+      receipt_path: receiptPath.replace(/\\/g, "/").replace(/^\/+/, ""),
+      receipt
     };
   }
 

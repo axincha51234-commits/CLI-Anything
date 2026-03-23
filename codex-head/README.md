@@ -185,6 +185,8 @@ currently local-ready and exposes the matching cooldown reason.
   and batch apply activity stays auditable without adding more SQLite state.
 - `operator-history` now gives operators a read-only view over those receipts,
   with small filters for command type and apply vs dry-run mode.
+- `show-operator-receipt <receipt-path>` now opens one of those receipts
+  directly from the CLI, either as JSON or a brief human-readable summary.
 - `sweep-tasks` now gives operators a filtered bulk action for backlog triage.
   It can dry-run or apply `cancel` and `requeue` across selected tasks without
   deleting history from SQLite.

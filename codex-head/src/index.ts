@@ -2,6 +2,7 @@ import { resolve } from "node:path";
 
 import {
   renderDoctorBrief,
+  renderOperatorReceiptBrief,
   renderOperatorHistoryBrief,
   renderOutcomeBrief,
   renderRunDoctorHintBrief,
@@ -521,6 +522,26 @@ function parseOperatorHistoryArgs(args: string[]): {
   };
 }
 
+function parseShowOperatorReceiptArgs(args: string[]): {
+  receiptPath: string;
+  brief: boolean;
+} {
+  const stripped = stripFlag(args, "--brief");
+  const receiptPath = stripped.values[0];
+  if (!receiptPath) {
+    throw new Error("show-operator-receipt requires a receipt path");
+  }
+
+  if (stripped.values.length > 1) {
+    throw new Error("show-operator-receipt only accepts a receipt path and optional --brief");
+  }
+
+  return {
+    receiptPath,
+    brief: stripped.present
+  };
+}
+
 function usage(): void {
   process.stdout.write(
     [
@@ -540,6 +561,7 @@ function usage(): void {
       "  node dist/src/index.js status [task-id] [--brief]",
       "  node dist/src/index.js doctor [--brief] [--all-tasks] [--task-window-hours N]",
       "  node dist/src/index.js operator-history [--brief] [--limit N] [--command NAME] [--apply-only] [--dry-run-only]",
+      "  node dist/src/index.js show-operator-receipt <receipt-path> [--brief]",
       "  node dist/src/index.js run-doctor-hint <hint-id> [--apply] [--brief] [--all-tasks] [--task-window-hours N]",
       "  node dist/src/index.js run-doctor-hints [--kind KIND] [--limit N] [--apply] [--allow-multi-task-apply] [--confirm-token TOKEN] [--brief] [--all-tasks] [--task-window-hours N]",
       "  node dist/src/index.js sweep-tasks <cancel|requeue> [--state a,b] [--older-than-hours N] [--goal-contains TEXT] [--worker-target TARGET] [--task-id ID] [--limit N] [--all] [--dry-run] [--brief]",
@@ -847,6 +869,17 @@ async function main(): Promise<void> {
     });
     if (parsed.brief) {
       printText(renderOperatorHistoryBrief(result));
+      return;
+    }
+    printJson(result);
+    return;
+  }
+
+  if (command === "show-operator-receipt") {
+    const parsed = parseShowOperatorReceiptArgs(rest);
+    const result = orchestrator.showOperatorReceipt(parsed.receiptPath);
+    if (parsed.brief) {
+      printText(renderOperatorReceiptBrief(result));
       return;
     }
     printJson(result);

@@ -1,6 +1,7 @@
 import type { DispatchOutcome } from "./contracts";
 import type { DoctorReport } from "./doctor";
 import type {
+  OperatorReceiptResult,
   OperatorHistoryResult,
   RunDoctorHintResult,
   RunDoctorHintsResult,
@@ -256,6 +257,43 @@ export function renderOperatorHistoryBrief(result: OperatorHistoryResult): strin
         + `changed=${entry.receipt.summary.changed} receipt=${entry.receipt_path}`;
     }),
     10
+  );
+
+  return lines.join("\n");
+}
+
+export function renderOperatorReceiptBrief(result: OperatorReceiptResult): string {
+  const lines = [
+    `receipt: ${result.receipt_path}`,
+    `created: ${result.receipt.created_at}`,
+    `command: ${result.receipt.command}`,
+    `mode: ${result.receipt.apply ? "apply" : "dry-run"}`,
+    `summary: matched ${result.receipt.summary.matched}, actionable ${result.receipt.summary.actionable}, changed ${result.receipt.summary.changed}`
+  ];
+
+  const selectionEntries = Object.entries(result.receipt.selection)
+    .filter(([, value]) => value !== null && value !== undefined && value !== "")
+    .map(([key, value]) => `${key}=${String(value)}`);
+  pushLimitedSection(lines, "selection:", selectionEntries.map((entry) => `- ${entry}`), 8);
+
+  pushLimitedSection(
+    lines,
+    "hints:",
+    (result.receipt.hints ?? []).map((hint) => (
+      `- ${hint.id} [${hint.kind}] ${compactText(hint.reason, 120)} :: `
+      + `matched ${hint.matched}, actionable ${hint.actionable}, changed ${hint.changed}`
+    )),
+    8
+  );
+
+  pushLimitedSection(
+    lines,
+    "tasks:",
+    (result.receipt.tasks ?? []).map((task) => {
+      const marker = task.changed ? `${task.previous_state} -> ${task.next_state}` : `${task.previous_state} (skipped)`;
+      return `- ${task.task_id} [${marker}] ${compactText(task.goal, 100)} :: ${compactText(task.reason, 140)}`;
+    }),
+    8
   );
 
   return lines.join("\n");

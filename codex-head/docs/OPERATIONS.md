@@ -81,6 +81,7 @@ node dist/src/index.js recover-running [timeout-sec] [interval-sec] [--requeue-l
 node dist/src/index.js status [task-id] [--brief]
 node dist/src/index.js doctor [--brief] [--all-tasks] [--task-window-hours N]
 node dist/src/index.js operator-history [--brief] [--limit N] [--command NAME] [--apply-only] [--dry-run-only]
+node dist/src/index.js show-operator-receipt <receipt-path> [--brief]
 node dist/src/index.js run-doctor-hint <hint-id> [--apply] [--brief] [--all-tasks] [--task-window-hours N]
 node dist/src/index.js run-doctor-hints [--kind KIND] [--limit N] [--apply] [--allow-multi-task-apply] [--brief] [--all-tasks] [--task-window-hours N]
 node dist/src/index.js sweep-tasks <cancel|requeue> [--state a,b] [--older-than-hours N] [--goal-contains TEXT] [--worker-target TARGET] [--task-id ID] [--limit N] [--all] [--dry-run] [--brief]
@@ -129,9 +130,11 @@ node dist/src/index.js complete-from-file <worker-result.json>
     hints by `kind` or `limit` while staying in dry-run mode by default.
 18. Run `operator-history` when you want a read-only audit trail of recent
     sweep and doctor-hint actions under `runtime/artifacts/operator-actions/`.
-19. Run `clear-penalties` when a local provider recovered and you want to stop
+19. Run `show-operator-receipt` when you want to inspect one specific receipt
+    from that history in more detail.
+20. Run `clear-penalties` when a local provider recovered and you want to stop
     honoring remembered cooldowns immediately.
-20. Run `complete-from-file` to ingest an external callback artifact such as
+21. Run `complete-from-file` to ingest an external callback artifact such as
     `github-callback.json`.
 
 `status [task-id]` now returns an enriched JSON snapshot. For GitHub queue
@@ -194,6 +197,12 @@ operator command instead of only describing the problem.
 - `operator-history --command run-doctor-hints --brief` narrows to one action
 - `operator-history --apply-only --brief` shows only real state-changing runs
 - `operator-history --dry-run-only --brief` shows only previews
+
+`show-operator-receipt` complements that history view:
+
+- `show-operator-receipt operator-actions/...json --brief` prints a compact
+  summary with selection, hints, and task effects
+- omitting `--brief` returns the stored JSON receipt verbatim
 
 `sweep-tasks` is intentionally conservative:
 

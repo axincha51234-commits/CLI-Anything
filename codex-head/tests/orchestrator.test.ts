@@ -2019,6 +2019,37 @@ test("listOperatorHistory returns recent receipts and supports command plus mode
   assert.equal(dryRunOnly.receipts.every((entry) => entry.receipt.dry_run), true);
 });
 
+test("showOperatorReceipt returns one stored operator receipt and rejects unknown paths", async () => {
+  const root = createTempDir("codex-head-show-operator-receipt-");
+  const registry = new AdapterRegistry();
+  const orchestrator = createAppWithRegistry(root, registry);
+
+  const queuedTask = orchestrator.submitTask(createTaskSpec({
+    task_id: "task-show-operator-receipt",
+    goal: "Summarize the current orchestration state",
+    repo: root,
+    worker_target: "codex-cli",
+    expected_output: { kind: "analysis", format: "markdown", code_change: false }
+  }));
+  orchestrator.enqueueTask(queuedTask.task.task_id);
+
+  const receipt = orchestrator.runSweepTasks({
+    action: "cancel",
+    task_ids: [queuedTask.task.task_id],
+    dry_run: true
+  });
+
+  const shown = orchestrator.showOperatorReceipt(receipt.receipt_path ?? "");
+  assert.equal(shown.receipt_path, receipt.receipt_path);
+  assert.equal(shown.receipt.command, "sweep-tasks");
+  assert.equal(shown.receipt.summary.matched, 1);
+
+  assert.throws(
+    () => orchestrator.showOperatorReceipt("operator-actions/missing.json"),
+    /operator receipt operator-actions\/missing\.json was not found/i
+  );
+});
+
 test("runDoctorHint defaults to dry-run and applies the selected structured sweep hint", async () => {
   const root = createTempDir("codex-head-run-doctor-hint-");
   const registry = new AdapterRegistry();
