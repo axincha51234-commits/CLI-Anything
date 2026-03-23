@@ -5,6 +5,54 @@ import { buildDoctorReport, DOCTOR_COMMAND_HINT_KINDS, type DoctorHealthSnapshot
 import { createTaskSpec } from "../src/schema";
 import type { TaskStatusSnapshot } from "../src/status";
 
+function createLocalStack(overrides: Partial<DoctorHealthSnapshot["local_stack"]> = {}): DoctorHealthSnapshot["local_stack"] {
+  return {
+    detected: true,
+    helper_script_path: "C:/repo/codex-head/scripts/ensure-9router-antigravity-stack.ps1",
+    helper_script_available: true,
+    helper_bootstrap_command: "powershell -ExecutionPolicy Bypass -File \"C:/repo/codex-head/scripts/ensure-9router-antigravity-stack.ps1\"",
+    gui_config_path: "C:/Users/test/.antigravity_tools/gui_config.json",
+    gui_config_exists: true,
+    recommended_review_path_ready: true,
+    antigravity: {
+      base_url: "http://127.0.0.1:8045",
+      port: 8045,
+      reachable: true,
+      version: "4.1.21",
+      auto_start: true,
+      auto_launch: false,
+      auth_mode: "all_except_health",
+      api_key_configured: true,
+      proxy_status_available: true,
+      running: true,
+      active_accounts: 7
+    },
+    router9: {
+      base_url: "http://127.0.0.1:20128",
+      reachable: true,
+      version: "0.3.60",
+      agm_chat: {
+        prefix: "agm",
+        api_type: "chat",
+        present: true,
+        active_connection: true,
+        default_model: "agm/gpt-4o-mini",
+        upstream_base_url: "http://127.0.0.1:8045/v1"
+      },
+      agr_responses: {
+        prefix: "agr",
+        api_type: "responses",
+        present: true,
+        active_connection: true,
+        default_model: "agr/gpt-4o-mini",
+        upstream_base_url: "http://127.0.0.1:8045/v1"
+      },
+      responses_route_suitable_for_codex_cli_local: false
+    },
+    ...overrides
+  };
+}
+
 function createGitHubRuntime(overrides: Partial<DoctorHealthSnapshot["github"]> = {}): DoctorHealthSnapshot["github"] {
   return {
     enabled: true,
@@ -163,6 +211,31 @@ test("buildDoctorReport aggregates worker, GitHub, and task findings", () => {
       gh_authenticated: false,
       matching_runners: []
     }),
+    local_stack: createLocalStack({
+      recommended_review_path_ready: false,
+      router9: {
+        base_url: "http://127.0.0.1:20128",
+        reachable: false,
+        version: null,
+        agm_chat: {
+          prefix: "agm",
+          api_type: "chat",
+          present: false,
+          active_connection: null,
+          default_model: null,
+          upstream_base_url: null
+        },
+        agr_responses: {
+          prefix: "agr",
+          api_type: "responses",
+          present: false,
+          active_connection: null,
+          default_model: null,
+          upstream_base_url: null
+        },
+        responses_route_suitable_for_codex_cli_local: false
+      }
+    }),
     database_path: "C:/repo/codex-head/runtime/codex-head.sqlite",
     artifacts_dir: "C:/repo/codex-head/runtime/artifacts"
   };
@@ -222,10 +295,12 @@ test("buildDoctorReport aggregates worker, GitHub, and task findings", () => {
   assert.equal(report.counts.enabled_workers, 3);
   assert.equal(report.attention.workers.length, 2);
   assert.equal(report.attention.github.length, 2);
+  assert.equal(report.attention.integrations.length, 1);
   assert.equal(report.attention.tasks.length, 2);
   assert.equal(report.task_filter.suppressed_task_findings, 0);
   assert.equal(report.actions.some((value) => /gh auth login/i.test(value)), true);
   assert.equal(report.actions.some((value) => /github-queue-recycle\.json/i.test(value)), true);
+  assert.equal(report.actions.some((value) => /ensure-9router-antigravity-stack\.ps1/i.test(value)), true);
   assert.equal(report.command_hints.length, 0);
   assert.equal(report.summary.includes("blocking item"), true);
   assert.equal(report.attention.tasks[0]?.task_id, "task-doctor-failed");
@@ -281,6 +356,7 @@ test("buildDoctorReport stays healthy when workers and completed tasks are clean
     ],
     recent_penalties: [],
     github: createGitHubRuntime(),
+    local_stack: createLocalStack(),
     database_path: "C:/repo/codex-head/runtime/codex-head.sqlite",
     artifacts_dir: "C:/repo/codex-head/runtime/artifacts"
   };
@@ -320,6 +396,7 @@ test("buildDoctorReport stays healthy when workers and completed tasks are clean
   assert.equal(report.ok, true);
   assert.equal(report.attention.workers.length, 0);
   assert.equal(report.attention.github.length, 0);
+  assert.equal(report.attention.integrations.length, 0);
   assert.equal(report.attention.tasks.length, 0);
   assert.equal(report.actions.length, 0);
   assert.equal(report.command_hints.length, 0);
@@ -347,6 +424,7 @@ test("buildDoctorReport hides older failed backlog by default but can include al
     ],
     recent_penalties: [],
     github: createGitHubRuntime({ enabled: false, self_hosted_targeted: false, matching_runners: [] }),
+    local_stack: createLocalStack(),
     database_path: "C:/repo/codex-head/runtime/codex-head.sqlite",
     artifacts_dir: "C:/repo/codex-head/runtime/artifacts"
   };
@@ -443,6 +521,7 @@ test("buildDoctorReport carries GitHub run URLs for running GitHub tasks", () =>
     ],
     recent_penalties: [],
     github: createGitHubRuntime(),
+    local_stack: createLocalStack(),
     database_path: "C:/repo/codex-head/runtime/codex-head.sqlite",
     artifacts_dir: "C:/repo/codex-head/runtime/artifacts"
   };
@@ -498,6 +577,7 @@ test("buildDoctorReport emits task-specific queued backlog command hints", () =>
     ],
     recent_penalties: [],
     github: createGitHubRuntime({ enabled: false, self_hosted_targeted: false, matching_runners: [] }),
+    local_stack: createLocalStack(),
     database_path: "C:/repo/codex-head/runtime/codex-head.sqlite",
     artifacts_dir: "C:/repo/codex-head/runtime/artifacts"
   };
@@ -553,6 +633,7 @@ test("buildDoctorReport only emits supported command hint kinds", () => {
     ],
     recent_penalties: [],
     github: createGitHubRuntime({ enabled: false, self_hosted_targeted: false, matching_runners: [] }),
+    local_stack: createLocalStack(),
     database_path: "C:/repo/codex-head/runtime/codex-head.sqlite",
     artifacts_dir: "C:/repo/codex-head/runtime/artifacts"
   };

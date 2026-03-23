@@ -39,6 +39,13 @@ uncontrolled local mutation.
 The default bootstrap is now local-first. `github.enabled` starts as `false`,
 so a fresh clone stays on-machine unless you explicitly enable GitHub routing.
 
+For a local Windows stack that fronts Antigravity-Manager with `9router`,
+use
+[scripts/ensure-9router-antigravity-stack.ps1](C:/Users/khoa%20phan/Documents/CLI-Anything-main/codex-head/scripts/ensure-9router-antigravity-stack.ps1).
+It starts `antigravity_tools --headless` on `127.0.0.1:8045` when needed,
+starts `9router` on `127.0.0.1:20128` when needed, and ensures the reusable
+`agm/*` chat route plus the experimental `agr/*` responses route exist.
+
 When you do enable GitHub, `github.execution_preference` controls whether
 GitHub-shaped tasks must execute remotely or can still prefer local workers
 while keeping GitHub mirrors and workflow artifacts. The conservative default
@@ -123,6 +130,15 @@ currently local-ready and exposes the matching cooldown reason.
   `OPENAI_API_KEY` for direct OpenAI usage, or `GEMINI_API_KEY` for Gemini.
 - On the OpenAI-compatible path, the workflow now tries `/v1/responses` first
   and falls back to `/v1/chat/completions` if needed.
+- The current practical local stack is `9router -> Antigravity-Manager`.
+  For self-hosted GitHub review, point:
+  - `REVIEW_API_URL` to `http://127.0.0.1:20128/v1`
+  - `REVIEW_API_KEY` to any non-empty local token such as `local-9router`
+  - `REVIEW_MODEL` to `agm/gpt-4o-mini`
+- `9router` is already useful for GitHub review and chat-completions clients,
+  but the Antigravity-backed `/v1/responses` reply shape is still not a
+  native OpenAI Responses object. Keep direct Responses-compatible routing for
+  `codex-cli` local execution until that gap is closed.
 - Both GitHub workflows now also honor the repository variable
   `CODEX_HEAD_RUNS_ON_JSON`, so you can switch from `["ubuntu-latest"]` to a
   self-hosted label array without editing workflow YAML each time.
@@ -154,6 +170,10 @@ currently local-ready and exposes the matching cooldown reason.
 - `npm run health` now also reports the resolved self-hosted `runs-on` labels,
   matching runner records, and whether a machine-local worker overlay is
   visible, so operator triage no longer depends on ad hoc `gh api` calls.
+- the same health snapshot now includes `local_stack`, which probes the
+  `9router -> Antigravity-Manager` path, reports whether the `agm` chat route
+  is active, and flags that the experimental `agr` responses route is still not
+  suitable for `codex-cli` local execution.
   It also shows whether stale-runner auto-recycle is enabled and whether the
   recycle script is present on disk.
 - `status` now also surfaces operator-only queue artifacts directly in JSON
@@ -216,6 +236,9 @@ currently local-ready and exposes the matching cooldown reason.
 - `doctor --brief`, `operator-history --brief`, and `show-operator-receipt --brief`
   now also surface a standardized `next-command:` line for the safest follow-up
   command available.
+- `doctor --brief` also prints a one-line `local-stack:` summary so operator
+  triage can see, at a glance, whether the self-hosted review path is actually
+  ready on this machine.
   - those refs carry the same freshness labels, so a queued/running task does
     not look like it already produced a new current result.
 - `sweep-tasks` now gives operators a filtered bulk action for backlog triage.

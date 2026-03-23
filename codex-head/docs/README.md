@@ -113,6 +113,20 @@ that feature flag is explicitly enabled.
 Use [`config/workers.example.json`](../config/workers.example.json) when you
 want to override those defaults for a different local execution policy.
 
+For an operator machine that already has Antigravity-Manager, the current
+practical stacked route is:
+
+`codex-head GitHub review -> 9router :20128 -> Antigravity-Manager :8045`
+
+The helper
+[scripts/ensure-9router-antigravity-stack.ps1](C:/Users/khoa%20phan/Documents/CLI-Anything-main/codex-head/scripts/ensure-9router-antigravity-stack.ps1)
+brings up that stack when it is not already running and ensures reusable
+`agm/*` plus experimental `agr/*` routes inside `9router`.
+
+`npm run health` now reports this stack directly under `local_stack`, and
+`doctor --brief` prints the same state as a single `local-stack:` line for
+operator triage.
+
 The config loader accepts both the current snake_case top-level keys and the
 older camelCase variants for backward compatibility.
 
@@ -134,6 +148,9 @@ older camelCase variants for backward compatibility.
   `REVIEW_API_URL` + `REVIEW_API_KEY`, `OPENAI_API_KEY`, or `GEMINI_API_KEY`;
   without any of them, the review workflow can still run but only emits a
   fallback callback
+- The self-hosted GitHub review path is now validated against
+  `REVIEW_API_URL=http://127.0.0.1:20128/v1` with `REVIEW_MODEL=agm/gpt-4o-mini`
+  on a runner that shares the same Windows host as Antigravity-Manager
 - GitHub workflows can now switch to self-hosted runners through the repository
   variable `CODEX_HEAD_RUNS_ON_JSON`, instead of editing `runs-on` in YAML
 - Machine-only overrides can now live in `config/workers.machine.json`, which
@@ -142,6 +159,9 @@ older camelCase variants for backward compatibility.
   on-demand, but it is not automatic or background-polled
 - `run-goal` can self-heal across local workers, but it still cannot recover if
   every candidate CLI is installed yet unusable at runtime
+- `9router` still returns completion-shaped payloads for the experimental
+  Antigravity-backed `/v1/responses` path, so `codex-cli` local execution
+  should stay on a native Responses-compatible route for now
 - `antigravity` is disabled by default
 - Production monitoring, rollout controls, and release governance are not built
   yet

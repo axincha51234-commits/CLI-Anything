@@ -123,6 +123,16 @@ It can:
 - automatically export `CODEX_HEAD_MACHINE_CONFIG` when a machine-only
   `config/workers.machine.json` file exists next to the bootstrap script
 
+If you want the runner to use the local `9router -> Antigravity-Manager`
+stack instead of talking to Antigravity-Manager directly, first bring the
+stack up with
+[`../scripts/ensure-9router-antigravity-stack.ps1`](C:/Users/khoa%20phan/Documents/CLI-Anything-main/codex-head/scripts/ensure-9router-antigravity-stack.ps1),
+then pass:
+
+- `-ReviewApiUrl http://127.0.0.1:20128/v1`
+- `-ReviewApiKey local-9router`
+- `-ReviewModel agm/gpt-4o-mini`
+
 If the downloaded Windows runner package omits `svc.cmd`, the helper now
 registers the runner and installs a scheduled-task fallback by default. The
 task runs `run.cmd` at user logon and can be disabled with
@@ -294,6 +304,17 @@ Current behavior:
 These remote credentials are only for the GitHub runner. They do not reuse
 local CLI login state or a local Antigravity-Manager proxy running on your
 machine unless you deliberately expose that proxy with a runner-reachable URL.
+
+On this repo's self-hosted Windows runner, the validated local review route is
+now:
+
+`codex-head-gemini-review.yml -> http://127.0.0.1:20128/v1 -> Antigravity-Manager`
+
+That path completed successfully on March 24, 2026 with:
+
+- review provider: `openai-compatible`
+- review transport: `chat_completions`
+- review model: `agm/gpt-4o-mini`
 
 This workflow is the current review-specific handoff path for GitHub review
 work in `codex-head`.

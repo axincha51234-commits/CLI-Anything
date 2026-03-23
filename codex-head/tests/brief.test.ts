@@ -15,6 +15,54 @@ import type { OperatorHistoryResult, OperatorReceiptResult, SweepTasksResult } f
 import { createTaskSpec } from "../src/schema";
 import type { TaskStatusSnapshot } from "../src/status";
 
+function createBriefLocalStack(overrides: Partial<DoctorReport["health"]["local_stack"]> = {}): DoctorReport["health"]["local_stack"] {
+  return {
+    detected: true,
+    helper_script_path: "C:/repo/codex-head/scripts/ensure-9router-antigravity-stack.ps1",
+    helper_script_available: true,
+    helper_bootstrap_command: "powershell -ExecutionPolicy Bypass -File \"C:/repo/codex-head/scripts/ensure-9router-antigravity-stack.ps1\"",
+    gui_config_path: "C:/Users/test/.antigravity_tools/gui_config.json",
+    gui_config_exists: true,
+    recommended_review_path_ready: true,
+    antigravity: {
+      base_url: "http://127.0.0.1:8045",
+      port: 8045,
+      reachable: true,
+      version: "4.1.21",
+      auto_start: true,
+      auto_launch: false,
+      auth_mode: "all_except_health",
+      api_key_configured: true,
+      proxy_status_available: true,
+      running: true,
+      active_accounts: 7
+    },
+    router9: {
+      base_url: "http://127.0.0.1:20128",
+      reachable: true,
+      version: "0.3.60",
+      agm_chat: {
+        prefix: "agm",
+        api_type: "chat",
+        present: true,
+        active_connection: true,
+        default_model: "agm/gpt-4o-mini",
+        upstream_base_url: "http://127.0.0.1:8045/v1"
+      },
+      agr_responses: {
+        prefix: "agr",
+        api_type: "responses",
+        present: true,
+        active_connection: true,
+        default_model: "agr/gpt-4o-mini",
+        upstream_base_url: "http://127.0.0.1:8045/v1"
+      },
+      responses_route_suitable_for_codex_cli_local: false
+    },
+    ...overrides
+  };
+}
+
 test("renderStatusBrief summarizes one task with operator guidance", () => {
   const task = createTaskSpec({
     task_id: "task-brief-1",
@@ -258,6 +306,7 @@ test("renderDoctorBrief summarizes operator findings and next actions", () => {
       enabled_workers: 3,
       workers_needing_attention: 1,
       github_findings: 1,
+      integration_findings: 1,
       tasks_needing_attention: 2,
       suppressed_task_findings: 2,
       blocking_findings: 3,
@@ -289,6 +338,31 @@ test("renderDoctorBrief summarizes operator findings and next actions", () => {
         matching_runners: [],
         runner_lookup_detail: null
       },
+      local_stack: createBriefLocalStack({
+        recommended_review_path_ready: false,
+        router9: {
+          base_url: "http://127.0.0.1:20128",
+          reachable: false,
+          version: null,
+          agm_chat: {
+            prefix: "agm",
+            api_type: "chat",
+            present: false,
+            active_connection: null,
+            default_model: null,
+            upstream_base_url: null
+          },
+          agr_responses: {
+            prefix: "agr",
+            api_type: "responses",
+            present: false,
+            active_connection: null,
+            default_model: null,
+            upstream_base_url: null
+          },
+          responses_route_suitable_for_codex_cli_local: false
+        }
+      }),
       database_path: "C:/repo/codex-head/runtime/codex-head.sqlite",
       artifacts_dir: "C:/repo/codex-head/runtime/artifacts"
     },
@@ -306,6 +380,14 @@ test("renderDoctorBrief summarizes operator findings and next actions", () => {
           severity: "error",
           summary: "GitHub dispatch is enabled but gh is not authenticated on this machine.",
           actions: ["Run gh auth login on the machine that dispatches or reconciles GitHub workflows."]
+        }
+      ],
+      integrations: [
+        {
+          integration: "local_review_stack",
+          severity: "error",
+          summary: "9router is not reachable at http://127.0.0.1:20128.",
+          actions: ["Run powershell -ExecutionPolicy Bypass -File \"C:/repo/codex-head/scripts/ensure-9router-antigravity-stack.ps1\" to start or repair the local review stack."]
         }
       ],
       tasks: [
@@ -357,8 +439,10 @@ test("renderDoctorBrief summarizes operator findings and next actions", () => {
   const rendered = renderDoctorBrief(report);
   assert.match(rendered, /^doctor: needs attention/im);
   assert.match(rendered, /history: hidden 2 older task finding\(s\) outside the 6h window/i);
+  assert.match(rendered, /local-stack: review-path-incomplete :: 9router=down :: agm-chat=missing :: antigravity=up :: accounts=7/i);
   assert.match(rendered, /workers:\n- claude-code \[error\] Worker claude-code health check failed/i);
   assert.match(rendered, /github:\n- \[error\] GitHub dispatch is enabled but gh is not authenticated/i);
+  assert.match(rendered, /integrations:\n- \[error\] 9router is not reachable at http:\/\/127\.0\.0\.1:20128\./i);
   assert.match(rendered, /tasks:\n- task-brief-doctor \[failed\/error\] Review the latest PR in GitHub/i);
   assert.match(rendered, /receipt=operator-actions\/2026-03-23T08-09-05\.877Z-run-doctor-hint\.json \[run-doctor-hint\]/i);
   assert.match(rendered, /receipt-commands:\n- task-brief-doctor :: node --disable-warning=ExperimentalWarning dist\/src\/index\.js show-operator-receipt operator-actions\/2026-03-23T08-09-05\.877Z-run-doctor-hint\.json --brief/i);
@@ -417,6 +501,7 @@ test("renderDoctorBrief keeps receipt commands aligned with visible task rows", 
       enabled_workers: 1,
       workers_needing_attention: 0,
       github_findings: 0,
+      integration_findings: 0,
       tasks_needing_attention: 9,
       suppressed_task_findings: 0,
       blocking_findings: 9,
@@ -448,12 +533,14 @@ test("renderDoctorBrief keeps receipt commands aligned with visible task rows", 
         matching_runners: [],
         runner_lookup_detail: null
       },
+      local_stack: createBriefLocalStack(),
       database_path: "C:/repo/codex-head/runtime/codex-head.sqlite",
       artifacts_dir: "C:/repo/codex-head/runtime/artifacts"
     },
     attention: {
       workers: [],
       github: [],
+      integrations: [],
       tasks
     },
     actions: ["Dispatch the queued task when the workspace and workers are ready."],
@@ -492,6 +579,7 @@ test("renderDoctorBrief keeps receipt commands aligned with visible task rows", 
   };
 
   const rendered = renderDoctorBrief(report);
+  assert.match(rendered, /local-stack: review-ready :: 9router=up :: agm-chat=ready :: antigravity=up :: accounts=7/i);
   assert.match(rendered, /tasks:\n- task-brief-visible-1/i);
   assert.match(rendered, /- 6 similar task\(s\) \[queued\/warning\] Queued task backlog :: Task is queued and waiting for dispatch\. :: examples=task-brief-visible-3, task-brief-visible-4, task-brief-visible-5, \+3 more/i);
   assert.doesNotMatch(rendered, /tasks:[\s\S]*task-brief-visible-3 \[queued\/warning\]/i);
@@ -522,6 +610,7 @@ test("renderDoctorBrief omits cleanup commands when the report is otherwise heal
       enabled_workers: 2,
       workers_needing_attention: 0,
       github_findings: 0,
+      integration_findings: 0,
       tasks_needing_attention: 0,
       suppressed_task_findings: 10,
       blocking_findings: 0,
@@ -553,12 +642,14 @@ test("renderDoctorBrief omits cleanup commands when the report is otherwise heal
         matching_runners: [],
         runner_lookup_detail: null
       },
+      local_stack: createBriefLocalStack(),
       database_path: "C:/repo/codex-head/runtime/codex-head.sqlite",
       artifacts_dir: "C:/repo/codex-head/runtime/artifacts"
     },
     attention: {
       workers: [],
       github: [],
+      integrations: [],
       tasks: []
     },
     actions: [],
@@ -579,6 +670,7 @@ test("renderDoctorBrief omits cleanup commands when the report is otherwise heal
 
   const rendered = renderDoctorBrief(report);
   assert.match(rendered, /^doctor: healthy/im);
+  assert.match(rendered, /local-stack: review-ready :: 9router=up :: agm-chat=ready :: antigravity=up :: accounts=7/i);
   assert.match(rendered, /history: hidden 10 older task finding\(s\) outside the 6h window/i);
   assert.doesNotMatch(rendered, /^next-command:/im);
   assert.doesNotMatch(rendered, /^commands:/im);
@@ -645,6 +737,7 @@ test("renderRunDoctorHintsBrief summarizes batch doctor hint execution", () => {
         enabled_workers: 2,
         workers_needing_attention: 0,
         github_findings: 0,
+        integration_findings: 0,
         tasks_needing_attention: 3,
         suppressed_task_findings: 1,
         blocking_findings: 2,
@@ -676,12 +769,14 @@ test("renderRunDoctorHintsBrief summarizes batch doctor hint execution", () => {
           matching_runners: [],
           runner_lookup_detail: null
         },
+        local_stack: createBriefLocalStack(),
         database_path: "C:/repo/codex-head/runtime/codex-head.sqlite",
         artifacts_dir: "C:/repo/codex-head/runtime/artifacts"
       },
       attention: {
         workers: [],
         github: [],
+        integrations: [],
         tasks: []
       },
       actions: [],

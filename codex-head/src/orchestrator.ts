@@ -28,6 +28,7 @@ import { TaskRouter } from "./router";
 import { computeRetryBackoffMs } from "./retry";
 import { buildTaskOperatorStatus, buildTaskStatusSnapshots, type TaskOperatorStatus } from "./status";
 import { SqliteTaskStore } from "./state-store/sqliteTaskStore";
+import { inspectLocalReviewStack } from "./localStack";
 import {
   buildDoctorReport,
   type DoctorCommandHint,
@@ -1895,6 +1896,7 @@ export class CodexHeadOrchestrator {
       readiness: await this.inspectAdapterReadiness(adapters),
       recent_penalties: this.getRecentWorkerPenalties(),
       github: this.github.inspectRuntime(),
+      local_stack: await inspectLocalReviewStack(this.config.app_root),
       database_path: this.config.database_path,
       artifacts_dir: this.config.artifacts_dir
     };

@@ -58,6 +58,26 @@ function buildDoctorCommand(): string {
   return `${CLI_BRIEF_PREFIX} doctor --brief`;
 }
 
+function renderLocalStackSummary(report: DoctorReport): string | null {
+  const stack = report.health.local_stack;
+  if (!stack.detected) {
+    return null;
+  }
+
+  const parts = [
+    stack.recommended_review_path_ready ? "review-ready" : "review-path-incomplete",
+    `9router=${stack.router9.reachable ? "up" : "down"}`,
+    `agm-chat=${stack.router9.agm_chat.present && stack.router9.agm_chat.active_connection === true ? "ready" : "missing"}`,
+    `antigravity=${stack.antigravity.reachable ? "up" : "down"}`
+  ];
+
+  if (typeof stack.antigravity.active_accounts === "number") {
+    parts.push(`accounts=${stack.antigravity.active_accounts}`);
+  }
+
+  return parts.join(" :: ");
+}
+
 function extractReceiptTaskIds(selection: Record<string, unknown>): string[] {
   const candidate = (selection as { task_ids?: unknown }).task_ids;
   if (!Array.isArray(candidate)) {
@@ -310,6 +330,11 @@ export function renderDoctorBrief(report: DoctorReport): string {
     lines.push(`history: hidden ${report.task_filter.suppressed_task_findings} older task finding(s) outside the ${windowLabel}`);
   }
 
+  const localStackSummary = renderLocalStackSummary(report);
+  if (localStackSummary) {
+    lines.push(`local-stack: ${localStackSummary}`);
+  }
+
   pushLimitedSection(
     lines,
     "workers:",
@@ -320,6 +345,12 @@ export function renderDoctorBrief(report: DoctorReport): string {
     lines,
     "github:",
     report.attention.github.map((finding) => `- [${finding.severity}] ${compactText(finding.summary, 180)}`),
+    5
+  );
+  pushLimitedSection(
+    lines,
+    "integrations:",
+    report.attention.integrations.map((finding) => `- [${finding.severity}] ${compactText(finding.summary, 180)}`),
     5
   );
   pushLimitedSection(

@@ -2894,6 +2894,8 @@ test("smokeAdapters treats template-disabled workers as opted out", async () => 
   assert.equal(claudeReadiness.healthy, false);
   assert.equal(claudeReadiness.feature_enabled, false);
   assert.equal(claudeReadiness.local_ready, false);
+  assert.equal(typeof health.local_stack.helper_script_path, "string");
+  assert.equal(typeof health.local_stack.recommended_review_path_ready, "boolean");
 });
 
 test("required reviews can complete a task through reviewer verdict aggregation", async () => {
@@ -3143,6 +3145,7 @@ test("recent local rate limits deprioritize the same worker on the next task", a
   const health = await orchestrator.smokeAdapters();
   assert.equal(Array.isArray(health.recent_penalties), true);
   assert.equal(health.recent_penalties.some((penalty) => penalty.worker_target === "codex-cli"), true);
+  assert.equal(typeof health.local_stack.router9.reachable, "boolean");
 
   const codexReadiness = health.readiness.find((entry: any) => entry.worker_target === "codex-cli");
   assert.ok(codexReadiness);

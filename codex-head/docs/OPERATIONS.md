@@ -35,6 +35,10 @@ What each command does:
 - `npm run health`: runtime binary detection, adapter readiness, GitHub config,
   GitHub CLI/auth readiness, cooldown-aware local readiness, plus database and
   artifact paths
+- the same snapshot now includes `local_stack`, which probes
+  `9router -> Antigravity-Manager`, confirms whether the `agm` chat route is
+  active, and records that the experimental `agr` responses route should not be
+  treated as a native Responses endpoint for `codex-cli`
 
 ## First Successful Run
 
@@ -159,7 +163,7 @@ also accept `--brief`.
 
 `doctor` builds on those same snapshots plus `npm run health`-style runtime
 inspection. The JSON form keeps the full `health` payload and categorized
-attention lists for workers, GitHub/runtime, and tasks. `doctor --brief`
+attention lists for workers, GitHub/runtime, integrations, and tasks. `doctor --brief`
 renders the same report as a short checklist when you only need the operator
 summary and next actions.
 
@@ -240,6 +244,8 @@ receipt path for a task when one exists, so operators can jump directly into
 - `doctor --brief`, `operator-history --brief`, and `show-operator-receipt --brief`
   also expose a standardized `next-command:` line for the safest follow-up
   command available
+- `doctor --brief` now also prints a `local-stack:` line that summarizes the
+  current `9router -> Antigravity-Manager` readiness on the machine
 - those artifact refs now include freshness labels so queued/running tasks do
   not present stale output as if it were the current attempt
 
@@ -331,6 +337,29 @@ For Antigravity-Manager, the practical local-only pattern is:
   `GOOGLE_GEMINI_BASE_URL=http://127.0.0.1:8045`
 - pass the manager API key through the matching worker env vars instead of
   rewriting your global CLI setup
+
+If you also want a local front router in front of Antigravity-Manager, use:
+
+```powershell
+pwsh -File .\scripts\ensure-9router-antigravity-stack.ps1
+```
+
+That helper:
+
+- starts `antigravity_tools --headless` on `127.0.0.1:8045` when needed
+- starts `9router` on `127.0.0.1:20128` when needed
+- ensures `agm/*` chat routing to Antigravity-Manager inside `9router`
+- ensures an experimental `agr/*` responses route for translator testing
+- prints the recommended GitHub review secrets for the self-hosted runner
+
+For GitHub review on the same Windows host, the recommended route is now:
+
+- `REVIEW_API_URL=http://127.0.0.1:20128/v1`
+- `REVIEW_API_KEY=local-9router`
+- `REVIEW_MODEL=agm/gpt-4o-mini`
+
+That stack has been verified end-to-end through
+`codex-head-gemini-review.yml` on the self-hosted runner.
 
 For WSL-backed `codex-cli`, `127.0.0.1` may still resolve inside Linux instead
 of the Windows host. In that case, use the Windows-side WSL vEthernet address
@@ -436,6 +465,12 @@ overrides, the endpoint must expose the OpenAI Responses API at
 `/v1/responses`. Codex CLI no longer supports `wire_api = "chat"`, so a local
 gateway that only offers `/v1/chat/completions` can still look healthy at the
 models endpoint while every real execution fails at runtime.
+
+`9router` is already useful for the GitHub review workflow because that
+workflow falls back from `/v1/responses` to `/v1/chat/completions`.
+However, under the current Antigravity-backed setup, `9router` still returns
+completion-shaped payloads on its `/v1/responses` route, so it should not yet
+replace a native Responses-compatible endpoint for `codex-cli` local execution.
 
 For the GitHub review workflow, the easiest no-public-endpoint path is now a
 self-hosted runner on the same Windows machine. Use

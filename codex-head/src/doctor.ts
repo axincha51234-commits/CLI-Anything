@@ -1,5 +1,6 @@
 import type { AdapterHealth, AdapterRuntimeReadiness, TaskState, WorkerTarget } from "./contracts";
 import type { GitHubRuntimeStatus } from "./github/controlPlane";
+import type { LocalReviewStackSnapshot } from "./localStack";
 import type { TaskArtifactRefs, TaskStatusSnapshot } from "./status";
 
 export type DoctorFindingSeverity = "error" | "warning" | "info";
@@ -23,6 +24,7 @@ export interface DoctorHealthSnapshot {
   readiness: AdapterRuntimeReadiness[];
   recent_penalties: DoctorPenaltySnapshot[];
   github: GitHubRuntimeStatus;
+  local_stack: LocalReviewStackSnapshot;
   database_path: string;
   artifacts_dir: string;
 }
@@ -35,6 +37,13 @@ export interface DoctorWorkerFinding {
 }
 
 export interface DoctorGitHubFinding {
+  severity: DoctorFindingSeverity;
+  summary: string;
+  actions: string[];
+}
+
+export interface DoctorIntegrationFinding {
+  integration: "local_review_stack";
   severity: DoctorFindingSeverity;
   summary: string;
   actions: string[];
@@ -93,6 +102,7 @@ export interface DoctorReport {
     enabled_workers: number;
     workers_needing_attention: number;
     github_findings: number;
+    integration_findings: number;
     tasks_needing_attention: number;
     suppressed_task_findings: number;
     blocking_findings: number;
@@ -102,6 +112,7 @@ export interface DoctorReport {
   attention: {
     workers: DoctorWorkerFinding[];
     github: DoctorGitHubFinding[];
+    integrations: DoctorIntegrationFinding[];
     tasks: DoctorTaskFinding[];
   };
   actions: string[];
@@ -306,6 +317,78 @@ function buildGitHubFindings(runtime: GitHubRuntimeStatus): DoctorGitHubFinding[
   return findings.sort((left, right) => severityRank(left.severity) - severityRank(right.severity));
 }
 
+function buildIntegrationFindings(health: DoctorHealthSnapshot): DoctorIntegrationFinding[] {
+  if (!health.github.self_hosted_targeted) {
+    return [];
+  }
+
+  const stack = health.local_stack;
+  const bootstrapAction = stack.helper_bootstrap_command
+    ? `Run ${stack.helper_bootstrap_command} to start or repair the local review stack.`
+    : "Start the local 9router and Antigravity-Manager services on this machine.";
+  const findings: DoctorIntegrationFinding[] = [];
+
+  if (!stack.antigravity.reachable && !stack.router9.reachable) {
+    findings.push({
+      integration: "local_review_stack",
+      severity: "error",
+      summary: "The self-hosted review path expects 9router and Antigravity-Manager, but neither local endpoint is reachable.",
+      actions: [bootstrapAction]
+    });
+    return findings;
+  }
+
+  if (!stack.antigravity.reachable) {
+    findings.push({
+      integration: "local_review_stack",
+      severity: "error",
+      summary: `Antigravity-Manager is not reachable at ${stack.antigravity.base_url}.`,
+      actions: [bootstrapAction]
+    });
+  }
+
+  if (!stack.router9.reachable) {
+    findings.push({
+      integration: "local_review_stack",
+      severity: "error",
+      summary: `9router is not reachable at ${stack.router9.base_url}.`,
+      actions: [bootstrapAction]
+    });
+  }
+
+  if (stack.router9.reachable && (!stack.router9.agm_chat.present || stack.router9.agm_chat.active_connection !== true)) {
+    findings.push({
+      integration: "local_review_stack",
+      severity: "error",
+      summary: "9router is up, but the agm chat route is not ready for review traffic.",
+      actions: [
+        bootstrapAction,
+        `Inspect ${stack.router9.base_url}/api/provider-nodes and ${stack.router9.base_url}/api/providers to confirm the agm route is seeded and active.`
+      ]
+    });
+  }
+
+  if (stack.antigravity.reachable && stack.antigravity.proxy_status_available && stack.antigravity.running === false) {
+    findings.push({
+      integration: "local_review_stack",
+      severity: "warning",
+      summary: "Antigravity-Manager responded, but proxy status reports the service as not running.",
+      actions: [bootstrapAction]
+    });
+  }
+
+  if (stack.antigravity.reachable && stack.antigravity.proxy_status_available && stack.antigravity.active_accounts === 0) {
+    findings.push({
+      integration: "local_review_stack",
+      severity: "warning",
+      summary: "Antigravity-Manager is reachable, but there are no active accounts in the local provider pool.",
+      actions: ["Sign in or reactivate at least one Antigravity-managed account before dispatching review work."]
+    });
+  }
+
+  return findings.sort((left, right) => severityRank(left.severity) - severityRank(right.severity));
+}
+
 function deriveTaskSummary(task: TaskStatusSnapshot): string {
   if (task.operator.summary) {
     return task.operator.summary;
@@ -467,6 +550,7 @@ function buildSummary(
   informationalFindings: number,
   workerFindings: DoctorWorkerFinding[],
   githubFindings: DoctorGitHubFinding[],
+  integrationFindings: DoctorIntegrationFinding[],
   taskFindings: DoctorTaskFinding[]
 ): string {
   if (blockingFindings === 0 && informationalFindings === 0) {
@@ -481,6 +565,7 @@ function buildSummary(
   const segments = [
     workerFindings.length > 0 ? pluralize(workerFindings.length, "worker finding") : "",
     githubFindings.length > 0 ? pluralize(githubFindings.length, "GitHub finding") : "",
+    integrationFindings.length > 0 ? pluralize(integrationFindings.length, "integration finding") : "",
     blockingTaskFindings > 0 ? pluralize(blockingTaskFindings, "task finding") : ""
   ].filter(Boolean);
 
@@ -537,11 +622,13 @@ export function buildDoctorReport(
     : (options.now ?? Date.now()) - taskWindowHours * 60 * 60 * 1000;
   const workerFindings = buildWorkerFindings(health);
   const githubFindings = buildGitHubFindings(health.github);
+  const integrationFindings = buildIntegrationFindings(health);
   const taskFindingSummary = buildTaskFindings(tasks, includeAllTaskHistory, cutoffTimestamp);
   const taskFindings = taskFindingSummary.findings;
   const findings = [
     ...workerFindings,
     ...githubFindings,
+    ...integrationFindings,
     ...taskFindings
   ];
   const blockingFindings = findings.filter((entry) => entry.severity !== "info").length;
@@ -558,6 +645,7 @@ export function buildDoctorReport(
       informationalFindings,
       workerFindings,
       githubFindings,
+      integrationFindings,
       taskFindings
     ),
     task_filter: {
@@ -572,6 +660,7 @@ export function buildDoctorReport(
       enabled_workers: enabledWorkers,
       workers_needing_attention: workerFindings.length,
       github_findings: githubFindings.length,
+      integration_findings: integrationFindings.length,
       tasks_needing_attention: taskFindings.length,
       suppressed_task_findings: taskFindingSummary.suppressedCount,
       blocking_findings: blockingFindings,
@@ -581,11 +670,13 @@ export function buildDoctorReport(
     attention: {
       workers: workerFindings,
       github: githubFindings,
+      integrations: integrationFindings,
       tasks: taskFindings
     },
     actions: dedupe([
       ...workerFindings.flatMap((entry) => entry.actions),
       ...githubFindings.flatMap((entry) => entry.actions),
+      ...integrationFindings.flatMap((entry) => entry.actions),
       ...taskFindings.flatMap((entry) => entry.actions)
     ]),
     command_hints: buildCommandHints(
