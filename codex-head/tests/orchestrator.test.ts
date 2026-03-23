@@ -1052,6 +1052,13 @@ test("recoverRunningTasks preserves queued wait detail when fallback sync also f
         reason: "The run is still queued even though a matching self-hosted runner appears online and idle; a stale broker session is likely.",
         suggested_action: "Consider recycling the self-hosted runner before retrying."
       });
+      orchestrator.artifactStore.writeJson(task.task.task_id, "github-queue-recycle.json", {
+        task_id: task.task.task_id,
+        run_id: 321,
+        ok: true,
+        skipped: false,
+        detail: "Automatic self-hosted runner recycle completed successfully."
+      });
       throw new Error(
         `GitHub run 321 appears stuck in queued state for task ${task.task.task_id}: `
         + "The run is still queued even though a matching self-hosted runner appears online and idle; a stale broker session is likely."
@@ -1072,10 +1079,13 @@ test("recoverRunningTasks preserves queued wait detail when fallback sync also f
   assert.match(recovered[0]?.detail ?? "", /stuck in queued state/i);
   assert.match(recovered[0]?.detail ?? "", /Fallback callback sync also failed/i);
   assert.match(recovered[0]?.detail ?? "", /github-queue-diagnosis\.json/i);
+  assert.match(recovered[0]?.detail ?? "", /manual intervention is now required/i);
+  assert.match(recovered[0]?.detail ?? "", /github-queue-recycle\.json/i);
 
   const record = orchestrator.getTask(task.task.task_id);
   assert.equal(record.state, "failed");
   assert.match(record.last_error ?? "", /Fallback callback sync also failed/i);
+  assert.match(record.last_error ?? "", /manual intervention is now required/i);
 });
 
 test("recoverRunningTasks fails unresolved GitHub tasks when no run or callback can be found", async () => {

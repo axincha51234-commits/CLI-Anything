@@ -1057,7 +1057,26 @@ export class CodexHeadOrchestrator {
       detail = `${detail} See ${diagnosisPath} for runner queue diagnosis.`;
     }
 
+    const recyclePath = join(this.artifactStore.getTaskDir(taskId), "github-queue-recycle.json");
+    if (this.hasSuccessfulQueueRecycle(taskId) && !/manual intervention is now required/i.test(detail)) {
+      detail = `${detail} Automatic stale-runner recovery was already attempted and manual intervention is now required. See ${recyclePath}.`;
+    }
+
     return detail;
+  }
+
+  private hasSuccessfulQueueRecycle(taskId: string): boolean {
+    const recyclePath = join(this.artifactStore.getTaskDir(taskId), "github-queue-recycle.json");
+    if (!existsSync(recyclePath)) {
+      return false;
+    }
+
+    try {
+      const parsed = JSON.parse(readFileSync(recyclePath, "utf8")) as { ok?: boolean };
+      return parsed.ok === true;
+    } catch {
+      return false;
+    }
   }
 
   private async inspectAdapterReadiness(healthEntries?: Awaited<ReturnType<AdapterRegistry["health"]>>): Promise<AdapterRuntimeReadiness[]> {
