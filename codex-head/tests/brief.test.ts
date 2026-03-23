@@ -267,6 +267,7 @@ test("renderSweepBrief summarizes bulk task actions", () => {
   const rendered = renderSweepBrief({
     action: "cancel",
     dry_run: true,
+    receipt_path: "operator-actions/2026-03-23T12-00-00.000Z-sweep-tasks.json",
     filters: {
       states: ["queued", "failed"],
       older_than_hours: 6,
@@ -302,6 +303,7 @@ test("renderSweepBrief summarizes bulk task actions", () => {
   assert.match(rendered, /^sweep: cancel \(dry-run\)$/im);
   assert.match(rendered, /summary: matched 2, actionable 2/i);
   assert.match(rendered, /tasks:\n- task-sweep-1 \[queued -> canceled\]/i);
+  assert.match(rendered, /receipt: operator-actions\/2026-03-23T12-00-00\.000Z-sweep-tasks\.json/i);
 });
 
 test("renderRunDoctorHintsBrief summarizes batch doctor hint execution", () => {
@@ -368,6 +370,7 @@ test("renderRunDoctorHintsBrief summarizes batch doctor hint execution", () => {
     limit: 2,
     apply: false,
     allow_multi_task_apply: false,
+    confirm_token: "abc123def456",
     total_matched: 2,
     total_actionable: 2,
     preview: [
@@ -385,6 +388,7 @@ test("renderRunDoctorHintsBrief summarizes batch doctor hint execution", () => {
         result: {
           action: "cancel",
           dry_run: true,
+          receipt_path: null,
           filters: {
             states: ["planned", "queued", "failed"],
             older_than_hours: null,
@@ -412,6 +416,7 @@ test("renderRunDoctorHintsBrief summarizes batch doctor hint execution", () => {
         result: {
           action: "cancel",
           dry_run: true,
+          receipt_path: null,
           filters: {
             states: ["planned", "queued", "failed"],
             older_than_hours: null,
@@ -426,6 +431,7 @@ test("renderRunDoctorHintsBrief summarizes batch doctor hint execution", () => {
         }
       }
     ],
+    receipt_path: "operator-actions/2026-03-23T12-05-00.000Z-run-doctor-hints.json",
     results: [
       {
         hint: {
@@ -441,6 +447,7 @@ test("renderRunDoctorHintsBrief summarizes batch doctor hint execution", () => {
         result: {
           action: "cancel",
           dry_run: true,
+          receipt_path: null,
           filters: {
             states: ["planned", "queued", "failed"],
             older_than_hours: null,
@@ -468,6 +475,7 @@ test("renderRunDoctorHintsBrief summarizes batch doctor hint execution", () => {
         result: {
           action: "cancel",
           dry_run: true,
+          receipt_path: null,
           filters: {
             states: ["planned", "queued", "failed"],
             older_than_hours: null,
@@ -486,8 +494,10 @@ test("renderRunDoctorHintsBrief summarizes batch doctor hint execution", () => {
 
   assert.match(rendered, /^doctor-hints: 2 selected \(dry-run\)$/im);
   assert.match(rendered, /summary: matched 2, actionable 2/i);
+  assert.match(rendered, /confirm-token: abc123def456/i);
   assert.match(rendered, /kind: queued_backlog/i);
   assert.match(rendered, /limit: 2/i);
-  assert.match(rendered, /next: review this preview, then rerun with --apply --allow-multi-task-apply/i);
+  assert.match(rendered, /next: rerun with --apply --allow-multi-task-apply --confirm-token abc123def456/i);
   assert.match(rendered, /hints:\n- queued-backlog-1 \[queued_backlog\]/i);
+  assert.match(rendered, /receipt: operator-actions\/2026-03-23T12-05-00\.000Z-run-doctor-hints\.json/i);
 });

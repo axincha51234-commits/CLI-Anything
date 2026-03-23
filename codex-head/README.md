@@ -180,6 +180,9 @@ currently local-ready and exposes the matching cooldown reason.
 - `run-doctor-hints` now batches the currently visible doctor hints by `kind`
   and `limit`, while keeping dry-run as the default safety rail. Multi-task
   batch apply now also requires an explicit `--allow-multi-task-apply` guard.
+- `sweep-tasks`, `run-doctor-hint`, and `run-doctor-hints` now each write one
+  JSON receipt under `runtime/artifacts/operator-actions/` so backlog cleanup
+  and batch apply activity stays auditable without adding more SQLite state.
 - `sweep-tasks` now gives operators a filtered bulk action for backlog triage.
   It can dry-run or apply `cancel` and `requeue` across selected tasks without
   deleting history from SQLite.

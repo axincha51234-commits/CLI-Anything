@@ -181,6 +181,9 @@ operator command instead of only describing the problem.
   `--allow-multi-task-apply` as an explicit batch guard
 - it still rebuilds the doctor report first and only executes each hint's
   structured sweep payload
+- every `sweep-tasks`, `run-doctor-hint`, and `run-doctor-hints` invocation
+  now writes one JSON receipt under `runtime/artifacts/operator-actions/`
+  so operator cleanup history is easy to audit later
 
 `sweep-tasks` is intentionally conservative:
 

@@ -6,6 +6,12 @@ export class FileArtifactStore {
     mkdirSync(this.rootDir, { recursive: true });
   }
 
+  getOperatorActionsDir(): string {
+    const dir = join(this.rootDir, "operator-actions");
+    mkdirSync(dir, { recursive: true });
+    return dir;
+  }
+
   getTaskDir(taskId: string): string {
     const taskDir = join(this.rootDir, taskId);
     mkdirSync(taskDir, { recursive: true });
@@ -20,6 +26,15 @@ export class FileArtifactStore {
     const filePath = join(this.getTaskDir(taskId), name);
     writeFileSync(filePath, JSON.stringify(value, null, 2), "utf8");
     return filePath;
+  }
+
+  writeOperatorReceipt(commandName: string, value: unknown): string {
+    const timestamp = new Date().toISOString().replace(/:/g, "-");
+    const safeCommand = commandName.replace(/[^a-z0-9_-]+/gi, "-").toLowerCase();
+    const fileName = `${timestamp}-${safeCommand}.json`;
+    const filePath = join(this.getOperatorActionsDir(), fileName);
+    writeFileSync(filePath, JSON.stringify(value, null, 2), "utf8");
+    return `operator-actions/${fileName}`;
   }
 
   readJsonIfExists<T>(taskId: string, name: string): T | null {

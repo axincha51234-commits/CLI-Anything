@@ -154,6 +154,7 @@ export interface SweepTasksEntry {
 export interface SweepTasksResult {
   action: SweepTasksOptions["action"];
   dry_run: boolean;
+  receipt_path: string | null;
   filters: {
     states: TaskState[];
     older_than_hours: number | null;
@@ -171,6 +172,7 @@ export interface RunDoctorHintResult {
   report: DoctorReport;
   hint: DoctorCommandHint;
   result: SweepTasksResult;
+  receipt_path: string | null;
 }
 
 export interface RunDoctorHintsEntryResult {
@@ -189,6 +191,7 @@ export interface RunDoctorHintsResult {
   total_actionable: number;
   preview: RunDoctorHintsEntryResult[];
   results: RunDoctorHintsEntryResult[];
+  receipt_path: string | null;
 }
 
 interface WorkerPenalty {
@@ -1190,6 +1193,7 @@ export class CodexHeadOrchestrator {
     return {
       action: options.action,
       dry_run: dryRun,
+      receipt_path: null,
       filters: {
         states: selectedStates,
         older_than_hours: olderThanHours,
@@ -1201,6 +1205,35 @@ export class CodexHeadOrchestrator {
       matched: entries.length,
       changed: entries.filter((entry) => entry.changed).length,
       tasks: entries
+    };
+  }
+
+  runSweepTasks(options: SweepTasksOptions): SweepTasksResult {
+    const result = this.sweepTasks(options);
+    const receipt_path = this.writeOperatorReceipt("sweep-tasks", {
+      schema_version: 1,
+      command: "sweep-tasks",
+      created_at: new Date().toISOString(),
+      dry_run: result.dry_run,
+      apply: !result.dry_run,
+      selection: {
+        states: result.filters.states,
+        older_than_hours: result.filters.older_than_hours,
+        goal_contains: result.filters.goal_contains,
+        worker_target: result.filters.worker_target,
+        task_ids: result.filters.task_ids,
+        limit: result.filters.limit
+      },
+      summary: {
+        matched: result.matched,
+        actionable: result.changed,
+        changed: result.dry_run ? 0 : result.changed
+      },
+      tasks: result.tasks
+    });
+    return {
+      ...result,
+      receipt_path
     };
   }
 
@@ -1221,11 +1254,45 @@ export class CodexHeadOrchestrator {
     if (!hint) {
       throw new Error(`doctor hint ${hintId} was not found`);
     }
+    const result = this.executeDoctorHintSweep(hint, Boolean(options.apply));
+    const receipt_path = this.writeOperatorReceipt("run-doctor-hint", {
+      schema_version: 1,
+      command: "run-doctor-hint",
+      created_at: new Date().toISOString(),
+      dry_run: result.dry_run,
+      apply: !result.dry_run,
+      selection: {
+        hint_id: hint.id,
+        kind: hint.kind,
+        include_all_task_history: options.include_all_task_history ?? false,
+        task_window_hours: options.include_all_task_history ? null : (options.task_window_hours ?? 6)
+      },
+      summary: {
+        matched: result.matched,
+        actionable: result.changed,
+        changed: result.dry_run ? 0 : result.changed
+      },
+      hints: [
+        {
+          id: hint.id,
+          kind: hint.kind,
+          reason: hint.reason,
+          matched: result.matched,
+          actionable: result.changed,
+          changed: result.dry_run ? 0 : result.changed
+        }
+      ],
+      tasks: result.tasks
+    });
 
     return {
       report,
       hint,
-      result: this.executeDoctorHintSweep(hint, Boolean(options.apply))
+      result: {
+        ...result,
+        receipt_path
+      },
+      receipt_path
     };
   }
 
@@ -1280,6 +1347,40 @@ export class CodexHeadOrchestrator {
       );
     }
     const apply = Boolean(options.apply);
+    const results = apply
+      ? selectedHints.map((hint) => ({
+        hint,
+        result: this.executeDoctorHintSweep(hint, true)
+      }))
+      : preview;
+    const receipt_path = this.writeOperatorReceipt("run-doctor-hints", {
+      schema_version: 1,
+      command: "run-doctor-hints",
+      created_at: new Date().toISOString(),
+      dry_run: !apply,
+      apply,
+      selection: {
+        kind: options.kind ?? null,
+        limit,
+        confirm_token: confirmToken,
+        include_all_task_history: options.include_all_task_history ?? false,
+        task_window_hours: options.include_all_task_history ? null : (options.task_window_hours ?? 6)
+      },
+      summary: {
+        matched: previewSummary.totalMatched,
+        actionable: previewSummary.totalActionable,
+        changed: apply ? previewSummary.totalActionable : 0
+      },
+      hints: results.map((entry) => ({
+        id: entry.hint.id,
+        kind: entry.hint.kind,
+        reason: entry.hint.reason,
+        matched: entry.result.matched,
+        actionable: entry.result.changed,
+        changed: entry.result.dry_run ? 0 : entry.result.changed
+      })),
+      tasks: flattenSweepEntries(results)
+    });
 
     return {
       report,
@@ -1291,12 +1392,14 @@ export class CodexHeadOrchestrator {
       total_matched: previewSummary.totalMatched,
       total_actionable: previewSummary.totalActionable,
       preview,
-      results: apply
-        ? selectedHints.map((hint) => ({
-          hint,
-          result: this.executeDoctorHintSweep(hint, true)
-        }))
-        : preview
+      results: results.map((entry) => ({
+        hint: entry.hint,
+        result: {
+          ...entry.result,
+          receipt_path
+        }
+      })),
+      receipt_path
     };
   }
 
@@ -1327,6 +1430,10 @@ export class CodexHeadOrchestrator {
       limit: hint.sweep.limit,
       dry_run: !apply
     });
+  }
+
+  private writeOperatorReceipt(commandName: string, payload: unknown): string {
+    return this.artifactStore.writeOperatorReceipt(commandName, payload);
   }
 
   private createRunDoctorHintsConfirmToken(
@@ -1483,4 +1590,14 @@ function summarizeRunDoctorHints(results: RunDoctorHintsEntryResult[]): {
     totalMatched: matchedTaskIds.size,
     totalActionable: actionableTaskIds.size
   };
+}
+
+function flattenSweepEntries(results: RunDoctorHintsEntryResult[]): SweepTasksEntry[] {
+  const byTaskId = new Map<string, SweepTasksEntry>();
+  for (const entry of results) {
+    for (const task of entry.result.tasks) {
+      byTaskId.set(task.task_id, task);
+    }
+  }
+  return [...byTaskId.values()];
 }

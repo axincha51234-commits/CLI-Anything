@@ -811,7 +811,7 @@ async function main(): Promise<void> {
 
   if (command === "sweep-tasks") {
     const parsed = parseSweepArgs(rest);
-    const result = orchestrator.sweepTasks({
+    const result = orchestrator.runSweepTasks({
       action: parsed.action,
       states: parsed.states,
       older_than_hours: parsed.olderThanHours,

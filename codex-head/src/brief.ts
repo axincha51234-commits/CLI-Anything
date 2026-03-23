@@ -169,6 +169,9 @@ export function renderSweepBrief(result: SweepTasksResult): string {
     return `- ${entry.task_id} [${marker}] ${compactText(entry.goal, 100)} :: ${compactText(entry.reason, 140)}`;
   });
   pushLimitedSection(lines, "tasks:", taskLines, 8);
+  if (result.receipt_path) {
+    lines.push(`receipt: ${result.receipt_path}`);
+  }
 
   return lines.join("\n");
 }
@@ -215,6 +218,9 @@ export function renderRunDoctorHintsBrief(result: RunDoctorHintsResult): string 
     )),
     8
   );
+  if (result.receipt_path) {
+    lines.push(`receipt: ${result.receipt_path}`);
+  }
 
   return lines.join("\n");
 }

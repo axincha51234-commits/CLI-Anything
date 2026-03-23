@@ -1864,6 +1864,7 @@ test("sweepTasks can dry-run cancel selected backlog tasks without mutating stat
   assert.deepEqual(result.tasks.map((entry) => entry.task_id), ["task-sweep-queued", "task-sweep-failed"]);
   assert.equal(orchestrator.getTask("task-sweep-queued").state, "queued");
   assert.equal(orchestrator.getTask("task-sweep-failed").state, "failed");
+  assert.equal(result.receipt_path, null);
 });
 
 test("sweepTasks can requeue planned and failed tasks while skipping unsupported states", async () => {
@@ -1936,6 +1937,31 @@ test("sweepTasks can requeue planned and failed tasks while skipping unsupported
     result.tasks.find((entry) => entry.task_id === queuedTask.task.task_id)?.reason.includes("cannot be requeued"),
     true
   );
+  assert.equal(result.receipt_path, null);
+});
+
+test("runSweepTasks writes an operator receipt under artifacts/operator-actions", async () => {
+  const root = createTempDir("codex-head-run-sweep-receipt-");
+  const registry = new AdapterRegistry();
+  const orchestrator = createAppWithRegistry(root, registry);
+
+  const queuedTask = orchestrator.submitTask(createTaskSpec({
+    task_id: "task-sweep-receipt-queued",
+    goal: "Summarize the current orchestration state",
+    repo: root,
+    worker_target: "codex-cli",
+    expected_output: { kind: "analysis", format: "markdown", code_change: false }
+  }));
+  orchestrator.enqueueTask(queuedTask.task.task_id);
+
+  const result = orchestrator.runSweepTasks({
+    action: "cancel",
+    task_ids: [queuedTask.task.task_id],
+    dry_run: true
+  });
+
+  assert.match(result.receipt_path ?? "", /^operator-actions\/.+-sweep-tasks\.json$/i);
+  assert.equal(existsSync(`${root}/artifacts/${result.receipt_path}`), true);
 });
 
 test("runDoctorHint defaults to dry-run and applies the selected structured sweep hint", async () => {
@@ -1956,11 +1982,15 @@ test("runDoctorHint defaults to dry-run and applies the selected structured swee
   assert.equal(dryRun.hint.id, "queued-backlog-1");
   assert.equal(dryRun.result.dry_run, true);
   assert.equal(dryRun.result.changed, 1);
+  assert.match(dryRun.receipt_path ?? "", /^operator-actions\/.+-run-doctor-hint\.json$/i);
+  assert.equal(dryRun.result.receipt_path, dryRun.receipt_path);
+  assert.equal(existsSync(`${root}/artifacts/${dryRun.receipt_path}`), true);
   assert.equal(orchestrator.getTask(queuedTask.task.task_id).state, "queued");
 
   const applied = await orchestrator.runDoctorHint("queued-backlog-1", { apply: true });
   assert.equal(applied.result.dry_run, false);
   assert.equal(applied.result.changed, 1);
+  assert.match(applied.receipt_path ?? "", /^operator-actions\/.+-run-doctor-hint\.json$/i);
   assert.equal(orchestrator.getTask(queuedTask.task.task_id).state, "canceled");
 });
 
@@ -2009,6 +2039,8 @@ test("runDoctorHints defaults to dry-run and can filter queued backlog hints wit
   assert.equal(result.total_actionable, 2);
   assert.equal(result.results.length, 2);
   assert.equal(result.preview.length, 2);
+  assert.match(result.receipt_path ?? "", /^operator-actions\/.+-run-doctor-hints\.json$/i);
+  assert.equal(existsSync(`${root}/artifacts/${result.receipt_path}`), true);
   assert.deepEqual(
     result.results.map((entry) => entry.hint.id),
     ["queued-backlog-1", "queued-backlog-2"]
@@ -2079,6 +2111,7 @@ test("runDoctorHints can apply a filtered suppressed backlog hint", async () => 
   assert.equal(result.total_matched, 1);
   assert.equal(result.total_actionable, 1);
   assert.equal(result.results.length, 1);
+  assert.match(result.receipt_path ?? "", /^operator-actions\/.+-run-doctor-hints\.json$/i);
   assert.equal(result.results[0]?.hint.id, "suppressed-failed-backlog");
   assert.equal(result.results[0]?.result.dry_run, false);
   assert.equal(result.results[0]?.result.changed, 1);
@@ -2185,6 +2218,7 @@ test("runDoctorHints can apply a multi-task batch after the explicit guard is pr
   assert.equal(result.confirm_token, preview.confirm_token);
   assert.equal(result.total_actionable, 2);
   assert.equal(result.results.length, 2);
+  assert.match(result.receipt_path ?? "", /^operator-actions\/.+-run-doctor-hints\.json$/i);
   assert.equal(result.results.every((entry) => entry.result.dry_run === false), true);
   assert.equal(orchestrator.getTask("task-doctor-hints-guard-apply-1").state, "canceled");
   assert.equal(orchestrator.getTask("task-doctor-hints-guard-apply-2").state, "canceled");
