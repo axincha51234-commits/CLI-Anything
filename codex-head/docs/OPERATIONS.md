@@ -152,6 +152,9 @@ By default, `doctor` highlights active tasks plus recent failures and suppresses
 older failed backlog into summary counts so the operator view stays current.
 Use `--all-tasks` to include the full backlog, or `--task-window-hours N` to
 change the recency window used for failed-task triage.
+It now also emits dry-run `sweep-tasks` command hints for queued backlog and
+suppressed failed backlog, so the report can point straight at the next safe
+operator command instead of only describing the problem.
 
 `sweep-tasks` is intentionally conservative:
 

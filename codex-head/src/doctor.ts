@@ -46,6 +46,12 @@ export interface DoctorTaskFinding {
   manual_intervention_required: boolean;
 }
 
+export interface DoctorCommandHint {
+  kind: "queued_backlog" | "suppressed_failed_backlog";
+  reason: string;
+  command: string;
+}
+
 export interface DoctorReport {
   ok: boolean;
   generated_at: string;
@@ -74,6 +80,7 @@ export interface DoctorReport {
     tasks: DoctorTaskFinding[];
   };
   actions: string[];
+  command_hints: DoctorCommandHint[];
 }
 
 export interface DoctorOptions {
@@ -449,6 +456,32 @@ function buildSummary(
   return `Found ${pluralize(blockingFindings, "blocking item")} across ${joinedSegments}.`;
 }
 
+function buildCommandHints(
+  taskFindings: DoctorTaskFinding[],
+  taskWindowHours: number | null,
+  suppressedTaskFindings: number
+): DoctorCommandHint[] {
+  const hints: DoctorCommandHint[] = [];
+
+  for (const entry of taskFindings.filter((task) => task.state === "queued").slice(0, 3)) {
+    hints.push({
+      kind: "queued_backlog",
+      reason: `Inspect queued task ${entry.task_id} before canceling it from the backlog.`,
+      command: `node dist/src/index.js sweep-tasks cancel --task-id ${entry.task_id} --dry-run --brief`
+    });
+  }
+
+  if (suppressedTaskFindings > 0 && taskWindowHours !== null) {
+    hints.push({
+      kind: "suppressed_failed_backlog",
+      reason: "Inspect older failed tasks hidden by the current doctor window before canceling them in bulk.",
+      command: `node dist/src/index.js sweep-tasks cancel --state failed --older-than-hours ${taskWindowHours} --dry-run --brief`
+    });
+  }
+
+  return hints;
+}
+
 export function buildDoctorReport(
   health: DoctorHealthSnapshot,
   tasks: TaskStatusSnapshot[],
@@ -511,6 +544,11 @@ export function buildDoctorReport(
       ...workerFindings.flatMap((entry) => entry.actions),
       ...githubFindings.flatMap((entry) => entry.actions),
       ...taskFindings.flatMap((entry) => entry.actions)
-    ])
+    ]),
+    command_hints: buildCommandHints(
+      taskFindings,
+      includeAllTaskHistory ? null : taskWindowHours,
+      taskFindingSummary.suppressedCount
+    )
   };
 }

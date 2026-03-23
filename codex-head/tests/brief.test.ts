@@ -231,6 +231,13 @@ test("renderDoctorBrief summarizes operator findings and next actions", () => {
       "Inspect the claude-code health command and local runtime.",
       "Run gh auth login on the machine that dispatches or reconciles GitHub workflows.",
       "Inspect C:/repo/codex-head/runtime/artifacts/task-brief-doctor/github-queue-recycle.json and retry."
+    ],
+    command_hints: [
+      {
+        kind: "suppressed_failed_backlog",
+        reason: "Inspect older failed tasks hidden by the current doctor window before canceling them in bulk.",
+        command: "node dist/src/index.js sweep-tasks cancel --state failed --older-than-hours 6 --dry-run --brief"
+      }
     ]
   };
 
@@ -241,6 +248,7 @@ test("renderDoctorBrief summarizes operator findings and next actions", () => {
   assert.match(rendered, /github:\n- \[error\] GitHub dispatch is enabled but gh is not authenticated/i);
   assert.match(rendered, /tasks:\n- task-brief-doctor \[failed\/error\] Review the latest PR in GitHub/i);
   assert.match(rendered, /next:\n- Inspect the claude-code health command and local runtime\./i);
+  assert.match(rendered, /commands:\n- node dist\/src\/index\.js sweep-tasks cancel --state failed --older-than-hours 6 --dry-run --brief/i);
 });
 
 test("renderSweepBrief summarizes bulk task actions", () => {

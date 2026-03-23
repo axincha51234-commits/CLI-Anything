@@ -148,6 +148,12 @@ export function renderDoctorBrief(report: DoctorReport): string {
     report.actions.map((action) => `- ${compactText(action, 180)}`),
     8
   );
+  pushLimitedSection(
+    lines,
+    "commands:",
+    report.command_hints.map((hint) => `- ${hint.command}`),
+    6
+  );
 
   return lines.join("\n");
 }

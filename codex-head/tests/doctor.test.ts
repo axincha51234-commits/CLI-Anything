@@ -213,6 +213,7 @@ test("buildDoctorReport aggregates worker, GitHub, and task findings", () => {
   assert.equal(report.task_filter.suppressed_task_findings, 0);
   assert.equal(report.actions.some((value) => /gh auth login/i.test(value)), true);
   assert.equal(report.actions.some((value) => /github-queue-recycle\.json/i.test(value)), true);
+  assert.equal(report.command_hints.length, 0);
   assert.equal(report.summary.includes("blocking item"), true);
   assert.equal(report.attention.tasks[0]?.task_id, "task-doctor-failed");
 });
@@ -292,6 +293,7 @@ test("buildDoctorReport stays healthy when workers and completed tasks are clean
   assert.equal(report.attention.github.length, 0);
   assert.equal(report.attention.tasks.length, 0);
   assert.equal(report.actions.length, 0);
+  assert.equal(report.command_hints.length, 0);
   assert.match(report.summary, /No blocking issues found/i);
 });
 
@@ -368,6 +370,10 @@ test("buildDoctorReport hides older failed backlog by default but can include al
   assert.equal(filtered.attention.tasks.some((entry) => entry.task_id === "task-doctor-stale-failed"), false);
   assert.equal(filtered.attention.tasks.some((entry) => entry.task_id === "task-doctor-recent-running"), true);
   assert.equal(filtered.task_filter.suppressed_task_findings, 1);
+  assert.equal(
+    filtered.command_hints.some((entry) => entry.kind === "suppressed_failed_backlog"),
+    true
+  );
 
   const allTasks = buildDoctorReport(
     health,
@@ -380,4 +386,55 @@ test("buildDoctorReport hides older failed backlog by default but can include al
   assert.equal(allTasks.attention.tasks.some((entry) => entry.task_id === "task-doctor-stale-failed"), true);
   assert.equal(allTasks.task_filter.suppressed_task_findings, 0);
   assert.equal(allTasks.task_filter.task_window_hours, null);
+  assert.equal(allTasks.command_hints.some((entry) => entry.kind === "suppressed_failed_backlog"), false);
+});
+
+test("buildDoctorReport emits task-specific queued backlog command hints", () => {
+  const health: DoctorHealthSnapshot = {
+    adapters: [
+      { worker_target: "codex-cli", healthy: true, reason: "ok", detected_binary: "codex.exe" }
+    ],
+    readiness: [
+      {
+        worker_target: "codex-cli",
+        healthy: true,
+        feature_enabled: true,
+        supports_local: true,
+        supports_github: false,
+        has_local_template: true,
+        local_ready: true,
+        github_ready: false,
+        cooldown_until: null,
+        cooldown_reason: null
+      }
+    ],
+    recent_penalties: [],
+    github: createGitHubRuntime({ enabled: false, self_hosted_targeted: false, matching_runners: [] }),
+    database_path: "C:/repo/codex-head/runtime/codex-head.sqlite",
+    artifacts_dir: "C:/repo/codex-head/runtime/artifacts"
+  };
+
+  const queuedTask = createStatusSnapshot({
+    task: createTaskSpec({
+      task_id: "task-doctor-queued-hint",
+      goal: "Summarize the current orchestration state",
+      repo: "C:/repo",
+      worker_target: "codex-cli",
+      expected_output: { kind: "analysis", format: "markdown", code_change: false }
+    }),
+    state: "queued",
+    routing: {
+      worker_target: "codex-cli",
+      mode: "local",
+      reason: "test",
+      fallback_from: null
+    }
+  });
+
+  const report = buildDoctorReport(health, [queuedTask]);
+  assert.equal(report.command_hints.some((entry) => entry.kind === "queued_backlog"), true);
+  assert.equal(
+    report.command_hints.some((entry) => /--task-id task-doctor-queued-hint --dry-run --brief/i.test(entry.command)),
+    true
+  );
 });

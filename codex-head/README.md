@@ -171,6 +171,9 @@ currently local-ready and exposes the matching cooldown reason.
 - By default, `doctor` now emphasizes active work plus recent failures and
   suppresses older failed backlog into summary counts. Use `doctor --all-tasks`
   or `doctor --task-window-hours N` when you want broader history.
+- `doctor` now also emits structured dry-run sweep hints for queued backlog and
+  suppressed failed backlog, so operators can jump straight into a safe
+  `sweep-tasks ... --dry-run --brief` command.
 - `sweep-tasks` now gives operators a filtered bulk action for backlog triage.
   It can dry-run or apply `cancel` and `requeue` across selected tasks without
   deleting history from SQLite.
