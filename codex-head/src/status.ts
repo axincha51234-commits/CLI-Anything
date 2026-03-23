@@ -37,6 +37,7 @@ export interface TaskOperatorStatus {
 }
 
 export interface TaskStatusSnapshot extends TaskRecord {
+  artifact_dir_path: string;
   operator: TaskOperatorStatus;
 }
 
@@ -232,6 +233,7 @@ export function buildTaskStatusSnapshot(
 ): TaskStatusSnapshot {
   return {
     ...record,
+    artifact_dir_path: artifactStore.resolveTaskDir(record.task.task_id),
     operator: buildTaskOperatorStatus(record, artifactStore)
   };
 }

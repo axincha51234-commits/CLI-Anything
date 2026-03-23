@@ -116,6 +116,10 @@ test("buildTaskStatusSnapshot surfaces queue diagnosis and recycle state", () =>
   assert.match(snapshot.operator.queue_diagnosis_path ?? "", /github-queue-diagnosis\.json$/i);
   assert.equal(snapshot.operator.queue_recycle?.ok, true);
   assert.match(snapshot.operator.queue_recycle_path ?? "", /github-queue-recycle\.json$/i);
+  assert.match(
+    snapshot.artifact_dir_path,
+    new RegExp(`artifacts[\\\\/]${record.task.task_id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i")
+  );
   assert.equal(snapshot.operator.latest_receipt_path, latestReceiptPath);
   assert.equal(snapshot.operator.latest_receipt_command, "run-doctor-hint");
   assert.equal(snapshot.operator.latest_receipt_created_at, "2026-03-23T09:00:00.000Z");
@@ -151,6 +155,10 @@ test("buildTaskStatusSnapshots stays read-only when queue artifacts do not exist
   const [snapshot] = buildTaskStatusSnapshots([record], artifactStore);
 
   assert.equal(existsSync(taskDir), false);
+  assert.match(
+    snapshot?.artifact_dir_path ?? "",
+    new RegExp(`artifacts[\\\\/]${record.task.task_id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i")
+  );
   assert.equal(snapshot?.operator.queue_diagnosis, null);
   assert.equal(snapshot?.operator.queue_recycle, null);
   assert.equal(snapshot?.operator.latest_receipt_path, null);

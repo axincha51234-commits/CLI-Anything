@@ -45,6 +45,8 @@ export interface DoctorTaskFinding {
   goal: string;
   worker_target: WorkerTarget;
   routing_mode: "local" | "github" | null;
+  artifact_dir_path: string;
+  github_run_url: string | null;
   severity: DoctorFindingSeverity;
   summary: string;
   actions: string[];
@@ -408,6 +410,8 @@ function summarizeTaskFinding(
     goal: task.task.goal,
     worker_target: task.task.worker_target,
     routing_mode: task.routing?.mode ?? null,
+    artifact_dir_path: task.artifact_dir_path,
+    github_run_url: task.github_run?.run_url ?? null,
     severity,
     summary: deriveTaskSummary(task),
     actions: deriveTaskActions(task),

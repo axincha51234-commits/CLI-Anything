@@ -78,12 +78,16 @@ function renderOperatorLines(operator: TaskOperatorStatus | null): string[] {
 function renderStatusBlock(snapshot: TaskStatusSnapshot): string {
   const lines = [
     `task ${snapshot.task.task_id} [${snapshot.state}] ${snapshot.task.goal}`,
-    `worker: ${snapshot.task.worker_target}${snapshot.routing ? ` via ${snapshot.routing.mode}` : ""}`
+    `worker: ${snapshot.task.worker_target}${snapshot.routing ? ` via ${snapshot.routing.mode}` : ""}`,
+    `artifacts: ${snapshot.artifact_dir_path}`
   ];
 
   if (snapshot.github_run) {
     const conclusion = snapshot.github_run.conclusion ? `/${snapshot.github_run.conclusion}` : "";
     lines.push(`github: ${snapshot.github_run.status}${conclusion}`);
+    if (snapshot.github_run.run_url) {
+      lines.push(`github-url: ${snapshot.github_run.run_url}`);
+    }
   }
 
   return [
@@ -172,6 +176,18 @@ export function renderDoctorBrief(report: DoctorReport): string {
     visibleTaskFindings
       .filter((finding) => Boolean(finding.operator_receipt_path))
       .map((finding) => `- ${finding.task_id} :: ${buildShowOperatorReceiptCommand(finding.operator_receipt_path!)}`),
+    8
+  );
+  pushLimitedSection(
+    lines,
+    "task-links:",
+    visibleTaskFindings.map((finding) => {
+      const segments = [`- ${finding.task_id} :: artifacts=${finding.artifact_dir_path}`];
+      if (finding.github_run_url) {
+        segments.push(`github=${finding.github_run_url}`);
+      }
+      return segments.join(" :: ");
+    }),
     8
   );
   pushLimitedSection(

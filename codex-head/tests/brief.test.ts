@@ -27,6 +27,7 @@ test("renderStatusBrief summarizes one task with operator guidance", () => {
 
   const rendered = renderStatusBrief({
     task,
+    artifact_dir_path: "C:/repo/codex-head/runtime/artifacts/task-brief-1",
     state: "failed",
     attempts: 1,
     max_attempts: 3,
@@ -71,6 +72,8 @@ test("renderStatusBrief summarizes one task with operator guidance", () => {
 
   assert.match(rendered, /task task-brief-1 \[failed\] Review the latest PR in GitHub/i);
   assert.match(rendered, /worker: gemini-cli via github/i);
+  assert.match(rendered, /artifacts: C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-1/i);
+  assert.match(rendered, /github-url: https:\/\/github\.com\/example\/repo\/actions\/runs\/321/i);
   assert.match(rendered, /operator: Automatic stale-runner recovery was already attempted/i);
   assert.match(rendered, /receipt: operator-actions\/2026-03-23T08-09-05\.877Z-run-doctor-hint\.json \[run-doctor-hint\]/i);
   assert.match(rendered, /open-receipt: node dist\/src\/index\.js show-operator-receipt operator-actions\/2026-03-23T08-09-05\.877Z-run-doctor-hint\.json --brief/i);
@@ -119,6 +122,7 @@ test("renderStatusBrief omits the no-action line when only follow-up actions exi
 
   const rendered = renderStatusBrief({
     task,
+    artifact_dir_path: "C:/repo/codex-head/runtime/artifacts/task-brief-3",
     state: "failed",
     attempts: 1,
     max_attempts: 3,
@@ -239,6 +243,8 @@ test("renderDoctorBrief summarizes operator findings and next actions", () => {
           goal: "Review the latest PR in GitHub",
           worker_target: "gemini-cli",
           routing_mode: "github",
+          artifact_dir_path: "C:/repo/codex-head/runtime/artifacts/task-brief-doctor",
+          github_run_url: "https://github.com/example/repo/actions/runs/321",
           severity: "error",
           summary: "Automatic stale-runner recovery was already attempted and manual intervention is now required.",
           actions: ["Inspect C:/repo/codex-head/runtime/artifacts/task-brief-doctor/github-queue-recycle.json and retry."],
@@ -277,6 +283,7 @@ test("renderDoctorBrief summarizes operator findings and next actions", () => {
   assert.match(rendered, /tasks:\n- task-brief-doctor \[failed\/error\] Review the latest PR in GitHub/i);
   assert.match(rendered, /receipt=operator-actions\/2026-03-23T08-09-05\.877Z-run-doctor-hint\.json \[run-doctor-hint\]/i);
   assert.match(rendered, /receipt-commands:\n- task-brief-doctor :: node dist\/src\/index\.js show-operator-receipt operator-actions\/2026-03-23T08-09-05\.877Z-run-doctor-hint\.json --brief/i);
+  assert.match(rendered, /task-links:\n- task-brief-doctor :: artifacts=C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-doctor :: github=https:\/\/github\.com\/example\/repo\/actions\/runs\/321/i);
   assert.match(rendered, /next:\n- Inspect the claude-code health command and local runtime\./i);
   assert.match(rendered, /commands:\n- \[suppressed-failed-backlog\] node dist\/src\/index\.js sweep-tasks cancel --state failed --older-than-hours 6 --dry-run --brief/i);
 });
@@ -288,6 +295,8 @@ test("renderDoctorBrief keeps receipt commands aligned with visible task rows", 
     goal: `Queued task ${index + 1}`,
     worker_target: "codex-cli",
     routing_mode: "local",
+    artifact_dir_path: `C:/repo/codex-head/runtime/artifacts/task-brief-visible-${index + 1}`,
+    github_run_url: null,
     severity: "warning",
     summary: "Task is queued and waiting for dispatch.",
     actions: ["Dispatch the queued task when the workspace and workers are ready."],

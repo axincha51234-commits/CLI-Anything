@@ -18,6 +18,10 @@ export class FileArtifactStore {
     return taskDir;
   }
 
+  resolveTaskDir(taskId: string): string {
+    return join(this.rootDir, taskId);
+  }
+
   resolveTaskArtifactPath(taskId: string, name: string): string {
     return join(this.rootDir, taskId, name);
   }

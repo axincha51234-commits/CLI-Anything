@@ -55,6 +55,7 @@ function createStatusSnapshot(
 
   return {
     task,
+    artifact_dir_path: `C:/repo/codex-head/runtime/artifacts/${task.task_id}`,
     state: "completed",
     attempts: 1,
     max_attempts: 3,
@@ -162,9 +163,9 @@ test("buildDoctorReport aggregates worker, GitHub, and task findings", () => {
 
   const failedTask = createStatusSnapshot({
     task: createTaskSpec({
-      task_id: "task-doctor-failed",
-      goal: "Review the latest PR in GitHub",
-      repo: "C:/repo",
+          task_id: "task-doctor-failed",
+          goal: "Review the latest PR in GitHub",
+          repo: "C:/repo",
       worker_target: "gemini-cli",
       expected_output: { kind: "review", format: "markdown", code_change: false },
       requires_github: true
@@ -222,6 +223,11 @@ test("buildDoctorReport aggregates worker, GitHub, and task findings", () => {
   assert.equal(report.command_hints.length, 0);
   assert.equal(report.summary.includes("blocking item"), true);
   assert.equal(report.attention.tasks[0]?.task_id, "task-doctor-failed");
+  assert.equal(
+    report.attention.tasks[0]?.artifact_dir_path,
+    "C:/repo/codex-head/runtime/artifacts/task-doctor-failed"
+  );
+  assert.equal(report.attention.tasks[0]?.github_run_url, null);
   assert.equal(
     report.attention.tasks[0]?.operator_receipt_path,
     "operator-actions/2026-03-23T08-09-05.877Z-run-doctor-hint.json"
@@ -401,6 +407,61 @@ test("buildDoctorReport hides older failed backlog by default but can include al
   assert.equal(allTasks.task_filter.suppressed_task_findings, 0);
   assert.equal(allTasks.task_filter.task_window_hours, null);
   assert.equal(allTasks.command_hints.some((entry) => entry.kind === "suppressed_failed_backlog"), false);
+});
+
+test("buildDoctorReport carries GitHub run URLs for running GitHub tasks", () => {
+  const health: DoctorHealthSnapshot = {
+    adapters: [
+      { worker_target: "gemini-cli", healthy: true, reason: "ok", detected_binary: "gemini.exe" }
+    ],
+    readiness: [
+      {
+        worker_target: "gemini-cli",
+        healthy: true,
+        feature_enabled: true,
+        supports_local: true,
+        supports_github: true,
+        has_local_template: true,
+        local_ready: true,
+        github_ready: true,
+        cooldown_until: null,
+        cooldown_reason: null
+      }
+    ],
+    recent_penalties: [],
+    github: createGitHubRuntime(),
+    database_path: "C:/repo/codex-head/runtime/codex-head.sqlite",
+    artifacts_dir: "C:/repo/codex-head/runtime/artifacts"
+  };
+
+  const runningGitHubTask = createStatusSnapshot({
+    task: createTaskSpec({
+      task_id: "task-doctor-github-link",
+      goal: "Review the latest PR in GitHub",
+      repo: "C:/repo",
+      worker_target: "gemini-cli",
+      expected_output: { kind: "review", format: "markdown", code_change: false },
+      requires_github: true
+    }),
+    state: "running",
+    routing: {
+      worker_target: "gemini-cli",
+      mode: "github",
+      reason: "test",
+      fallback_from: null
+    },
+    github_run: {
+      run_id: 321,
+      run_url: "https://github.com/example/repo/actions/runs/321",
+      workflow_name: "codex-head-gemini-review.yml",
+      status: "in_progress",
+      conclusion: null,
+      updated_at: 0
+    }
+  });
+
+  const report = buildDoctorReport(health, [runningGitHubTask]);
+  assert.equal(report.attention.tasks[0]?.github_run_url, "https://github.com/example/repo/actions/runs/321");
 });
 
 test("buildDoctorReport emits task-specific queued backlog command hints", () => {

@@ -193,6 +193,11 @@ currently local-ready and exposes the matching cooldown reason.
   operator receipt for task-level triage when one exists.
 - those views also print a ready-to-run `show-operator-receipt ... --brief`
   command so operators can jump straight into the latest receipt.
+- `status --brief` now also prints the task artifact directory path, and adds
+  `github-url:` when a persisted workflow run URL is known.
+- `doctor --brief` now adds a `task-links:` section for the visible task rows,
+  with each task's artifact directory path plus its GitHub run URL when one is
+  available.
 - `sweep-tasks` now gives operators a filtered bulk action for backlog triage.
   It can dry-run or apply `cancel` and `requeue` across selected tasks without
   deleting history from SQLite.
