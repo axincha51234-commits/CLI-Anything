@@ -76,9 +76,9 @@ node dist/src/index.js review <task-id> <reviewer> <verdict> [summary]
 node dist/src/index.js run-github-payload <payload-json>
 node dist/src/index.js sync-github-callback <task-id>
 node dist/src/index.js wait-github-callback <task-id> [timeout-sec] [interval-sec]
-node dist/src/index.js reconcile-github-running [timeout-sec] [interval-sec]
-node dist/src/index.js recover-running [timeout-sec] [interval-sec] [--requeue-local]
-node dist/src/index.js status [task-id]
+node dist/src/index.js reconcile-github-running [timeout-sec] [interval-sec] [--brief]
+node dist/src/index.js recover-running [timeout-sec] [interval-sec] [--requeue-local] [--brief]
+node dist/src/index.js status [task-id] [--brief]
 node dist/src/index.js dispatch <task-id>
 node dist/src/index.js dispatch-and-wait <task-id> [timeout-sec] [interval-sec]
 node dist/src/index.js dispatch-next
@@ -133,6 +133,8 @@ problems, look under `operator` for:
 The same `operator` block is now also returned by `recover-running` and
 `reconcile-github-running`, so operator tooling can consume one shape across
 status, recovery, and batch reconciliation.
+If you only need the short human-facing triage view, all three commands now
+also accept `--brief`.
 
 ## Runtime Paths
 
@@ -619,6 +621,7 @@ This command:
 - returns a per-task summary with either `reconciled` or `error`
 - includes the same `operator` guidance block used by `status` and
   `recover-running`
+- supports `--brief` for a short plain-text reconcile summary
 
 To recover tasks left behind in `running` state after an interrupted local
 session:
@@ -634,6 +637,7 @@ This command:
 - optionally requeues interrupted local tasks when `--requeue-local` is set
 - returns the same `operator` guidance block used by `status`, including
   queue-artifact summaries and recommended follow-up actions when recovery fails
+- supports `--brief` for a short plain-text recovery summary
 - writes `recovery-result.json` for each recovered local task
 
 ## Direct Callback Ingestion

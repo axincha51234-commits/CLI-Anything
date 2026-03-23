@@ -165,6 +165,9 @@ currently local-ready and exposes the matching cooldown reason.
 - `reconcile-github-running` now returns that same `operator` block for batch
   callback reconciliation, so success and failure triage use one consistent
   output shape.
+- `status`, `recover-running`, and `reconcile-github-running` now also support
+  `--brief` for plain-text operator summaries when JSON is more noise than
+  signal.
 - Self-hosted queue-stall handling now writes `github-queue-diagnosis.json`,
   and an opt-in `github.auto_recycle_stale_runner` flag can automatically call
   the Windows recycle helper for stale broker sessions.

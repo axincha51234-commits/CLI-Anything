@@ -1,6 +1,7 @@
 import { resolve } from "node:path";
 
 import { normalizeGitHubRepository, updateGitHubConfig } from "./config";
+import { renderOutcomeBrief, renderStatusBrief } from "./brief";
 import { REVIEW_VERDICTS, WORKER_TARGETS } from "./contracts";
 import { executeGitHubPayloadFile } from "./github/workflowRunner";
 import { CodexHeadOrchestrator } from "./orchestrator";
@@ -8,6 +9,28 @@ import { buildTaskStatusSnapshot, buildTaskStatusSnapshots } from "./status";
 
 function printJson(value: unknown): void {
   process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
+}
+
+function printText(value: string): void {
+  process.stdout.write(`${value}\n`);
+}
+
+function stripFlag(args: string[], flag: string): {
+  values: string[];
+  present: boolean;
+} {
+  let present = false;
+  const values = args.filter((value) => {
+    if (value === flag) {
+      present = true;
+      return false;
+    }
+    return true;
+  });
+  return {
+    values,
+    present
+  };
 }
 
 function parseRunGoalArgs(args: string[]): {
@@ -74,16 +97,22 @@ function parseRecoverRunningArgs(args: string[]): {
   timeoutSec?: number;
   intervalSec?: number;
   requeueLocal: boolean;
+  brief: boolean;
 } {
   let timeoutSec: number | undefined;
   let intervalSec: number | undefined;
   let requeueLocal = false;
+  let brief = false;
   const positionals: string[] = [];
 
   for (let index = 0; index < args.length; index += 1) {
     const current = args[index];
     if (current === "--requeue-local") {
       requeueLocal = true;
+      continue;
+    }
+    if (current === "--brief") {
+      brief = true;
       continue;
     }
     positionals.push(current);
@@ -99,7 +128,32 @@ function parseRecoverRunningArgs(args: string[]): {
   return {
     timeoutSec,
     intervalSec,
-    requeueLocal
+    requeueLocal,
+    brief
+  };
+}
+
+function parseStatusArgs(args: string[]): {
+  taskId?: string;
+  brief: boolean;
+} {
+  const stripped = stripFlag(args, "--brief");
+  return {
+    taskId: stripped.values[0],
+    brief: stripped.present
+  };
+}
+
+function parseReconcileArgs(args: string[]): {
+  timeoutSec?: number;
+  intervalSec?: number;
+  brief: boolean;
+} {
+  const stripped = stripFlag(args, "--brief");
+  return {
+    timeoutSec: stripped.values[0] ? Number(stripped.values[0]) : undefined,
+    intervalSec: stripped.values[1] ? Number(stripped.values[1]) : undefined,
+    brief: stripped.present
   };
 }
 
@@ -117,9 +171,9 @@ function usage(): void {
       "  node dist/src/index.js run-github-payload <payload-json>",
       "  node dist/src/index.js sync-github-callback <task-id>",
       "  node dist/src/index.js wait-github-callback <task-id> [timeout-sec] [interval-sec]",
-      "  node dist/src/index.js reconcile-github-running [timeout-sec] [interval-sec]",
-      "  node dist/src/index.js recover-running [timeout-sec] [interval-sec] [--requeue-local]",
-      "  node dist/src/index.js status [task-id]",
+      "  node dist/src/index.js reconcile-github-running [timeout-sec] [interval-sec] [--brief]",
+      "  node dist/src/index.js recover-running [timeout-sec] [interval-sec] [--requeue-local] [--brief]",
+      "  node dist/src/index.js status [task-id] [--brief]",
       "  node dist/src/index.js dispatch <task-id>",
       "  node dist/src/index.js dispatch-and-wait <task-id> [timeout-sec] [interval-sec]",
       "  node dist/src/index.js dispatch-next",
@@ -315,19 +369,28 @@ async function main(): Promise<void> {
   }
 
   if (command === "reconcile-github-running") {
-    const timeoutSec = rest[0] ? Number(rest[0]) : undefined;
-    const intervalSec = rest[1] ? Number(rest[1]) : undefined;
-    printJson(await orchestrator.reconcileRunningGitHubTasks(timeoutSec, intervalSec));
+    const parsed = parseReconcileArgs(rest);
+    const result = await orchestrator.reconcileRunningGitHubTasks(parsed.timeoutSec, parsed.intervalSec);
+    if (parsed.brief) {
+      printText(renderOutcomeBrief(result, "No running GitHub tasks to reconcile."));
+      return;
+    }
+    printJson(result);
     return;
   }
 
   if (command === "recover-running") {
     const parsed = parseRecoverRunningArgs(rest);
-    printJson(await orchestrator.recoverRunningTasks({
+    const result = await orchestrator.recoverRunningTasks({
       timeout_sec: parsed.timeoutSec,
       interval_sec: parsed.intervalSec,
       requeue_local: parsed.requeueLocal
-    }));
+    });
+    if (parsed.brief) {
+      printText(renderOutcomeBrief(result, "No running tasks to recover."));
+      return;
+    }
+    printJson(result);
     return;
   }
 
@@ -379,12 +442,15 @@ async function main(): Promise<void> {
   }
 
   if (command === "status") {
-    const taskId = rest[0];
-    printJson(
-      taskId
-        ? buildTaskStatusSnapshot(orchestrator.getTask(taskId), orchestrator.artifactStore)
-        : buildTaskStatusSnapshots(orchestrator.listTasks(), orchestrator.artifactStore)
-    );
+    const parsed = parseStatusArgs(rest);
+    const result = parsed.taskId
+      ? buildTaskStatusSnapshot(orchestrator.getTask(parsed.taskId), orchestrator.artifactStore)
+      : buildTaskStatusSnapshots(orchestrator.listTasks(), orchestrator.artifactStore);
+    if (parsed.brief) {
+      printText(renderStatusBrief(result));
+      return;
+    }
+    printJson(result);
     return;
   }
 
