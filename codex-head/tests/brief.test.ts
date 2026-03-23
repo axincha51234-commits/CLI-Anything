@@ -505,6 +505,85 @@ test("renderDoctorBrief keeps receipt commands aligned with visible task rows", 
   assert.doesNotMatch(rendered, /next:[\s\S]*Dispatch the queued task when the workspace and workers are ready\./i);
 });
 
+test("renderDoctorBrief omits cleanup commands when the report is otherwise healthy", () => {
+  const report: DoctorReport = {
+    ok: true,
+    generated_at: new Date().toISOString(),
+    summary: "No blocking issues found across 53 task(s) and 2 enabled worker(s).",
+    task_filter: {
+      include_all_task_history: false,
+      task_window_hours: 6,
+      cutoff_at: "2026-03-23T00:00:00.000Z",
+      suppressed_task_findings: 10
+    },
+    counts: {
+      total_tasks: 53,
+      task_states: { completed: 40, canceled: 13 },
+      enabled_workers: 2,
+      workers_needing_attention: 0,
+      github_findings: 0,
+      tasks_needing_attention: 0,
+      suppressed_task_findings: 10,
+      blocking_findings: 0,
+      informational_findings: 0
+    },
+    health: {
+      adapters: [],
+      readiness: [],
+      recent_penalties: [],
+      github: {
+        enabled: true,
+        dispatch_mode: "gh_cli",
+        execution_preference: "local_preferred",
+        auto_recycle_stale_runner: false,
+        repository: "example/repo",
+        workflow: "codex-head-worker.yml",
+        review_workflow: "codex-head-gemini-review.yml",
+        cli_binary: "gh",
+        gh_cli_available: true,
+        gh_cli_path: "gh",
+        gh_authenticated: true,
+        machine_config_path: null,
+        machine_config_exists: false,
+        runs_on_json: null,
+        runs_on_labels: [],
+        self_hosted_targeted: false,
+        recycle_script_path: null,
+        recycle_script_available: false,
+        matching_runners: [],
+        runner_lookup_detail: null
+      },
+      database_path: "C:/repo/codex-head/runtime/codex-head.sqlite",
+      artifacts_dir: "C:/repo/codex-head/runtime/artifacts"
+    },
+    attention: {
+      workers: [],
+      github: [],
+      tasks: []
+    },
+    actions: [],
+    command_hints: [
+      {
+        id: "suppressed-failed-backlog",
+        kind: "suppressed_failed_backlog",
+        reason: "Inspect older failed tasks hidden by the current doctor window before canceling them in bulk.",
+        command: "node --disable-warning=ExperimentalWarning dist/src/index.js sweep-tasks cancel --state failed --older-than-hours 6 --dry-run --brief",
+        sweep: {
+          action: "cancel",
+          states: ["failed"],
+          older_than_hours: 6
+        }
+      }
+    ]
+  };
+
+  const rendered = renderDoctorBrief(report);
+  assert.match(rendered, /^doctor: healthy/im);
+  assert.match(rendered, /history: hidden 10 older task finding\(s\) outside the 6h window/i);
+  assert.doesNotMatch(rendered, /^next-command:/im);
+  assert.doesNotMatch(rendered, /^commands:/im);
+});
+
 test("renderSweepBrief summarizes bulk task actions", () => {
   const rendered = renderSweepBrief({
     action: "cancel",
@@ -861,4 +940,57 @@ test("renderOperatorReceiptBrief summarizes one operator receipt", () => {
   assert.match(rendered, /selection:\n- kind=queued_backlog/i);
   assert.match(rendered, /hints:\n- queued-backlog-1 \[queued_backlog\]/i);
   assert.match(rendered, /tasks:\n- task-1 \[queued -> canceled\]/i);
+});
+
+test("renderOperatorReceiptBrief points bulk latest receipts back to doctor", () => {
+  const rendered = renderOperatorReceiptBrief({
+    receipt_path: "operator-actions/2026-03-23T09-00-00.000Z-sweep-tasks.json",
+    receipt: {
+      schema_version: 1,
+      command: "sweep-tasks",
+      created_at: "2026-03-23T09:00:00.000Z",
+      dry_run: true,
+      apply: false,
+      selection: {
+        task_ids: ["task-a", "task-b"]
+      },
+      summary: {
+        matched: 2,
+        actionable: 2,
+        changed: 0
+      },
+      tasks: [
+        {
+          task_id: "task-a",
+          goal: "Summarize the orchestration state",
+          worker_target: "codex-cli",
+          previous_state: "queued",
+          next_state: "canceled",
+          changed: true,
+          reason: "Would cancel the selected task."
+        },
+        {
+          task_id: "task-b",
+          goal: "Review the latest PR in GitHub",
+          worker_target: "gemini-cli",
+          previous_state: "failed",
+          next_state: "canceled",
+          changed: true,
+          reason: "Would cancel the selected task."
+        }
+      ]
+    },
+    lookup: {
+      mode: "latest",
+      task_id: null,
+      filters: {
+        command: null,
+        apply_only: false,
+        dry_run_only: false
+      }
+    }
+  } satisfies OperatorReceiptResult);
+
+  assert.match(rendered, /^receipt: operator-actions\/2026-03-23T09-00-00\.000Z-sweep-tasks\.json$/im);
+  assert.match(rendered, /next-command: node --disable-warning=ExperimentalWarning dist\/src\/index\.js doctor --brief/i);
 });

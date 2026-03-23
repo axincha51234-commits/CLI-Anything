@@ -54,6 +54,18 @@ function buildStatusCommand(taskId: string): string {
   return `${CLI_BRIEF_PREFIX} status ${taskId} --brief`;
 }
 
+function buildDoctorCommand(): string {
+  return `${CLI_BRIEF_PREFIX} doctor --brief`;
+}
+
+function extractReceiptTaskIds(selection: Record<string, unknown>): string[] {
+  const candidate = (selection as { task_ids?: unknown }).task_ids;
+  if (!Array.isArray(candidate)) {
+    return [];
+  }
+  return candidate.filter((value): value is string => typeof value === "string" && value.trim().length > 0);
+}
+
 function shouldRenderDoctorArtifactFiles(finding: DoctorReport["attention"]["tasks"][number]): boolean {
   return finding.severity === "error"
     || finding.manual_intervention_required
@@ -283,11 +295,13 @@ export function renderDoctorBrief(report: DoctorReport): string {
   const visibleTaskFindings = report.attention.tasks.slice(0, 8);
   const taskSummary = summarizeDoctorTaskLines(visibleTaskFindings);
   const nextActions = filterDoctorNextActions(report);
-  const nextCommand = report.command_hints[0]?.command
-    ?? (() => {
-      const receiptPath = visibleTaskFindings.find((finding) => finding.operator_receipt_path)?.operator_receipt_path ?? null;
-      return receiptPath ? buildShowOperatorReceiptCommand(receiptPath) : null;
-    })();
+  const nextCommand = report.ok
+    ? null
+    : report.command_hints[0]?.command
+      ?? (() => {
+        const receiptPath = visibleTaskFindings.find((finding) => finding.operator_receipt_path)?.operator_receipt_path ?? null;
+        return receiptPath ? buildShowOperatorReceiptCommand(receiptPath) : null;
+      })();
 
   if (report.task_filter.suppressed_task_findings > 0) {
     const windowLabel = report.task_filter.task_window_hours === null
@@ -375,19 +389,21 @@ export function renderDoctorBrief(report: DoctorReport): string {
     nextActions.map((action) => `- ${compactText(action, 180)}`),
     8
   );
-  pushLimitedSection(
-    lines,
-    "commands:",
-    report.command_hints.map((hint) => {
-      const hintedTaskId = hint.sweep.task_ids?.[0] ?? null;
-      const groupedTask = hintedTaskId ? taskSummary.groupedTaskInfo.get(hintedTaskId) : null;
-      const groupSuffix = groupedTask
-        ? ` :: representative of ${groupedTask.count} similar ${groupedTask.state}/${groupedTask.severity} task(s)`
-        : "";
-      return `- [${hint.id}] ${hint.command}${groupSuffix}`;
-    }),
-    6
-  );
+  if (!report.ok) {
+    pushLimitedSection(
+      lines,
+      "commands:",
+      report.command_hints.map((hint) => {
+        const hintedTaskId = hint.sweep.task_ids?.[0] ?? null;
+        const groupedTask = hintedTaskId ? taskSummary.groupedTaskInfo.get(hintedTaskId) : null;
+        const groupSuffix = groupedTask
+          ? ` :: representative of ${groupedTask.count} similar ${groupedTask.state}/${groupedTask.severity} task(s)`
+          : "";
+        return `- [${hint.id}] ${hint.command}${groupSuffix}`;
+      }),
+      6
+    );
+  }
 
   return lines.join("\n");
 }
@@ -520,8 +536,19 @@ export function renderOperatorReceiptBrief(result: OperatorReceiptResult): strin
   if (lookupFilters.length > 0) {
     lines.push(`lookup-filters: ${lookupFilters.join(", ")}`);
   }
-  if ((result.receipt.tasks ?? [])[0]) {
-    lines.push(`next-command: ${buildStatusCommand(result.receipt.tasks![0]!.task_id)}`);
+  const receiptTasks = result.receipt.tasks ?? [];
+  const selectedTaskIds = extractReceiptTaskIds(result.receipt.selection);
+  const nextTaskId = result.lookup.mode === "task_id"
+    ? result.lookup.task_id
+    : receiptTasks.length === 1
+      ? receiptTasks[0]!.task_id
+      : selectedTaskIds.length === 1
+        ? selectedTaskIds[0]!
+        : null;
+  if (nextTaskId) {
+    lines.push(`next-command: ${buildStatusCommand(nextTaskId)}`);
+  } else if (receiptTasks.length > 1 || selectedTaskIds.length > 1) {
+    lines.push(`next-command: ${buildDoctorCommand()}`);
   }
 
   const selectionEntries = Object.entries(result.receipt.selection)
