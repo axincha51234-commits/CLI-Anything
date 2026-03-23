@@ -51,6 +51,7 @@ export interface DoctorTaskFinding {
   severity: DoctorFindingSeverity;
   summary: string;
   actions: string[];
+  has_operator_actions: boolean;
   operator_receipt_path: string | null;
   operator_receipt_command: string | null;
   operator_receipt_created_at: string | null;
@@ -417,6 +418,7 @@ function summarizeTaskFinding(
     severity,
     summary: deriveTaskSummary(task),
     actions: deriveTaskActions(task),
+    has_operator_actions: task.operator.actions.length > 0,
     operator_receipt_path: task.operator.latest_receipt_path,
     operator_receipt_command: task.operator.latest_receipt_command,
     operator_receipt_created_at: task.operator.latest_receipt_created_at,

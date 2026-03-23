@@ -240,6 +240,7 @@ test("buildDoctorReport aggregates worker, GitHub, and task findings", () => {
     primary_log: null
   });
   assert.equal(report.attention.tasks[0]?.github_run_url, null);
+  assert.equal(report.attention.tasks[0]?.has_operator_actions, true);
   assert.equal(
     report.attention.tasks[0]?.operator_receipt_path,
     "operator-actions/2026-03-23T08-09-05.877Z-run-doctor-hint.json"

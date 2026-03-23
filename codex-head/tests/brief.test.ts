@@ -270,6 +270,7 @@ test("renderDoctorBrief summarizes operator findings and next actions", () => {
           severity: "error",
           summary: "Automatic stale-runner recovery was already attempted and manual intervention is now required.",
           actions: ["Inspect C:/repo/codex-head/runtime/artifacts/task-brief-doctor/github-queue-recycle.json and retry."],
+          has_operator_actions: true,
           operator_receipt_path: "operator-actions/2026-03-23T08-09-05.877Z-run-doctor-hint.json",
           operator_receipt_command: "run-doctor-hint",
           operator_receipt_created_at: "2026-03-23T08:09:05.877Z",
@@ -335,9 +336,12 @@ test("renderDoctorBrief keeps receipt commands aligned with visible task rows", 
     severity: "warning",
     summary: "Task is queued and waiting for dispatch.",
     actions: ["Dispatch the queued task when the workspace and workers are ready."],
-    operator_receipt_path: `operator-actions/2026-03-23T08-09-0${index}.000Z-run-doctor-hint.json`,
-    operator_receipt_command: "run-doctor-hint",
-    operator_receipt_created_at: `2026-03-23T08:09:0${index}.000Z`,
+    has_operator_actions: false,
+    operator_receipt_path: index < 2
+      ? `operator-actions/2026-03-23T08-09-0${index}.000Z-run-doctor-hint.json`
+      : null,
+    operator_receipt_command: index < 2 ? "run-doctor-hint" : null,
+    operator_receipt_created_at: index < 2 ? `2026-03-23T08:09:0${index}.000Z` : null,
     manual_intervention_required: false
   }));
   const report: DoctorReport = {
@@ -403,9 +407,10 @@ test("renderDoctorBrief keeps receipt commands aligned with visible task rows", 
   assert.match(rendered, /tasks:\n- task-brief-visible-1/i);
   assert.doesNotMatch(rendered, /task-brief-visible-9/i);
   assert.match(rendered, /receipt-commands:\n- task-brief-visible-1 :: node dist\/src\/index\.js show-operator-receipt operator-actions\/2026-03-23T08-09-00\.000Z-run-doctor-hint\.json --brief/i);
-  assert.match(rendered, /artifact-files:\n- task-brief-visible-1 :: result\(last-attempt\)=C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-visible-1\/worker-result\.json :: attempts\(history\)=C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-visible-1\/execution-attempts\.json :: log\(last-attempt\)=C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-visible-1\/codex-cli-local\.combined\.log/i);
+  assert.match(rendered, /task-links:\n- task-brief-visible-1 :: artifacts=C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-visible-1/i);
+  assert.doesNotMatch(rendered, /task-links:[\s\S]*task-brief-visible-3/i);
   assert.doesNotMatch(rendered, /receipt-commands:[\s\S]*task-brief-visible-9/i);
-  assert.doesNotMatch(rendered, /artifact-files:[\s\S]*task-brief-visible-9/i);
+  assert.doesNotMatch(rendered, /^artifact-files:/im);
 });
 
 test("renderSweepBrief summarizes bulk task actions", () => {

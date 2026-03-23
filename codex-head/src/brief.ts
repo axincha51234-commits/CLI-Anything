@@ -48,6 +48,19 @@ function buildShowOperatorReceiptCommand(receiptPath: string): string {
   return `node dist/src/index.js show-operator-receipt ${receiptPath} --brief`;
 }
 
+function shouldRenderDoctorArtifactFiles(finding: DoctorReport["attention"]["tasks"][number]): boolean {
+  return finding.severity === "error"
+    || finding.manual_intervention_required
+    || finding.state === "failed"
+    || finding.has_operator_actions;
+}
+
+function shouldRenderDoctorTaskLink(finding: DoctorReport["attention"]["tasks"][number]): boolean {
+  return shouldRenderDoctorArtifactFiles(finding)
+    || Boolean(finding.operator_receipt_path)
+    || Boolean(finding.github_run_url);
+}
+
 function renderArtifactRefLines(refs: {
   worker_result: { path: string; freshness: string } | null;
   execution_attempts: { path: string; freshness: string } | null;
@@ -213,7 +226,9 @@ export function renderDoctorBrief(report: DoctorReport): string {
   pushLimitedSection(
     lines,
     "task-links:",
-    visibleTaskFindings.map((finding) => {
+    visibleTaskFindings
+      .filter((finding) => shouldRenderDoctorTaskLink(finding))
+      .map((finding) => {
       const segments = [`- ${finding.task_id} :: artifacts=${finding.artifact_dir_path}`];
       if (finding.github_run_url) {
         segments.push(`github=${finding.github_run_url}`);
@@ -226,6 +241,7 @@ export function renderDoctorBrief(report: DoctorReport): string {
     lines,
     "artifact-files:",
     visibleTaskFindings
+      .filter((finding) => shouldRenderDoctorArtifactFiles(finding))
       .map((finding) => {
         const segments = [
           finding.artifact_refs.worker_result

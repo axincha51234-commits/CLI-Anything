@@ -225,11 +225,12 @@ receipt path for a task when one exists, so operators can jump directly into
 - `status --brief` prints `github-url: ...` when the task has a persisted
   workflow run URL
 - `doctor --brief` adds a `receipt-commands:` section for task-level receipt jumps
-- `doctor --brief` also adds a `task-links:` section so the visible task rows
-  expose `artifacts=...` and `github=...` pointers without reopening JSON
-- `doctor --brief` also adds an `artifact-files:` section for visible task rows
-  when `worker-result.json`, `execution-attempts.json`, primary output, or the
-  primary log can be resolved
+- `doctor --brief` also adds a `task-links:` section only for the visible task
+  rows that already have a receipt, GitHub run URL, or other stronger triage
+  signals, so `artifacts=...` and `github=...` pointers stay high-signal
+- `doctor --brief` also adds an `artifact-files:` section only for the higher-
+  signal visible task rows when `worker-result.json`,
+  `execution-attempts.json`, primary output, or the primary log can be resolved
 - those artifact refs now include freshness labels so queued/running tasks do
   not present stale output as if it were the current attempt
 

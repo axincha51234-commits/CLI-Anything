@@ -199,12 +199,13 @@ currently local-ready and exposes the matching cooldown reason.
   known.
   - retained refs from an older attempt are now labeled as `last-attempt`, and
     retry history is labeled as `history`.
-- `doctor --brief` now adds a `task-links:` section for the visible task rows,
-  with each task's artifact directory path plus its GitHub run URL when one is
-  available.
-- `doctor --brief` also adds an `artifact-files:` section for the visible task
-  rows when canonical refs like `worker-result.json`, `execution-attempts.json`,
-  primary output, or primary log are known.
+- `doctor --brief` now adds a `task-links:` section only for the visible task
+  rows that already have a receipt, GitHub run URL, or other stronger triage
+  signals, with each row exposing its artifact directory path plus GitHub run
+  URL when one is available.
+- `doctor --brief` also adds an `artifact-files:` section only for the higher-
+  signal visible task rows when canonical refs like `worker-result.json`,
+  `execution-attempts.json`, primary output, or primary log are known.
   - those refs carry the same freshness labels, so a queued/running task does
     not look like it already produced a new current result.
 - `sweep-tasks` now gives operators a filtered bulk action for backlog triage.
