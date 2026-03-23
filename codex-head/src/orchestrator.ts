@@ -24,7 +24,7 @@ import { GitHubControlPlane } from "./github/controlPlane";
 import { CodexHeadPlanner } from "./planner";
 import { TaskRouter } from "./router";
 import { computeRetryBackoffMs } from "./retry";
-import { buildTaskStatusSnapshot, type TaskOperatorStatus } from "./status";
+import { buildTaskOperatorStatus, type TaskOperatorStatus } from "./status";
 import { SqliteTaskStore } from "./state-store/sqliteTaskStore";
 
 function toCliPrompt(lines: string[]): string {
@@ -855,6 +855,7 @@ export class CodexHeadOrchestrator {
     status: "reconciled" | "error";
     detail: string;
     outcome: DispatchOutcome | null;
+    operator: TaskOperatorStatus | null;
   }>> {
     const runningGitHubTasks = this.taskStore
       .listTasks("running")
@@ -865,6 +866,7 @@ export class CodexHeadOrchestrator {
       status: "reconciled" | "error";
       detail: string;
       outcome: DispatchOutcome | null;
+      operator: TaskOperatorStatus | null;
     }> = [];
 
     for (const record of runningGitHubTasks) {
@@ -874,7 +876,8 @@ export class CodexHeadOrchestrator {
           task_id: record.task.task_id,
           status: "reconciled",
           detail: outcome.detail,
-          outcome
+          outcome,
+          operator: this.buildOperatorStatus(record.task.task_id)
         });
       } catch (error) {
         const detail = error instanceof Error ? error.message : String(error);
@@ -882,7 +885,8 @@ export class CodexHeadOrchestrator {
           task_id: record.task.task_id,
           status: "error",
           detail,
-          outcome: null
+          outcome: null,
+          operator: this.buildOperatorStatus(record.task.task_id, [detail])
         });
       }
     }
@@ -1024,9 +1028,9 @@ export class CodexHeadOrchestrator {
     return this.taskStore.listTasks();
   }
 
-  private buildOperatorStatus(taskId: string): TaskOperatorStatus | null {
+  private buildOperatorStatus(taskId: string, extraTexts: string[] = []): TaskOperatorStatus | null {
     try {
-      return buildTaskStatusSnapshot(this.taskStore.getTaskOrThrow(taskId), this.artifactStore).operator;
+      return buildTaskOperatorStatus(this.taskStore.getTaskOrThrow(taskId), this.artifactStore, extraTexts);
     } catch {
       return null;
     }

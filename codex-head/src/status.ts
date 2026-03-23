@@ -41,12 +41,13 @@ function hasText(value: string | null | undefined): value is string {
   return Boolean(value && value.trim());
 }
 
-function collectTaskTexts(record: TaskRecord): string[] {
+function collectTaskTexts(record: TaskRecord, extraTexts: string[] = []): string[] {
   const notes = record.result?.review_notes ?? [];
   return [
     record.last_error,
     record.result?.summary,
-    ...notes
+    ...notes,
+    ...extraTexts
   ].filter(hasText);
 }
 
@@ -55,10 +56,11 @@ function buildOperatorActions(
   diagnosis: QueueDiagnosisArtifact | null,
   recycle: QueueRecycleArtifact | null,
   artifactStore: FileArtifactStore,
-  manualInterventionRequired: boolean
+  manualInterventionRequired: boolean,
+  extraTexts: string[] = []
 ): string[] {
   const actions = new Set<string>();
-  const taskTexts = collectTaskTexts(record).join("\n");
+  const taskTexts = collectTaskTexts(record, extraTexts).join("\n");
   const diagnosisReason = diagnosis?.reason ?? "";
   const diagnosisPath = artifactStore.resolveTaskArtifactPath(record.task.task_id, "github-queue-diagnosis.json");
   const recyclePath = artifactStore.resolveTaskArtifactPath(record.task.task_id, "github-queue-recycle.json");
@@ -131,10 +133,11 @@ function summarizeOperatorState(
   return null;
 }
 
-export function buildTaskStatusSnapshot(
+export function buildTaskOperatorStatus(
   record: TaskRecord,
-  artifactStore: FileArtifactStore
-): TaskStatusSnapshot {
+  artifactStore: FileArtifactStore,
+  extraTexts: string[] = []
+): TaskOperatorStatus {
   const queueDiagnosis = artifactStore.readJsonIfExists<QueueDiagnosisArtifact>(
     record.task.task_id,
     "github-queue-diagnosis.json"
@@ -143,30 +146,38 @@ export function buildTaskStatusSnapshot(
     record.task.task_id,
     "github-queue-recycle.json"
   );
-  const collectedTexts = collectTaskTexts(record);
+  const collectedTexts = collectTaskTexts(record, extraTexts);
   const manualInterventionRequired = collectedTexts.some((value) => /manual intervention is now required/i.test(value));
 
   return {
+    queue_diagnosis_path: queueDiagnosis
+      ? artifactStore.resolveTaskArtifactPath(record.task.task_id, "github-queue-diagnosis.json")
+      : null,
+    queue_diagnosis: queueDiagnosis,
+    queue_recycle_path: queueRecycle
+      ? artifactStore.resolveTaskArtifactPath(record.task.task_id, "github-queue-recycle.json")
+      : null,
+    queue_recycle: queueRecycle,
+    manual_intervention_required: manualInterventionRequired,
+    summary: summarizeOperatorState(queueDiagnosis, queueRecycle, manualInterventionRequired),
+    actions: buildOperatorActions(
+      record,
+      queueDiagnosis,
+      queueRecycle,
+      artifactStore,
+      manualInterventionRequired,
+      extraTexts
+    )
+  };
+}
+
+export function buildTaskStatusSnapshot(
+  record: TaskRecord,
+  artifactStore: FileArtifactStore
+): TaskStatusSnapshot {
+  return {
     ...record,
-    operator: {
-      queue_diagnosis_path: queueDiagnosis
-        ? artifactStore.resolveTaskArtifactPath(record.task.task_id, "github-queue-diagnosis.json")
-        : null,
-      queue_diagnosis: queueDiagnosis,
-      queue_recycle_path: queueRecycle
-        ? artifactStore.resolveTaskArtifactPath(record.task.task_id, "github-queue-recycle.json")
-        : null,
-      queue_recycle: queueRecycle,
-      manual_intervention_required: manualInterventionRequired,
-      summary: summarizeOperatorState(queueDiagnosis, queueRecycle, manualInterventionRequired),
-      actions: buildOperatorActions(
-        record,
-        queueDiagnosis,
-        queueRecycle,
-        artifactStore,
-        manualInterventionRequired
-      )
-    }
+    operator: buildTaskOperatorStatus(record, artifactStore)
   };
 }
 

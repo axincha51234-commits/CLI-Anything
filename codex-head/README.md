@@ -162,6 +162,9 @@ currently local-ready and exposes the matching cooldown reason.
   required, and concrete action hints for common queue-stall failure modes.
 - `recover-running` now returns the same `operator` block, so recovery output
   carries queue diagnosis and next-step actions without a second status lookup.
+- `reconcile-github-running` now returns that same `operator` block for batch
+  callback reconciliation, so success and failure triage use one consistent
+  output shape.
 - Self-hosted queue-stall handling now writes `github-queue-diagnosis.json`,
   and an opt-in `github.auto_recycle_stale_runner` flag can automatically call
   the Windows recycle helper for stale broker sessions.

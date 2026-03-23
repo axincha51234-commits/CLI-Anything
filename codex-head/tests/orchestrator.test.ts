@@ -1521,7 +1521,170 @@ test("reconcileRunningGitHubTasks processes running GitHub tasks in batch", asyn
   const reconciled = await orchestrator.reconcileRunningGitHubTasks(1, 1);
   assert.equal(reconciled.length, 1);
   assert.equal(reconciled[0]?.status, "reconciled");
+  assert.equal(reconciled[0]?.operator?.manual_intervention_required, false);
+  assert.equal(reconciled[0]?.operator?.summary, null);
+  assert.deepEqual(reconciled[0]?.operator?.actions, []);
   assert.equal(orchestrator.getTask(task.task.task_id).state, "completed");
+});
+
+test("reconcileRunningGitHubTasks surfaces operator guidance for queued self-hosted stalls", async () => {
+  const root = createTempDir("codex-head-reconcile-gh-queued-detail-");
+  const registry = new AdapterRegistry();
+
+  registry.register(new FakeAdapter(
+    makeCapability("gemini-cli"),
+    createHealthyHealth("gemini-cli"),
+    async () => {
+      throw new Error("GitHub review should not run locally");
+    }
+  ));
+
+  registry.register(new FakeAdapter(
+    makeCapability("codex-cli"),
+    createHealthyHealth("codex-cli"),
+    async () => {
+      throw new Error("should not execute");
+    }
+  ));
+
+  registry.register(new FakeAdapter(
+    makeCapability("claude-code"),
+    createHealthyHealth("claude-code"),
+    async () => {
+      throw new Error("should not execute");
+    }
+  ));
+
+  registry.register(new FakeAdapter(
+    makeCapability("antigravity", { supports_local: false, supports_github: false }),
+    createHealthyHealth("antigravity"),
+    async () => {
+      throw new Error("should not execute");
+    }
+  ));
+
+  const config = createTestConfig(root);
+  config.github.repository = "example/repo";
+  const orchestrator = createAppWithRegistry(root, registry, config);
+  const task = orchestrator.submitTask(createTaskSpec({
+    goal: "Review the latest PR in GitHub",
+    repo: root,
+    worker_target: "gemini-cli",
+    expected_output: { kind: "review", format: "markdown", code_change: false },
+    requires_github: true
+  }));
+
+  orchestrator.enqueueTask(task.task.task_id);
+  const dispatchOutcome = await orchestrator.dispatchNext();
+  assert.equal(dispatchOutcome?.state, "running");
+
+  (orchestrator as any).github = {
+    resolveTaskRun: () => ({
+      run_id: 432,
+      run_url: "https://github.com/example/repo/actions/runs/432",
+      workflow_name: "codex-head-gemini-review.yml",
+      status: "queued",
+      conclusion: null,
+      updated_at: Date.now()
+    }),
+    waitForRunCompletion: async () => {
+      orchestrator.artifactStore.writeJson(task.task.task_id, "github-queue-diagnosis.json", {
+        task_id: task.task.task_id,
+        run_id: 432,
+        reason: "The run is still queued even though a matching self-hosted runner appears online and idle; a stale broker session is likely.",
+        suggested_action: "Consider recycling the self-hosted runner before retrying."
+      });
+      orchestrator.artifactStore.writeJson(task.task.task_id, "github-queue-recycle.json", {
+        task_id: task.task.task_id,
+        run_id: 432,
+        ok: true,
+        skipped: false,
+        detail: "Automatic self-hosted runner recycle completed successfully."
+      });
+      throw new Error(
+        `GitHub run 432 appears stuck in queued state for task ${task.task.task_id}: `
+        + "The run is still queued even though a matching self-hosted runner appears online and idle; a stale broker session is likely. "
+        + `Automatic stale-runner recovery was already attempted and manual intervention is now required. See ${root}\\artifacts\\${task.task.task_id}\\github-queue-recycle.json.`
+      );
+    },
+    diagnoseQueuedRunIfPresent: () => ({
+      reason: "The run is still queued even though a matching self-hosted runner appears online and idle; a stale broker session is likely.",
+      suggested_action: "Consider recycling the self-hosted runner before retrying."
+    })
+  };
+
+  const reconciled = await orchestrator.reconcileRunningGitHubTasks(1, 1);
+  assert.equal(reconciled.length, 1);
+  assert.equal(reconciled[0]?.status, "error");
+  assert.match(reconciled[0]?.detail ?? "", /stuck in queued state/i);
+  assert.equal(reconciled[0]?.operator?.manual_intervention_required, true);
+  assert.match(reconciled[0]?.operator?.summary ?? "", /manual intervention is now required/i);
+  assert.equal(
+    reconciled[0]?.operator?.actions.some((value) => /inspect .*github-queue-recycle\.json/i.test(value)),
+    true
+  );
+});
+
+test("reconcileRunningGitHubTasks recommends repository setup when the GitHub run cannot be resolved", async () => {
+  const root = createTempDir("codex-head-reconcile-gh-unresolved-");
+  const registry = new AdapterRegistry();
+
+  registry.register(new FakeAdapter(
+    makeCapability("gemini-cli"),
+    createHealthyHealth("gemini-cli"),
+    async () => {
+      throw new Error("GitHub review should not run locally");
+    }
+  ));
+
+  registry.register(new FakeAdapter(
+    makeCapability("codex-cli"),
+    createHealthyHealth("codex-cli"),
+    async () => {
+      throw new Error("should not execute");
+    }
+  ));
+
+  registry.register(new FakeAdapter(
+    makeCapability("claude-code"),
+    createHealthyHealth("claude-code"),
+    async () => {
+      throw new Error("should not execute");
+    }
+  ));
+
+  registry.register(new FakeAdapter(
+    makeCapability("antigravity", { supports_local: false, supports_github: false }),
+    createHealthyHealth("antigravity"),
+    async () => {
+      throw new Error("should not execute");
+    }
+  ));
+
+  const config = createTestConfig(root);
+  config.github.repository = "OWNER/REPO";
+  const orchestrator = createAppWithRegistry(root, registry, config);
+  const task = orchestrator.submitTask(createTaskSpec({
+    goal: "Review the latest PR in GitHub",
+    repo: root,
+    worker_target: "gemini-cli",
+    expected_output: { kind: "review", format: "markdown", code_change: false },
+    requires_github: true
+  }));
+
+  orchestrator.enqueueTask(task.task.task_id);
+  const dispatchOutcome = await orchestrator.dispatchNext();
+  assert.equal(dispatchOutcome?.state, "running");
+
+  const reconciled = await orchestrator.reconcileRunningGitHubTasks(1, 1);
+  assert.equal(reconciled.length, 1);
+  assert.equal(reconciled[0]?.status, "error");
+  assert.match(reconciled[0]?.detail ?? "", /requires github\.repository to be configured|does not have a resolved GitHub workflow run yet/i);
+  assert.equal(reconciled[0]?.operator?.manual_intervention_required, false);
+  assert.equal(
+    reconciled[0]?.operator?.actions.some((value) => /set github\.repository or dispatch the task again/i.test(value)),
+    true
+  );
 });
 
 test("recoverRunningTasks marks interrupted local tasks as failed", async () => {

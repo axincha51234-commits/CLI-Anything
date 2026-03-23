@@ -130,6 +130,10 @@ problems, look under `operator` for:
 - `summary`
 - `actions`
 
+The same `operator` block is now also returned by `recover-running` and
+`reconcile-github-running`, so operator tooling can consume one shape across
+status, recovery, and batch reconciliation.
+
 ## Runtime Paths
 
 Defaults come from [`src/config.ts`](../src/config.ts):
@@ -613,6 +617,8 @@ This command:
 - filters to tasks whose persisted routing mode is `github`
 - waits and ingests callbacks task-by-task
 - returns a per-task summary with either `reconciled` or `error`
+- includes the same `operator` guidance block used by `status` and
+  `recover-running`
 
 To recover tasks left behind in `running` state after an interrupted local
 session:
