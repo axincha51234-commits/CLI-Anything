@@ -49,24 +49,31 @@ function buildShowOperatorReceiptCommand(receiptPath: string): string {
 }
 
 function renderArtifactRefLines(refs: {
-  worker_result_path: string | null;
-  execution_attempts_path: string | null;
-  primary_output_path: string | null;
-  primary_log_path: string | null;
+  worker_result: { path: string; freshness: string } | null;
+  execution_attempts: { path: string; freshness: string } | null;
+  primary_output: { path: string; freshness: string } | null;
+  primary_log: { path: string; freshness: string } | null;
 }): string[] {
   const lines: string[] = [];
 
-  if (refs.worker_result_path) {
-    lines.push(`worker-result: ${refs.worker_result_path}`);
+  const formatLabel = (label: string, freshness: string): string => {
+    if (freshness === "current") {
+      return label;
+    }
+    return `${label} (${freshness.replace(/_/g, "-")})`;
+  };
+
+  if (refs.worker_result) {
+    lines.push(`${formatLabel("worker-result", refs.worker_result.freshness)}: ${refs.worker_result.path}`);
   }
-  if (refs.execution_attempts_path) {
-    lines.push(`attempts: ${refs.execution_attempts_path}`);
+  if (refs.execution_attempts) {
+    lines.push(`${formatLabel("attempts", refs.execution_attempts.freshness)}: ${refs.execution_attempts.path}`);
   }
-  if (refs.primary_output_path) {
-    lines.push(`output: ${refs.primary_output_path}`);
+  if (refs.primary_output) {
+    lines.push(`${formatLabel("output", refs.primary_output.freshness)}: ${refs.primary_output.path}`);
   }
-  if (refs.primary_log_path) {
-    lines.push(`log: ${refs.primary_log_path}`);
+  if (refs.primary_log) {
+    lines.push(`${formatLabel("log", refs.primary_log.freshness)}: ${refs.primary_log.path}`);
   }
 
   return lines;
@@ -221,10 +228,18 @@ export function renderDoctorBrief(report: DoctorReport): string {
     visibleTaskFindings
       .map((finding) => {
         const segments = [
-          finding.artifact_refs.worker_result_path ? `result=${finding.artifact_refs.worker_result_path}` : null,
-          finding.artifact_refs.execution_attempts_path ? `attempts=${finding.artifact_refs.execution_attempts_path}` : null,
-          finding.artifact_refs.primary_output_path ? `output=${finding.artifact_refs.primary_output_path}` : null,
-          finding.artifact_refs.primary_log_path ? `log=${finding.artifact_refs.primary_log_path}` : null
+          finding.artifact_refs.worker_result
+            ? `result${finding.artifact_refs.worker_result.freshness === "current" ? "" : `(${finding.artifact_refs.worker_result.freshness.replace(/_/g, "-")})`}=${finding.artifact_refs.worker_result.path}`
+            : null,
+          finding.artifact_refs.execution_attempts
+            ? `attempts${finding.artifact_refs.execution_attempts.freshness === "current" ? "" : `(${finding.artifact_refs.execution_attempts.freshness.replace(/_/g, "-")})`}=${finding.artifact_refs.execution_attempts.path}`
+            : null,
+          finding.artifact_refs.primary_output
+            ? `output${finding.artifact_refs.primary_output.freshness === "current" ? "" : `(${finding.artifact_refs.primary_output.freshness.replace(/_/g, "-")})`}=${finding.artifact_refs.primary_output.path}`
+            : null,
+          finding.artifact_refs.primary_log
+            ? `log${finding.artifact_refs.primary_log.freshness === "current" ? "" : `(${finding.artifact_refs.primary_log.freshness.replace(/_/g, "-")})`}=${finding.artifact_refs.primary_log.path}`
+            : null
         ].filter((value): value is string => Boolean(value));
 
         if (segments.length === 0) {

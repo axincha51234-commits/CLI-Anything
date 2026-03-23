@@ -197,12 +197,16 @@ currently local-ready and exposes the matching cooldown reason.
   most useful artifact refs it can resolve (`worker-result`, `attempts`,
   `output`, `log`), and adds `github-url:` when a persisted workflow run URL is
   known.
+  - retained refs from an older attempt are now labeled as `last-attempt`, and
+    retry history is labeled as `history`.
 - `doctor --brief` now adds a `task-links:` section for the visible task rows,
   with each task's artifact directory path plus its GitHub run URL when one is
   available.
 - `doctor --brief` also adds an `artifact-files:` section for the visible task
   rows when canonical refs like `worker-result.json`, `execution-attempts.json`,
   primary output, or primary log are known.
+  - those refs carry the same freshness labels, so a queued/running task does
+    not look like it already produced a new current result.
 - `sweep-tasks` now gives operators a filtered bulk action for backlog triage.
   It can dry-run or apply `cancel` and `requeue` across selected tasks without
   deleting history from SQLite.

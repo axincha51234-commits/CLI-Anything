@@ -29,10 +29,10 @@ test("renderStatusBrief summarizes one task with operator guidance", () => {
     task,
     artifact_dir_path: "C:/repo/codex-head/runtime/artifacts/task-brief-1",
     artifact_refs: {
-      worker_result_path: "C:/repo/codex-head/runtime/artifacts/task-brief-1/worker-result.json",
-      execution_attempts_path: "C:/repo/codex-head/runtime/artifacts/task-brief-1/execution-attempts.json",
-      primary_output_path: "C:/repo/codex-head/runtime/artifacts/task-brief-1/worker-output.md",
-      primary_log_path: "C:/repo/codex-head/runtime/artifacts/task-brief-1/gemini-cli-local.combined.log"
+      worker_result: { path: "C:/repo/codex-head/runtime/artifacts/task-brief-1/worker-result.json", freshness: "current" },
+      execution_attempts: { path: "C:/repo/codex-head/runtime/artifacts/task-brief-1/execution-attempts.json", freshness: "history" },
+      primary_output: { path: "C:/repo/codex-head/runtime/artifacts/task-brief-1/worker-output.md", freshness: "current" },
+      primary_log: { path: "C:/repo/codex-head/runtime/artifacts/task-brief-1/gemini-cli-local.combined.log", freshness: "current" }
     },
     state: "failed",
     attempts: 1,
@@ -80,7 +80,7 @@ test("renderStatusBrief summarizes one task with operator guidance", () => {
   assert.match(rendered, /worker: gemini-cli via github/i);
   assert.match(rendered, /artifacts: C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-1/i);
   assert.match(rendered, /worker-result: C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-1\/worker-result\.json/i);
-  assert.match(rendered, /attempts: C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-1\/execution-attempts\.json/i);
+  assert.match(rendered, /attempts \(history\): C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-1\/execution-attempts\.json/i);
   assert.match(rendered, /output: C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-1\/worker-output\.md/i);
   assert.match(rendered, /log: C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-1\/gemini-cli-local\.combined\.log/i);
   assert.match(rendered, /github-url: https:\/\/github\.com\/example\/repo\/actions\/runs\/321/i);
@@ -134,10 +134,10 @@ test("renderStatusBrief omits the no-action line when only follow-up actions exi
     task,
     artifact_dir_path: "C:/repo/codex-head/runtime/artifacts/task-brief-3",
     artifact_refs: {
-      worker_result_path: null,
-      execution_attempts_path: null,
-      primary_output_path: null,
-      primary_log_path: null
+      worker_result: null,
+      execution_attempts: null,
+      primary_output: null,
+      primary_log: null
     },
     state: "failed",
     attempts: 1,
@@ -261,10 +261,10 @@ test("renderDoctorBrief summarizes operator findings and next actions", () => {
           routing_mode: "github",
           artifact_dir_path: "C:/repo/codex-head/runtime/artifacts/task-brief-doctor",
           artifact_refs: {
-            worker_result_path: "C:/repo/codex-head/runtime/artifacts/task-brief-doctor/worker-result.json",
-            execution_attempts_path: "C:/repo/codex-head/runtime/artifacts/task-brief-doctor/execution-attempts.json",
-            primary_output_path: "C:/repo/codex-head/runtime/artifacts/task-brief-doctor/worker-output.md",
-            primary_log_path: "C:/repo/codex-head/runtime/artifacts/task-brief-doctor/gemini-cli-local.combined.log"
+            worker_result: { path: "C:/repo/codex-head/runtime/artifacts/task-brief-doctor/worker-result.json", freshness: "current" },
+            execution_attempts: { path: "C:/repo/codex-head/runtime/artifacts/task-brief-doctor/execution-attempts.json", freshness: "history" },
+            primary_output: { path: "C:/repo/codex-head/runtime/artifacts/task-brief-doctor/worker-output.md", freshness: "current" },
+            primary_log: { path: "C:/repo/codex-head/runtime/artifacts/task-brief-doctor/gemini-cli-local.combined.log", freshness: "current" }
           },
           github_run_url: "https://github.com/example/repo/actions/runs/321",
           severity: "error",
@@ -306,7 +306,7 @@ test("renderDoctorBrief summarizes operator findings and next actions", () => {
   assert.match(rendered, /receipt=operator-actions\/2026-03-23T08-09-05\.877Z-run-doctor-hint\.json \[run-doctor-hint\]/i);
   assert.match(rendered, /receipt-commands:\n- task-brief-doctor :: node dist\/src\/index\.js show-operator-receipt operator-actions\/2026-03-23T08-09-05\.877Z-run-doctor-hint\.json --brief/i);
   assert.match(rendered, /task-links:\n- task-brief-doctor :: artifacts=C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-doctor :: github=https:\/\/github\.com\/example\/repo\/actions\/runs\/321/i);
-  assert.match(rendered, /artifact-files:\n- task-brief-doctor :: result=C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-doctor\/worker-result\.json :: attempts=C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-doctor\/execution-attempts\.json :: output=C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-doctor\/worker-output\.md :: log=C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-doctor\/gemini-cli-local\.combined\.log/i);
+  assert.match(rendered, /artifact-files:\n- task-brief-doctor :: result=C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-doctor\/worker-result\.json :: attempts\(history\)=C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-doctor\/execution-attempts\.json :: output=C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-doctor\/worker-output\.md :: log=C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-doctor\/gemini-cli-local\.combined\.log/i);
   assert.match(rendered, /next:\n- Inspect the claude-code health command and local runtime\./i);
   assert.match(rendered, /commands:\n- \[suppressed-failed-backlog\] node dist\/src\/index\.js sweep-tasks cancel --state failed --older-than-hours 6 --dry-run --brief/i);
 });
@@ -320,10 +320,16 @@ test("renderDoctorBrief keeps receipt commands aligned with visible task rows", 
     routing_mode: "local",
     artifact_dir_path: `C:/repo/codex-head/runtime/artifacts/task-brief-visible-${index + 1}`,
     artifact_refs: {
-      worker_result_path: index < 2 ? `C:/repo/codex-head/runtime/artifacts/task-brief-visible-${index + 1}/worker-result.json` : null,
-      execution_attempts_path: index < 2 ? `C:/repo/codex-head/runtime/artifacts/task-brief-visible-${index + 1}/execution-attempts.json` : null,
-      primary_output_path: null,
-      primary_log_path: index < 2 ? `C:/repo/codex-head/runtime/artifacts/task-brief-visible-${index + 1}/codex-cli-local.combined.log` : null
+      worker_result: index < 2
+        ? { path: `C:/repo/codex-head/runtime/artifacts/task-brief-visible-${index + 1}/worker-result.json`, freshness: "last_attempt" }
+        : null,
+      execution_attempts: index < 2
+        ? { path: `C:/repo/codex-head/runtime/artifacts/task-brief-visible-${index + 1}/execution-attempts.json`, freshness: "history" }
+        : null,
+      primary_output: null,
+      primary_log: index < 2
+        ? { path: `C:/repo/codex-head/runtime/artifacts/task-brief-visible-${index + 1}/codex-cli-local.combined.log`, freshness: "last_attempt" }
+        : null
     },
     github_run_url: null,
     severity: "warning",
@@ -397,7 +403,7 @@ test("renderDoctorBrief keeps receipt commands aligned with visible task rows", 
   assert.match(rendered, /tasks:\n- task-brief-visible-1/i);
   assert.doesNotMatch(rendered, /task-brief-visible-9/i);
   assert.match(rendered, /receipt-commands:\n- task-brief-visible-1 :: node dist\/src\/index\.js show-operator-receipt operator-actions\/2026-03-23T08-09-00\.000Z-run-doctor-hint\.json --brief/i);
-  assert.match(rendered, /artifact-files:\n- task-brief-visible-1 :: result=C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-visible-1\/worker-result\.json :: attempts=C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-visible-1\/execution-attempts\.json :: log=C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-visible-1\/codex-cli-local\.combined\.log/i);
+  assert.match(rendered, /artifact-files:\n- task-brief-visible-1 :: result\(last-attempt\)=C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-visible-1\/worker-result\.json :: attempts\(history\)=C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-visible-1\/execution-attempts\.json :: log\(last-attempt\)=C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-visible-1\/codex-cli-local\.combined\.log/i);
   assert.doesNotMatch(rendered, /receipt-commands:[\s\S]*task-brief-visible-9/i);
   assert.doesNotMatch(rendered, /artifact-files:[\s\S]*task-brief-visible-9/i);
 });

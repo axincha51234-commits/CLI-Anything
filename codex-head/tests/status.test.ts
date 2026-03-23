@@ -124,10 +124,10 @@ test("buildTaskStatusSnapshot surfaces queue diagnosis and recycle state", () =>
   assert.equal(snapshot.operator.latest_receipt_command, "run-doctor-hint");
   assert.equal(snapshot.operator.latest_receipt_created_at, "2026-03-23T09:00:00.000Z");
   assert.deepEqual(snapshot.artifact_refs, {
-    worker_result_path: null,
-    execution_attempts_path: null,
-    primary_output_path: null,
-    primary_log_path: null
+    worker_result: null,
+    execution_attempts: null,
+    primary_output: null,
+    primary_log: null
   });
   assert.equal(snapshot.operator.manual_intervention_required, true);
   assert.match(snapshot.operator.summary ?? "", /manual intervention is now required/i);
@@ -171,10 +171,10 @@ test("buildTaskStatusSnapshots stays read-only when queue artifacts do not exist
   assert.equal(snapshot?.operator.latest_receipt_command, null);
   assert.equal(snapshot?.operator.latest_receipt_created_at, null);
   assert.deepEqual(snapshot?.artifact_refs, {
-    worker_result_path: null,
-    execution_attempts_path: null,
-    primary_output_path: null,
-    primary_log_path: null
+    worker_result: null,
+    execution_attempts: null,
+    primary_output: null,
+    primary_log: null
   });
   assert.equal(snapshot?.operator.manual_intervention_required, false);
   assert.equal(snapshot?.operator.summary, null);
@@ -250,10 +250,52 @@ test("buildTaskStatusSnapshot surfaces canonical artifact refs when present", ()
   artifactStore.writeJson(taskId, "execution-attempts.json", { attempts: [] });
 
   const snapshot = buildTaskStatusSnapshot(record, artifactStore);
-  assert.match(snapshot.artifact_refs.worker_result_path ?? "", /worker-result\.json$/i);
-  assert.match(snapshot.artifact_refs.execution_attempts_path ?? "", /execution-attempts\.json$/i);
-  assert.match(snapshot.artifact_refs.primary_output_path ?? "", /worker-output\.md$/i);
-  assert.match(snapshot.artifact_refs.primary_log_path ?? "", /gemini-cli-local\.combined\.log$/i);
+  assert.match(snapshot.artifact_refs.worker_result?.path ?? "", /worker-result\.json$/i);
+  assert.equal(snapshot.artifact_refs.worker_result?.freshness, "current");
+  assert.match(snapshot.artifact_refs.execution_attempts?.path ?? "", /execution-attempts\.json$/i);
+  assert.equal(snapshot.artifact_refs.execution_attempts?.freshness, "history");
+  assert.match(snapshot.artifact_refs.primary_output?.path ?? "", /worker-output\.md$/i);
+  assert.equal(snapshot.artifact_refs.primary_output?.freshness, "current");
+  assert.match(snapshot.artifact_refs.primary_log?.path ?? "", /gemini-cli-local\.combined\.log$/i);
+  assert.equal(snapshot.artifact_refs.primary_log?.freshness, "current");
+});
+
+test("buildTaskStatusSnapshot marks active-task result refs as last_attempt", () => {
+  const root = createTempDir("codex-head-status-active-artifact-refs-");
+  const artifactStore = new FileArtifactStore(resolve(root, "artifacts"));
+  const taskId = "task-active-last-attempt";
+  const record = createRecord({
+    task: createTaskSpec({
+      task_id: taskId,
+      goal: "Summarize the current orchestration state",
+      repo: "C:/repo",
+      worker_target: "codex-cli",
+      expected_output: { kind: "analysis", format: "markdown", code_change: false }
+    }),
+    state: "queued",
+    result: {
+      task_id: taskId,
+      worker_target: "codex-cli",
+      status: "failed",
+      review_verdict: null,
+      summary: "Previous attempt failed",
+      artifacts: [],
+      patch_ref: null,
+      log_ref: resolve(root, "artifacts", taskId, "codex-cli-local.combined.log"),
+      cost: 0,
+      duration_ms: 0,
+      next_action: "retry",
+      review_notes: []
+    }
+  });
+
+  artifactStore.writeJson(taskId, "worker-result.json", { ok: false });
+  artifactStore.writeJson(taskId, "execution-attempts.json", { attempts: [] });
+
+  const snapshot = buildTaskStatusSnapshot(record, artifactStore);
+  assert.equal(snapshot.artifact_refs.worker_result?.freshness, "last_attempt");
+  assert.equal(snapshot.artifact_refs.execution_attempts?.freshness, "history");
+  assert.equal(snapshot.artifact_refs.primary_log?.freshness, "last_attempt");
 });
 
 test("buildTaskStatusSnapshot recommends concrete actions for busy runners and gh auth failures", () => {

@@ -220,6 +220,8 @@ receipt path for a task when one exists, so operators can jump directly into
 - `status --brief` also prints `artifacts: ...` plus canonical refs like
   `worker-result: ...`, `attempts: ...`, `output: ...`, and `log: ...` when
   those paths are known
+- retained refs from an older attempt are labeled `(... last-attempt ...)`,
+  while retry history stays labeled `(... history ...)`
 - `status --brief` prints `github-url: ...` when the task has a persisted
   workflow run URL
 - `doctor --brief` adds a `receipt-commands:` section for task-level receipt jumps
@@ -228,6 +230,8 @@ receipt path for a task when one exists, so operators can jump directly into
 - `doctor --brief` also adds an `artifact-files:` section for visible task rows
   when `worker-result.json`, `execution-attempts.json`, primary output, or the
   primary log can be resolved
+- those artifact refs now include freshness labels so queued/running tasks do
+  not present stale output as if it were the current attempt
 
 `sweep-tasks` is intentionally conservative:
 

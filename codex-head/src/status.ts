@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 
-import type { TaskRecord } from "./contracts";
+import type { TaskRecord, TaskState } from "./contracts";
 import { FileArtifactStore } from "./artifacts/fileArtifactStore";
 
 interface QueueDiagnosisArtifact {
@@ -38,11 +38,18 @@ export interface TaskOperatorStatus {
   actions: string[];
 }
 
+export type TaskArtifactRefFreshness = "current" | "last_attempt" | "history";
+
+export interface TaskArtifactRef {
+  path: string;
+  freshness: TaskArtifactRefFreshness;
+}
+
 export interface TaskArtifactRefs {
-  worker_result_path: string | null;
-  execution_attempts_path: string | null;
-  primary_output_path: string | null;
-  primary_log_path: string | null;
+  worker_result: TaskArtifactRef | null;
+  execution_attempts: TaskArtifactRef | null;
+  primary_output: TaskArtifactRef | null;
+  primary_log: TaskArtifactRef | null;
 }
 
 export interface TaskStatusSnapshot extends TaskRecord {
@@ -208,11 +215,28 @@ function buildTaskArtifactRefs(
   record: TaskRecord,
   artifactStore: FileArtifactStore
 ): TaskArtifactRefs {
+  const resultFreshness: TaskArtifactRefFreshness =
+    record.state === "completed" || record.state === "failed" || record.state === "awaiting_review"
+      ? "current"
+      : "last_attempt";
+  const workerResultPath = resolveExistingArtifactPath(artifactStore, record.task.task_id, "worker-result.json");
+  const executionAttemptsPath = resolveExistingArtifactPath(artifactStore, record.task.task_id, "execution-attempts.json");
+
   return {
-    worker_result_path: resolveExistingArtifactPath(artifactStore, record.task.task_id, "worker-result.json"),
-    execution_attempts_path: resolveExistingArtifactPath(artifactStore, record.task.task_id, "execution-attempts.json"),
-    primary_output_path: record.result?.patch_ref ?? record.result?.artifacts[0] ?? null,
-    primary_log_path: record.result?.log_ref ?? null
+    worker_result: workerResultPath ? { path: workerResultPath, freshness: resultFreshness } : null,
+    execution_attempts: executionAttemptsPath ? { path: executionAttemptsPath, freshness: "history" } : null,
+    primary_output: (record.result?.patch_ref ?? record.result?.artifacts[0])
+      ? {
+          path: record.result?.patch_ref ?? record.result?.artifacts[0] ?? "",
+          freshness: resultFreshness
+        }
+      : null,
+    primary_log: record.result?.log_ref
+      ? {
+          path: record.result.log_ref,
+          freshness: resultFreshness
+        }
+      : null
   };
 }
 

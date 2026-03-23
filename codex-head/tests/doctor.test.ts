@@ -57,10 +57,10 @@ function createStatusSnapshot(
     task,
     artifact_dir_path: `C:/repo/codex-head/runtime/artifacts/${task.task_id}`,
     artifact_refs: {
-      worker_result_path: null,
-      execution_attempts_path: null,
-      primary_output_path: null,
-      primary_log_path: null
+      worker_result: null,
+      execution_attempts: null,
+      primary_output: null,
+      primary_log: null
     },
     state: "completed",
     attempts: 1,
@@ -234,10 +234,10 @@ test("buildDoctorReport aggregates worker, GitHub, and task findings", () => {
     "C:/repo/codex-head/runtime/artifacts/task-doctor-failed"
   );
   assert.deepEqual(report.attention.tasks[0]?.artifact_refs, {
-    worker_result_path: null,
-    execution_attempts_path: null,
-    primary_output_path: null,
-    primary_log_path: null
+    worker_result: null,
+    execution_attempts: null,
+    primary_output: null,
+    primary_log: null
   });
   assert.equal(report.attention.tasks[0]?.github_run_url, null);
   assert.equal(
