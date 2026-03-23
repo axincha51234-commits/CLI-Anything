@@ -199,6 +199,8 @@ currently local-ready and exposes the matching cooldown reason.
   known.
   - retained refs from an older attempt are now labeled as `last-attempt`, and
     retry history is labeled as `history`.
+  - if the task already has an operator receipt, brief mode shows the receipt
+    jump without the filler line `operator: no immediate action`.
 - `doctor --brief` now adds a `task-links:` section only for the visible task
   rows that already have a receipt, GitHub run URL, or other stronger triage
   signals, with each row exposing its artifact directory path plus GitHub run

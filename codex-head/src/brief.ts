@@ -191,7 +191,7 @@ function renderOperatorLines(operator: TaskOperatorStatus | null): string[] {
   const lines: string[] = [];
   if (operator.summary) {
     lines.push(`operator: ${compactText(operator.summary)}`);
-  } else if (operator.actions.length === 0) {
+  } else if (operator.actions.length === 0 && !operator.latest_receipt_path) {
     lines.push("operator: no immediate action");
   }
 

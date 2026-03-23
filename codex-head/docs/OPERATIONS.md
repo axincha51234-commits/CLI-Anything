@@ -224,6 +224,8 @@ receipt path for a task when one exists, so operators can jump directly into
   while retry history stays labeled `(... history ...)`
 - `status --brief` prints `github-url: ...` when the task has a persisted
   workflow run URL
+- `status --brief` hides `operator: no immediate action` when the task already
+  has an operator receipt to open
 - `doctor --brief` adds a `receipt-commands:` section for task-level receipt jumps
 - `doctor --brief` also adds a `task-links:` section only for the visible task
   rows that already have a receipt, GitHub run URL, or other stronger triage

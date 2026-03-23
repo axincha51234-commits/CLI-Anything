@@ -178,6 +178,62 @@ test("renderStatusBrief omits the no-action line when only follow-up actions exi
   assert.match(rendered, /next: Set github\.repository or dispatch the task again/i);
 });
 
+test("renderStatusBrief omits the no-action line when a receipt is available", () => {
+  const task = createTaskSpec({
+    task_id: "task-brief-4",
+    goal: "Summarize the current orchestration state",
+    repo: "C:/repo",
+    worker_target: "gemini-cli",
+    expected_output: { kind: "analysis", format: "markdown", code_change: false }
+  });
+
+  const rendered = renderStatusBrief({
+    task,
+    artifact_dir_path: "C:/repo/codex-head/runtime/artifacts/task-brief-4",
+    artifact_refs: {
+      worker_result: { path: "C:/repo/codex-head/runtime/artifacts/task-brief-4/worker-result.json", freshness: "last_attempt" },
+      execution_attempts: { path: "C:/repo/codex-head/runtime/artifacts/task-brief-4/execution-attempts.json", freshness: "history" },
+      primary_output: null,
+      primary_log: { path: "C:/repo/codex-head/runtime/artifacts/task-brief-4/gemini-cli-local.combined.log", freshness: "last_attempt" }
+    },
+    state: "queued",
+    attempts: 1,
+    max_attempts: 3,
+    next_run_at: 0,
+    created_at: 0,
+    updated_at: 0,
+    started_at: 0,
+    finished_at: 0,
+    last_error: null,
+    result: null,
+    routing: {
+      worker_target: "gemini-cli",
+      mode: "local",
+      reason: "test",
+      fallback_from: null
+    },
+    github_run: null,
+    github_mirror: null,
+    reviews: [],
+    operator: {
+      queue_diagnosis_path: null,
+      queue_diagnosis: null,
+      queue_recycle_path: null,
+      queue_recycle: null,
+      latest_receipt_path: "operator-actions/2026-03-23T08-09-05.877Z-run-doctor-hint.json",
+      latest_receipt_command: "run-doctor-hint",
+      latest_receipt_created_at: "2026-03-23T08:09:05.877Z",
+      manual_intervention_required: false,
+      summary: null,
+      actions: []
+    }
+  } satisfies TaskStatusSnapshot);
+
+  assert.doesNotMatch(rendered, /operator: no immediate action/i);
+  assert.match(rendered, /receipt: operator-actions\/2026-03-23T08-09-05\.877Z-run-doctor-hint\.json \[run-doctor-hint\]/i);
+  assert.match(rendered, /open-receipt: node dist\/src\/index\.js show-operator-receipt operator-actions\/2026-03-23T08-09-05\.877Z-run-doctor-hint\.json --brief/i);
+});
+
 test("renderOutcomeBrief handles empty batches", () => {
   assert.equal(renderOutcomeBrief([], "No reconcile targets."), "No reconcile targets.");
 });
