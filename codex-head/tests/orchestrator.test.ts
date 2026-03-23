@@ -2132,7 +2132,8 @@ test("showLatestOperatorReceipt and showOperatorReceiptForTask resolve the newes
   );
   assert.throws(
     () => orchestrator.showLatestOperatorReceipt({
-      command: "run-doctor-hint"
+      command: "run-doctor-hint",
+      apply_only: true
     }),
     /no operator receipt matched the requested latest lookup/i
   );
