@@ -82,7 +82,7 @@ currently local-ready and exposes the matching cooldown reason.
   `antigravity`
 - SQLite-backed task lifecycle and retry state
 - CLI support for `health`, `run-goal`, `configure-github-repo`, `plan`, `enqueue`,
-  `review`, `status`, `dispatch`, `dispatch-next`, `dispatch-and-wait`, `publish-github-mirror`,
+  `review`, `status`, `doctor`, `dispatch`, `dispatch-next`, `dispatch-and-wait`, `publish-github-mirror`,
   `run-github-payload`,
   `sync-github-callback`, `wait-github-callback`, `clear-penalties`,
   `reconcile-github-running`, `recover-running`, and `complete-from-file`
@@ -165,9 +165,12 @@ currently local-ready and exposes the matching cooldown reason.
 - `reconcile-github-running` now returns that same `operator` block for batch
   callback reconciliation, so success and failure triage use one consistent
   output shape.
+- `doctor` now aggregates `health`, self-hosted GitHub runtime status, and
+  task/operator snapshots into one read-only operator report, with an optional
+  `--brief` summary when you only need the short triage version.
 - `status`, `recover-running`, and `reconcile-github-running` now also support
   `--brief` for plain-text operator summaries when JSON is more noise than
-  signal.
+  signal, and `doctor` offers that same brief mode for whole-system triage.
 - Self-hosted queue-stall handling now writes `github-queue-diagnosis.json`,
   and an opt-in `github.auto_recycle_stale_runner` flag can automatically call
   the Windows recycle helper for stale broker sessions.

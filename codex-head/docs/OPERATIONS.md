@@ -79,6 +79,7 @@ node dist/src/index.js wait-github-callback <task-id> [timeout-sec] [interval-se
 node dist/src/index.js reconcile-github-running [timeout-sec] [interval-sec] [--brief]
 node dist/src/index.js recover-running [timeout-sec] [interval-sec] [--requeue-local] [--brief]
 node dist/src/index.js status [task-id] [--brief]
+node dist/src/index.js doctor [--brief]
 node dist/src/index.js dispatch <task-id>
 node dist/src/index.js dispatch-and-wait <task-id> [timeout-sec] [interval-sec]
 node dist/src/index.js dispatch-next
@@ -114,9 +115,11 @@ node dist/src/index.js complete-from-file <worker-result.json>
     interrupted and tasks are stuck in `running`.
 13. Run `review` to submit a reviewer verdict for a task that is already in
     `awaiting_review`.
-14. Run `clear-penalties` when a local provider recovered and you want to stop
+14. Run `doctor` when you want one read-only triage surface that combines
+    worker health, self-hosted GitHub runtime, and task/operator guidance.
+15. Run `clear-penalties` when a local provider recovered and you want to stop
     honoring remembered cooldowns immediately.
-15. Run `complete-from-file` to ingest an external callback artifact such as
+16. Run `complete-from-file` to ingest an external callback artifact such as
     `github-callback.json`.
 
 `status [task-id]` now returns an enriched JSON snapshot. For GitHub queue
@@ -135,6 +138,12 @@ The same `operator` block is now also returned by `recover-running` and
 status, recovery, and batch reconciliation.
 If you only need the short human-facing triage view, all three commands now
 also accept `--brief`.
+
+`doctor` builds on those same snapshots plus `npm run health`-style runtime
+inspection. The JSON form keeps the full `health` payload and categorized
+attention lists for workers, GitHub/runtime, and tasks. `doctor --brief`
+renders the same report as a short checklist when you only need the operator
+summary and next actions.
 
 ## Runtime Paths
 

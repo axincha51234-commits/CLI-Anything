@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { renderOutcomeBrief, renderStatusBrief } from "../src/brief";
+import { renderDoctorBrief, renderOutcomeBrief, renderStatusBrief } from "../src/brief";
+import type { DoctorReport } from "../src/doctor";
 import { createTaskSpec } from "../src/schema";
 import type { TaskStatusSnapshot } from "../src/status";
 
@@ -139,4 +140,96 @@ test("renderStatusBrief omits the no-action line when only follow-up actions exi
 
 test("renderOutcomeBrief handles empty batches", () => {
   assert.equal(renderOutcomeBrief([], "No reconcile targets."), "No reconcile targets.");
+});
+
+test("renderDoctorBrief summarizes operator findings and next actions", () => {
+  const report: DoctorReport = {
+    ok: false,
+    generated_at: new Date().toISOString(),
+    summary: "Found 3 blocking item(s) across 1 worker, 1 GitHub, 1 task.",
+    counts: {
+      total_tasks: 2,
+      task_states: {
+        failed: 1,
+        running: 1
+      },
+      enabled_workers: 3,
+      workers_needing_attention: 1,
+      github_findings: 1,
+      tasks_needing_attention: 2,
+      blocking_findings: 3,
+      informational_findings: 1
+    },
+    health: {
+      adapters: [],
+      readiness: [],
+      recent_penalties: [],
+      github: {
+        enabled: true,
+        dispatch_mode: "gh_cli",
+        execution_preference: "local_preferred",
+        auto_recycle_stale_runner: true,
+        repository: "example/repo",
+        workflow: "codex-head-worker.yml",
+        review_workflow: "codex-head-gemini-review.yml",
+        cli_binary: "gh",
+        gh_cli_available: true,
+        gh_cli_path: "gh",
+        gh_authenticated: false,
+        machine_config_path: "C:/repo/codex-head/config/workers.machine.json",
+        machine_config_exists: true,
+        runs_on_json: "[\"self-hosted\",\"Windows\",\"codex-head\"]",
+        runs_on_labels: ["self-hosted", "Windows", "codex-head"],
+        self_hosted_targeted: true,
+        recycle_script_path: "C:/repo/codex-head/scripts/recycle-self-hosted-runner.ps1",
+        recycle_script_available: true,
+        matching_runners: [],
+        runner_lookup_detail: null
+      },
+      database_path: "C:/repo/codex-head/runtime/codex-head.sqlite",
+      artifacts_dir: "C:/repo/codex-head/runtime/artifacts"
+    },
+    attention: {
+      workers: [
+        {
+          worker_target: "claude-code",
+          severity: "error",
+          summary: "Worker claude-code health check failed: Timed out while checking auth",
+          actions: ["Inspect the claude-code health command and local runtime."]
+        }
+      ],
+      github: [
+        {
+          severity: "error",
+          summary: "GitHub dispatch is enabled but gh is not authenticated on this machine.",
+          actions: ["Run gh auth login on the machine that dispatches or reconciles GitHub workflows."]
+        }
+      ],
+      tasks: [
+        {
+          task_id: "task-brief-doctor",
+          state: "failed",
+          goal: "Review the latest PR in GitHub",
+          worker_target: "gemini-cli",
+          routing_mode: "github",
+          severity: "error",
+          summary: "Automatic stale-runner recovery was already attempted and manual intervention is now required.",
+          actions: ["Inspect C:/repo/codex-head/runtime/artifacts/task-brief-doctor/github-queue-recycle.json and retry."],
+          manual_intervention_required: true
+        }
+      ]
+    },
+    actions: [
+      "Inspect the claude-code health command and local runtime.",
+      "Run gh auth login on the machine that dispatches or reconciles GitHub workflows.",
+      "Inspect C:/repo/codex-head/runtime/artifacts/task-brief-doctor/github-queue-recycle.json and retry."
+    ]
+  };
+
+  const rendered = renderDoctorBrief(report);
+  assert.match(rendered, /^doctor: needs attention/im);
+  assert.match(rendered, /workers:\n- claude-code \[error\] Worker claude-code health check failed/i);
+  assert.match(rendered, /github:\n- \[error\] GitHub dispatch is enabled but gh is not authenticated/i);
+  assert.match(rendered, /tasks:\n- task-brief-doctor \[failed\/error\] Review the latest PR in GitHub/i);
+  assert.match(rendered, /next:\n- Inspect the claude-code health command and local runtime\./i);
 });

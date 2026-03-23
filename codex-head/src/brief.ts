@@ -1,4 +1,5 @@
 import type { DispatchOutcome } from "./contracts";
+import type { DoctorReport } from "./doctor";
 import type { TaskOperatorStatus, TaskStatusSnapshot } from "./status";
 
 type ReconcileOrRecoveryEntry = {
@@ -15,6 +16,25 @@ function compactText(value: string, maxLength = 220): string {
     return normalized;
   }
   return `${normalized.slice(0, Math.max(0, maxLength - 3)).trimEnd()}...`;
+}
+
+function pushLimitedSection(
+  lines: string[],
+  heading: string,
+  values: string[],
+  maxItems: number
+): void {
+  if (values.length === 0) {
+    return;
+  }
+
+  lines.push(heading);
+  for (const value of values.slice(0, maxItems)) {
+    lines.push(value);
+  }
+  if (values.length > maxItems) {
+    lines.push(`- ... ${values.length - maxItems} more`);
+  }
 }
 
 function renderOperatorLines(operator: TaskOperatorStatus | null): string[] {
@@ -88,4 +108,38 @@ export function renderOutcomeBrief(
     return emptyMessage;
   }
   return entries.map((entry) => renderOutcomeBlock(entry)).join("\n\n");
+}
+
+export function renderDoctorBrief(report: DoctorReport): string {
+  const lines = [
+    `doctor: ${report.ok ? "healthy" : "needs attention"}`,
+    `summary: ${compactText(report.summary)}`
+  ];
+
+  pushLimitedSection(
+    lines,
+    "workers:",
+    report.attention.workers.map((finding) => `- ${finding.worker_target} [${finding.severity}] ${compactText(finding.summary, 180)}`),
+    5
+  );
+  pushLimitedSection(
+    lines,
+    "github:",
+    report.attention.github.map((finding) => `- [${finding.severity}] ${compactText(finding.summary, 180)}`),
+    5
+  );
+  pushLimitedSection(
+    lines,
+    "tasks:",
+    report.attention.tasks.map((finding) => `- ${finding.task_id} [${finding.state}/${finding.severity}] ${compactText(finding.goal, 90)} :: ${compactText(finding.summary, 180)}`),
+    8
+  );
+  pushLimitedSection(
+    lines,
+    "next:",
+    report.actions.map((action) => `- ${compactText(action, 180)}`),
+    8
+  );
+
+  return lines.join("\n");
 }

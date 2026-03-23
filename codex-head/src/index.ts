@@ -1,8 +1,9 @@
 import { resolve } from "node:path";
 
+import { renderDoctorBrief, renderOutcomeBrief, renderStatusBrief } from "./brief";
 import { normalizeGitHubRepository, updateGitHubConfig } from "./config";
-import { renderOutcomeBrief, renderStatusBrief } from "./brief";
 import { REVIEW_VERDICTS, WORKER_TARGETS } from "./contracts";
+import { buildDoctorReport } from "./doctor";
 import { executeGitHubPayloadFile } from "./github/workflowRunner";
 import { CodexHeadOrchestrator } from "./orchestrator";
 import { buildTaskStatusSnapshot, buildTaskStatusSnapshots } from "./status";
@@ -157,6 +158,18 @@ function parseReconcileArgs(args: string[]): {
   };
 }
 
+function parseDoctorArgs(args: string[]): {
+  brief: boolean;
+} {
+  const stripped = stripFlag(args, "--brief");
+  if (stripped.values.length > 0) {
+    throw new Error("doctor does not accept positional arguments");
+  }
+  return {
+    brief: stripped.present
+  };
+}
+
 function usage(): void {
   process.stdout.write(
     [
@@ -174,6 +187,7 @@ function usage(): void {
       "  node dist/src/index.js reconcile-github-running [timeout-sec] [interval-sec] [--brief]",
       "  node dist/src/index.js recover-running [timeout-sec] [interval-sec] [--requeue-local] [--brief]",
       "  node dist/src/index.js status [task-id] [--brief]",
+      "  node dist/src/index.js doctor [--brief]",
       "  node dist/src/index.js dispatch <task-id>",
       "  node dist/src/index.js dispatch-and-wait <task-id> [timeout-sec] [interval-sec]",
       "  node dist/src/index.js dispatch-next",
@@ -448,6 +462,20 @@ async function main(): Promise<void> {
       : buildTaskStatusSnapshots(orchestrator.listTasks(), orchestrator.artifactStore);
     if (parsed.brief) {
       printText(renderStatusBrief(result));
+      return;
+    }
+    printJson(result);
+    return;
+  }
+
+  if (command === "doctor") {
+    const parsed = parseDoctorArgs(rest);
+    const result = buildDoctorReport(
+      await orchestrator.smokeAdapters(),
+      buildTaskStatusSnapshots(orchestrator.listTasks(), orchestrator.artifactStore)
+    );
+    if (parsed.brief) {
+      printText(renderDoctorBrief(result));
       return;
     }
     printJson(result);
