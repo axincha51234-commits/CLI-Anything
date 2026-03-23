@@ -400,7 +400,38 @@ test("renderDoctorBrief keeps receipt commands aligned with visible task rows", 
       tasks
     },
     actions: ["Dispatch the queued task when the workspace and workers are ready."],
-    command_hints: []
+    command_hints: [
+      {
+        id: "queued-backlog-1",
+        kind: "queued_backlog",
+        reason: "Inspect queued task task-brief-visible-1 before canceling it from the backlog.",
+        command: "node dist/src/index.js sweep-tasks cancel --task-id task-brief-visible-1 --dry-run --brief",
+        sweep: {
+          action: "cancel",
+          task_ids: ["task-brief-visible-1"]
+        }
+      },
+      {
+        id: "queued-backlog-2",
+        kind: "queued_backlog",
+        reason: "Inspect queued task task-brief-visible-2 before canceling it from the backlog.",
+        command: "node dist/src/index.js sweep-tasks cancel --task-id task-brief-visible-2 --dry-run --brief",
+        sweep: {
+          action: "cancel",
+          task_ids: ["task-brief-visible-2"]
+        }
+      },
+      {
+        id: "queued-backlog-3",
+        kind: "queued_backlog",
+        reason: "Inspect queued task task-brief-visible-3 before canceling it from the backlog.",
+        command: "node dist/src/index.js sweep-tasks cancel --task-id task-brief-visible-3 --dry-run --brief",
+        sweep: {
+          action: "cancel",
+          task_ids: ["task-brief-visible-3"]
+        }
+      }
+    ]
   };
 
   const rendered = renderDoctorBrief(report);
@@ -410,9 +441,10 @@ test("renderDoctorBrief keeps receipt commands aligned with visible task rows", 
   assert.doesNotMatch(rendered, /task-brief-visible-9/i);
   assert.match(rendered, /receipt-commands:\n- task-brief-visible-1 :: node dist\/src\/index\.js show-operator-receipt operator-actions\/2026-03-23T08-09-00\.000Z-run-doctor-hint\.json --brief/i);
   assert.match(rendered, /task-links:\n- task-brief-visible-1 :: artifacts=C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-visible-1/i);
-  assert.doesNotMatch(rendered, /task-links:[\s\S]*task-brief-visible-3/i);
+  assert.doesNotMatch(rendered, /\n- task-brief-visible-3 :: artifacts=/i);
   assert.doesNotMatch(rendered, /receipt-commands:[\s\S]*task-brief-visible-9/i);
   assert.doesNotMatch(rendered, /^artifact-files:/im);
+  assert.match(rendered, /commands:[\s\S]*\[queued-backlog-3\] node dist\/src\/index\.js sweep-tasks cancel --task-id task-brief-visible-3 --dry-run --brief :: representative of 6 similar queued\/warning task\(s\)/i);
 });
 
 test("renderSweepBrief summarizes bulk task actions", () => {

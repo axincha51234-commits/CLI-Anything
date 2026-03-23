@@ -77,9 +77,20 @@ function renderDoctorTaskLine(finding: DoctorReport["attention"]["tasks"][number
   return `- ${finding.task_id} [${finding.state}/${finding.severity}] ${compactText(finding.goal, 90)} :: ${compactText(finding.summary, 180)}${receiptSuffix}`;
 }
 
-function renderDoctorTaskSummaryLines(findings: DoctorReport["attention"]["tasks"]): string[] {
+type DoctorRoutineTaskGroupInfo = {
+  count: number;
+  state: string;
+  severity: string;
+  goal: string;
+};
+
+function summarizeDoctorTaskLines(findings: DoctorReport["attention"]["tasks"]): {
+  lines: string[];
+  groupedTaskInfo: Map<string, DoctorRoutineTaskGroupInfo>;
+} {
   const routineGroups = new Map<string, DoctorReport["attention"]["tasks"]>();
   const lines: string[] = [];
+  const groupedTaskInfo = new Map<string, DoctorRoutineTaskGroupInfo>();
 
   for (const finding of findings) {
     if (!isRoutineDoctorTaskFinding(finding)) {
@@ -105,18 +116,30 @@ function renderDoctorTaskSummaryLines(findings: DoctorReport["attention"]["tasks
     }
 
     const first = group[0]!;
+    const groupInfo = {
+      count: group.length,
+      state: first.state,
+      severity: first.severity,
+      goal: first.goal
+    };
+    for (const entry of group) {
+      groupedTaskInfo.set(entry.task_id, groupInfo);
+    }
     const examples = group.slice(0, 3).map((entry) => entry.task_id).join(", ");
     const moreCount = group.length - Math.min(group.length, 3);
     const exampleSuffix = moreCount > 0
       ? `${examples}, +${moreCount} more`
       : examples;
     lines.push(
-      `- ${group.length} similar task(s) [${first.state}/${first.severity}] ${compactText(first.goal, 90)}`
+      `- ${groupInfo.count} similar task(s) [${groupInfo.state}/${groupInfo.severity}] ${compactText(groupInfo.goal, 90)}`
       + ` :: ${compactText(first.summary, 180)} :: examples=${exampleSuffix}`
     );
   }
 
-  return lines;
+  return {
+    lines,
+    groupedTaskInfo
+  };
 }
 
 function renderArtifactRefLines(refs: {
@@ -242,6 +265,7 @@ export function renderDoctorBrief(report: DoctorReport): string {
     `summary: ${compactText(report.summary)}`
   ];
   const visibleTaskFindings = report.attention.tasks.slice(0, 8);
+  const taskSummary = summarizeDoctorTaskLines(visibleTaskFindings);
 
   if (report.task_filter.suppressed_task_findings > 0) {
     const windowLabel = report.task_filter.task_window_hours === null
@@ -265,7 +289,7 @@ export function renderDoctorBrief(report: DoctorReport): string {
   pushLimitedSection(
     lines,
     "tasks:",
-    renderDoctorTaskSummaryLines(visibleTaskFindings),
+    taskSummary.lines,
     8
   );
   pushLimitedSection(
@@ -329,7 +353,14 @@ export function renderDoctorBrief(report: DoctorReport): string {
   pushLimitedSection(
     lines,
     "commands:",
-    report.command_hints.map((hint) => `- [${hint.id}] ${hint.command}`),
+    report.command_hints.map((hint) => {
+      const hintedTaskId = hint.sweep.task_ids?.[0] ?? null;
+      const groupedTask = hintedTaskId ? taskSummary.groupedTaskInfo.get(hintedTaskId) : null;
+      const groupSuffix = groupedTask
+        ? ` :: representative of ${groupedTask.count} similar ${groupedTask.state}/${groupedTask.severity} task(s)`
+        : "";
+      return `- [${hint.id}] ${hint.command}${groupSuffix}`;
+    }),
     6
   );
 
