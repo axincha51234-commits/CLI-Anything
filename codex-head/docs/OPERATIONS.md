@@ -213,6 +213,10 @@ operator command instead of only describing the problem.
   narrows that lookup to one operator command type
 - omitting `--brief` returns the stored JSON receipt verbatim
 
+`status --brief` and `doctor --brief` now surface the newest matching operator
+receipt path for a task when one exists, so operators can jump directly into
+`show-operator-receipt` without listing history first.
+
 `sweep-tasks` is intentionally conservative:
 
 - it never deletes task rows from SQLite

@@ -48,6 +48,9 @@ export interface DoctorTaskFinding {
   severity: DoctorFindingSeverity;
   summary: string;
   actions: string[];
+  operator_receipt_path: string | null;
+  operator_receipt_command: string | null;
+  operator_receipt_created_at: string | null;
   manual_intervention_required: boolean;
 }
 
@@ -408,6 +411,9 @@ function summarizeTaskFinding(
     severity,
     summary: deriveTaskSummary(task),
     actions: deriveTaskActions(task),
+    operator_receipt_path: task.operator.latest_receipt_path,
+    operator_receipt_command: task.operator.latest_receipt_command,
+    operator_receipt_created_at: task.operator.latest_receipt_created_at,
     manual_intervention_required: task.operator.manual_intervention_required
   };
 }

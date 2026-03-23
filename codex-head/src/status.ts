@@ -28,6 +28,9 @@ export interface TaskOperatorStatus {
   queue_diagnosis: QueueDiagnosisArtifact | null;
   queue_recycle_path: string | null;
   queue_recycle: QueueRecycleArtifact | null;
+  latest_receipt_path: string | null;
+  latest_receipt_command: string | null;
+  latest_receipt_created_at: string | null;
   manual_intervention_required: boolean;
   summary: string | null;
   actions: string[];
@@ -133,6 +136,54 @@ function summarizeOperatorState(
   return null;
 }
 
+type OperatorReceiptSnapshot = {
+  command?: string;
+  created_at?: string;
+  selection?: Record<string, unknown>;
+  tasks?: Array<{
+    task_id?: string;
+  }>;
+};
+
+function operatorReceiptMatchesTaskId(receipt: OperatorReceiptSnapshot, taskId: string): boolean {
+  if ((receipt.tasks ?? []).some((task) => task.task_id === taskId)) {
+    return true;
+  }
+
+  const selection = receipt.selection ?? {};
+  const directTaskId = selection.task_id;
+  if (typeof directTaskId === "string" && directTaskId === taskId) {
+    return true;
+  }
+
+  const taskIds = selection.task_ids;
+  return Array.isArray(taskIds) && taskIds.some((value) => value === taskId);
+}
+
+function findLatestOperatorReceipt(
+  taskId: string,
+  artifactStore: FileArtifactStore
+): {
+  path: string;
+  command: string | null;
+  created_at: string | null;
+} | null {
+  for (const receiptPath of artifactStore.listOperatorReceipts()) {
+    const receipt = artifactStore.readOperatorReceiptIfExists<OperatorReceiptSnapshot>(receiptPath);
+    if (!receipt || !operatorReceiptMatchesTaskId(receipt, taskId)) {
+      continue;
+    }
+
+    return {
+      path: receiptPath,
+      command: typeof receipt.command === "string" ? receipt.command : null,
+      created_at: typeof receipt.created_at === "string" ? receipt.created_at : null
+    };
+  }
+
+  return null;
+}
+
 export function buildTaskOperatorStatus(
   record: TaskRecord,
   artifactStore: FileArtifactStore,
@@ -148,6 +199,7 @@ export function buildTaskOperatorStatus(
   );
   const collectedTexts = collectTaskTexts(record, extraTexts);
   const manualInterventionRequired = collectedTexts.some((value) => /manual intervention is now required/i.test(value));
+  const latestReceipt = findLatestOperatorReceipt(record.task.task_id, artifactStore);
 
   return {
     queue_diagnosis_path: queueDiagnosis
@@ -158,6 +210,9 @@ export function buildTaskOperatorStatus(
       ? artifactStore.resolveTaskArtifactPath(record.task.task_id, "github-queue-recycle.json")
       : null,
     queue_recycle: queueRecycle,
+    latest_receipt_path: latestReceipt?.path ?? null,
+    latest_receipt_command: latestReceipt?.command ?? null,
+    latest_receipt_created_at: latestReceipt?.created_at ?? null,
     manual_intervention_required: manualInterventionRequired,
     summary: summarizeOperatorState(queueDiagnosis, queueRecycle, manualInterventionRequired),
     actions: buildOperatorActions(

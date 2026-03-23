@@ -189,6 +189,8 @@ currently local-ready and exposes the matching cooldown reason.
   directly from the CLI, either by explicit path or by resolving the latest
   matching receipt for a task/filter, and can render JSON or a brief
   human-readable summary.
+- `status --brief` and `doctor --brief` now surface the newest matching
+  operator receipt for task-level triage when one exists.
 - `sweep-tasks` now gives operators a filtered bulk action for backlog triage.
   It can dry-run or apply `cancel` and `requeue` across selected tasks without
   deleting history from SQLite.

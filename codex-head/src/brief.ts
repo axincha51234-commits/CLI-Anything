@@ -56,6 +56,13 @@ function renderOperatorLines(operator: TaskOperatorStatus | null): string[] {
     lines.push("operator: no immediate action");
   }
 
+  if (operator.latest_receipt_path) {
+    const receiptLabel = operator.latest_receipt_command
+      ? `${operator.latest_receipt_path} [${operator.latest_receipt_command}]`
+      : operator.latest_receipt_path;
+    lines.push(`receipt: ${receiptLabel}`);
+  }
+
   if (operator.actions.length > 0) {
     lines.push(`next: ${operator.actions.map((value) => compactText(value, 160)).join(" | ")}`);
   }
@@ -145,7 +152,12 @@ export function renderDoctorBrief(report: DoctorReport): string {
   pushLimitedSection(
     lines,
     "tasks:",
-    report.attention.tasks.map((finding) => `- ${finding.task_id} [${finding.state}/${finding.severity}] ${compactText(finding.goal, 90)} :: ${compactText(finding.summary, 180)}`),
+    report.attention.tasks.map((finding) => {
+      const receiptSuffix = finding.operator_receipt_path
+        ? ` :: receipt=${finding.operator_receipt_path}${finding.operator_receipt_command ? ` [${finding.operator_receipt_command}]` : ""}`
+        : "";
+      return `- ${finding.task_id} [${finding.state}/${finding.severity}] ${compactText(finding.goal, 90)} :: ${compactText(finding.summary, 180)}${receiptSuffix}`;
+    }),
     8
   );
   pushLimitedSection(

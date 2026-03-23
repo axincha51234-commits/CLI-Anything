@@ -58,6 +58,9 @@ test("renderStatusBrief summarizes one task with operator guidance", () => {
       queue_diagnosis: null,
       queue_recycle_path: "C:/artifacts/task-brief-1/github-queue-recycle.json",
       queue_recycle: null,
+      latest_receipt_path: "operator-actions/2026-03-23T08-09-05.877Z-run-doctor-hint.json",
+      latest_receipt_command: "run-doctor-hint",
+      latest_receipt_created_at: "2026-03-23T08:09:05.877Z",
       manual_intervention_required: true,
       summary: "Automatic stale-runner recovery was already attempted and manual intervention is now required.",
       actions: [
@@ -69,6 +72,7 @@ test("renderStatusBrief summarizes one task with operator guidance", () => {
   assert.match(rendered, /task task-brief-1 \[failed\] Review the latest PR in GitHub/i);
   assert.match(rendered, /worker: gemini-cli via github/i);
   assert.match(rendered, /operator: Automatic stale-runner recovery was already attempted/i);
+  assert.match(rendered, /receipt: operator-actions\/2026-03-23T08-09-05\.877Z-run-doctor-hint\.json \[run-doctor-hint\]/i);
   assert.match(rendered, /next: Inspect C:\/artifacts\/task-brief-1\/github-queue-recycle\.json/i);
 });
 
@@ -84,6 +88,9 @@ test("renderOutcomeBrief summarizes recovery and reconcile style outputs", () =>
         queue_diagnosis: null,
         queue_recycle_path: null,
         queue_recycle: null,
+        latest_receipt_path: null,
+        latest_receipt_command: null,
+        latest_receipt_created_at: null,
         manual_intervention_required: false,
         summary: "Matching self-hosted runners are all busy.",
         actions: [
@@ -135,6 +142,9 @@ test("renderStatusBrief omits the no-action line when only follow-up actions exi
       queue_diagnosis: null,
       queue_recycle_path: null,
       queue_recycle: null,
+      latest_receipt_path: null,
+      latest_receipt_command: null,
+      latest_receipt_created_at: null,
       manual_intervention_required: false,
       summary: null,
       actions: [
@@ -231,6 +241,9 @@ test("renderDoctorBrief summarizes operator findings and next actions", () => {
           severity: "error",
           summary: "Automatic stale-runner recovery was already attempted and manual intervention is now required.",
           actions: ["Inspect C:/repo/codex-head/runtime/artifacts/task-brief-doctor/github-queue-recycle.json and retry."],
+          operator_receipt_path: "operator-actions/2026-03-23T08-09-05.877Z-run-doctor-hint.json",
+          operator_receipt_command: "run-doctor-hint",
+          operator_receipt_created_at: "2026-03-23T08:09:05.877Z",
           manual_intervention_required: true
         }
       ]
@@ -261,6 +274,7 @@ test("renderDoctorBrief summarizes operator findings and next actions", () => {
   assert.match(rendered, /workers:\n- claude-code \[error\] Worker claude-code health check failed/i);
   assert.match(rendered, /github:\n- \[error\] GitHub dispatch is enabled but gh is not authenticated/i);
   assert.match(rendered, /tasks:\n- task-brief-doctor \[failed\/error\] Review the latest PR in GitHub/i);
+  assert.match(rendered, /receipt=operator-actions\/2026-03-23T08-09-05\.877Z-run-doctor-hint\.json \[run-doctor-hint\]/i);
   assert.match(rendered, /next:\n- Inspect the claude-code health command and local runtime\./i);
   assert.match(rendered, /commands:\n- \[suppressed-failed-backlog\] node dist\/src\/index\.js sweep-tasks cancel --state failed --older-than-hours 6 --dry-run --brief/i);
 });

@@ -95,12 +95,30 @@ test("buildTaskStatusSnapshot surfaces queue diagnosis and recycle state", () =>
     skipped: false,
     detail: "Automatic self-hosted runner recycle completed successfully."
   });
+  const latestReceiptPath = artifactStore.writeOperatorReceipt("run-doctor-hint", {
+    schema_version: 1,
+    command: "run-doctor-hint",
+    created_at: "2026-03-23T09:00:00.000Z",
+    dry_run: true,
+    apply: false,
+    selection: {
+      task_ids: [record.task.task_id]
+    },
+    summary: {
+      matched: 1,
+      actionable: 1,
+      changed: 0
+    }
+  });
 
   const snapshot = buildTaskStatusSnapshot(record, artifactStore);
   assert.equal(snapshot.operator.queue_diagnosis?.likely_stalled, true);
   assert.match(snapshot.operator.queue_diagnosis_path ?? "", /github-queue-diagnosis\.json$/i);
   assert.equal(snapshot.operator.queue_recycle?.ok, true);
   assert.match(snapshot.operator.queue_recycle_path ?? "", /github-queue-recycle\.json$/i);
+  assert.equal(snapshot.operator.latest_receipt_path, latestReceiptPath);
+  assert.equal(snapshot.operator.latest_receipt_command, "run-doctor-hint");
+  assert.equal(snapshot.operator.latest_receipt_created_at, "2026-03-23T09:00:00.000Z");
   assert.equal(snapshot.operator.manual_intervention_required, true);
   assert.match(snapshot.operator.summary ?? "", /manual intervention is now required/i);
   assert.equal(snapshot.operator.actions.some((value) => /inspect .*github-queue-recycle\.json/i.test(value)), true);
@@ -135,9 +153,53 @@ test("buildTaskStatusSnapshots stays read-only when queue artifacts do not exist
   assert.equal(existsSync(taskDir), false);
   assert.equal(snapshot?.operator.queue_diagnosis, null);
   assert.equal(snapshot?.operator.queue_recycle, null);
+  assert.equal(snapshot?.operator.latest_receipt_path, null);
+  assert.equal(snapshot?.operator.latest_receipt_command, null);
+  assert.equal(snapshot?.operator.latest_receipt_created_at, null);
   assert.equal(snapshot?.operator.manual_intervention_required, false);
   assert.equal(snapshot?.operator.summary, null);
   assert.deepEqual(snapshot?.operator.actions, []);
+});
+
+test("buildTaskStatusSnapshot prefers the newest matching operator receipt", () => {
+  const root = createTempDir("codex-head-status-latest-receipt-");
+  const artifactStore = new FileArtifactStore(resolve(root, "artifacts"));
+  const record = createRecord();
+
+  artifactStore.writeOperatorReceipt("sweep-tasks", {
+    schema_version: 1,
+    command: "sweep-tasks",
+    created_at: "2026-03-23T08:59:00.000Z",
+    dry_run: true,
+    apply: false,
+    selection: {
+      task_ids: [record.task.task_id]
+    },
+    summary: {
+      matched: 1,
+      actionable: 1,
+      changed: 0
+    }
+  });
+  const latestReceiptPath = artifactStore.writeOperatorReceipt("run-doctor-hint", {
+    schema_version: 1,
+    command: "run-doctor-hint",
+    created_at: "2026-03-23T09:01:00.000Z",
+    dry_run: true,
+    apply: false,
+    selection: {
+      task_ids: [record.task.task_id]
+    },
+    summary: {
+      matched: 1,
+      actionable: 1,
+      changed: 0
+    }
+  });
+
+  const snapshot = buildTaskStatusSnapshot(record, artifactStore);
+  assert.equal(snapshot.operator.latest_receipt_path, latestReceiptPath);
+  assert.equal(snapshot.operator.latest_receipt_command, "run-doctor-hint");
 });
 
 test("buildTaskStatusSnapshot recommends concrete actions for busy runners and gh auth failures", () => {

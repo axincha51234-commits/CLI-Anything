@@ -74,6 +74,9 @@ function createStatusSnapshot(
       queue_diagnosis: null,
       queue_recycle_path: null,
       queue_recycle: null,
+      latest_receipt_path: null,
+      latest_receipt_command: null,
+      latest_receipt_created_at: null,
       manual_intervention_required: false,
       summary: null,
       actions: []
@@ -178,6 +181,9 @@ test("buildDoctorReport aggregates worker, GitHub, and task findings", () => {
       queue_diagnosis: null,
       queue_recycle_path: "C:/repo/codex-head/runtime/artifacts/task-doctor-failed/github-queue-recycle.json",
       queue_recycle: null,
+      latest_receipt_path: "operator-actions/2026-03-23T08-09-05.877Z-run-doctor-hint.json",
+      latest_receipt_command: "run-doctor-hint",
+      latest_receipt_created_at: "2026-03-23T08:09:05.877Z",
       manual_intervention_required: true,
       summary: "Automatic stale-runner recovery was already attempted and manual intervention is now required.",
       actions: [
@@ -216,6 +222,10 @@ test("buildDoctorReport aggregates worker, GitHub, and task findings", () => {
   assert.equal(report.command_hints.length, 0);
   assert.equal(report.summary.includes("blocking item"), true);
   assert.equal(report.attention.tasks[0]?.task_id, "task-doctor-failed");
+  assert.equal(
+    report.attention.tasks[0]?.operator_receipt_path,
+    "operator-actions/2026-03-23T08-09-05.877Z-run-doctor-hint.json"
+  );
 });
 
 test("buildDoctorReport stays healthy when workers and completed tasks are clean", () => {
