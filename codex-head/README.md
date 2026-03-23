@@ -84,7 +84,7 @@ currently local-ready and exposes the matching cooldown reason.
 - CLI support for `health`, `run-goal`, `configure-github-repo`, `plan`, `enqueue`,
   `review`, `status`, `doctor`, `dispatch`, `dispatch-next`, `dispatch-and-wait`, `publish-github-mirror`,
   `run-github-payload`,
-  `sync-github-callback`, `wait-github-callback`, `clear-penalties`,
+  `sync-github-callback`, `wait-github-callback`, `clear-penalties`, `sweep-tasks`,
   `reconcile-github-running`, `recover-running`, and `complete-from-file`
 - Local artifact generation and GitHub dispatch payload generation
 - Opt-in live GitHub workflow dispatch through `gh workflow run`
@@ -171,6 +171,9 @@ currently local-ready and exposes the matching cooldown reason.
 - By default, `doctor` now emphasizes active work plus recent failures and
   suppresses older failed backlog into summary counts. Use `doctor --all-tasks`
   or `doctor --task-window-hours N` when you want broader history.
+- `sweep-tasks` now gives operators a filtered bulk action for backlog triage.
+  It can dry-run or apply `cancel` and `requeue` across selected tasks without
+  deleting history from SQLite.
 - `status`, `recover-running`, and `reconcile-github-running` now also support
   `--brief` for plain-text operator summaries when JSON is more noise than
   signal, and `doctor` offers that same brief mode for whole-system triage.

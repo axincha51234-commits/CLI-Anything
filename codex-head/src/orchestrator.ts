@@ -14,6 +14,7 @@ import type {
   TaskRecord,
   TaskReview,
   TaskRuntimeContext,
+  TaskState,
   TaskSpec,
   WorkerTarget,
   WorkerResult
@@ -120,6 +121,44 @@ interface RunningTaskRecovery {
   operator: TaskOperatorStatus | null;
 }
 
+export interface SweepTasksOptions {
+  action: "cancel" | "requeue";
+  states?: TaskState[];
+  older_than_hours?: number;
+  goal_contains?: string;
+  worker_target?: WorkerTarget;
+  task_ids?: string[];
+  limit?: number;
+  dry_run?: boolean;
+  now?: number;
+}
+
+export interface SweepTasksEntry {
+  task_id: string;
+  goal: string;
+  worker_target: WorkerTarget;
+  previous_state: TaskState;
+  next_state: TaskState;
+  changed: boolean;
+  reason: string;
+}
+
+export interface SweepTasksResult {
+  action: SweepTasksOptions["action"];
+  dry_run: boolean;
+  filters: {
+    states: TaskState[];
+    older_than_hours: number | null;
+    goal_contains: string | null;
+    worker_target: WorkerTarget | null;
+    task_ids: string[];
+    limit: number | null;
+  };
+  matched: number;
+  changed: number;
+  tasks: SweepTasksEntry[];
+}
+
 interface WorkerPenalty {
   worker_target: WorkerTarget;
   category: "rate_limited" | "timed_out" | "auth_failed";
@@ -220,6 +259,26 @@ function inferWorkerPenaltyFromResult(
     penalized_until: penalizedUntil,
     source_task_id: taskId
   };
+}
+
+function resolveSweepTimestamp(record: TaskRecord): number {
+  return record.updated_at
+    || record.finished_at
+    || record.started_at
+    || record.created_at
+    || 0;
+}
+
+function normalizeSweepStates(
+  action: SweepTasksOptions["action"],
+  states?: TaskState[]
+): TaskState[] {
+  if (states && states.length > 0) {
+    return states;
+  }
+  return action === "cancel"
+    ? ["planned", "queued", "failed"]
+    : ["failed", "planned"];
 }
 
 export class CodexHeadOrchestrator {
@@ -1018,6 +1077,99 @@ export class CodexHeadOrchestrator {
     }
 
     return results;
+  }
+
+  sweepTasks(options: SweepTasksOptions): SweepTasksResult {
+    const dryRun = Boolean(options.dry_run);
+    const now = options.now ?? Date.now();
+    const selectedStates = normalizeSweepStates(options.action, options.states);
+    const goalContains = options.goal_contains?.trim().toLowerCase() || null;
+    const taskIds = [...new Set((options.task_ids ?? []).map((value) => value.trim()).filter(Boolean))];
+    const taskIdSet = new Set(taskIds);
+    const olderThanHours = options.older_than_hours ?? null;
+    const cutoffTimestamp = olderThanHours === null ? null : now - (olderThanHours * 60 * 60 * 1000);
+    const limit = options.limit && Number.isFinite(options.limit) && options.limit > 0
+      ? Math.floor(options.limit)
+      : null;
+    const shouldApplyStateFilter = taskIds.length === 0 || Boolean(options.states && options.states.length > 0);
+
+    const candidates = this.taskStore.listTasks()
+      .filter((record) => !shouldApplyStateFilter || selectedStates.includes(record.state))
+      .filter((record) => !goalContains || record.task.goal.toLowerCase().includes(goalContains))
+      .filter((record) => !options.worker_target || record.task.worker_target === options.worker_target)
+      .filter((record) => taskIds.length === 0 || taskIdSet.has(record.task.task_id))
+      .filter((record) => cutoffTimestamp === null || resolveSweepTimestamp(record) <= cutoffTimestamp)
+      .slice(0, limit ?? undefined);
+
+    const entries: SweepTasksEntry[] = [];
+
+    for (const record of candidates) {
+      if (options.action === "cancel") {
+        const allowed = record.state !== "completed" && record.state !== "canceled";
+        const nextState: TaskState = allowed ? "canceled" : record.state;
+        const reason = allowed
+          ? (dryRun
+            ? "Would cancel the selected task."
+            : "Canceled the selected task.")
+          : `Task in state ${record.state} cannot be canceled by sweep.`;
+
+        if (!dryRun && allowed) {
+          this.taskStore.transitionTask(record.task.task_id, "canceled", {
+            last_error: record.last_error,
+            finished: true
+          });
+        }
+
+        entries.push({
+          task_id: record.task.task_id,
+          goal: record.task.goal,
+          worker_target: record.task.worker_target,
+          previous_state: record.state,
+          next_state: nextState,
+          changed: allowed,
+          reason
+        });
+        continue;
+      }
+
+      const canRequeue = record.state === "failed" || record.state === "planned";
+      const nextState: TaskState = canRequeue ? "queued" : record.state;
+      const reason = canRequeue
+        ? (dryRun
+          ? "Would enqueue the selected task."
+          : "Enqueued the selected task.")
+        : `Task in state ${record.state} cannot be requeued by sweep.`;
+
+      if (!dryRun && canRequeue) {
+        this.taskStore.enqueue(record.task.task_id);
+      }
+
+      entries.push({
+        task_id: record.task.task_id,
+        goal: record.task.goal,
+        worker_target: record.task.worker_target,
+        previous_state: record.state,
+        next_state: nextState,
+        changed: canRequeue,
+        reason
+      });
+    }
+
+    return {
+      action: options.action,
+      dry_run: dryRun,
+      filters: {
+        states: selectedStates,
+        older_than_hours: olderThanHours,
+        goal_contains: goalContains,
+        worker_target: options.worker_target ?? null,
+        task_ids: taskIds,
+        limit
+      },
+      matched: entries.length,
+      changed: entries.filter((entry) => entry.changed).length,
+      tasks: entries
+    };
   }
 
   getTask(taskId: string): TaskRecord {

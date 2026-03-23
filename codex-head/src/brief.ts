@@ -1,5 +1,6 @@
 import type { DispatchOutcome } from "./contracts";
 import type { DoctorReport } from "./doctor";
+import type { SweepTasksResult } from "./orchestrator";
 import type { TaskOperatorStatus, TaskStatusSnapshot } from "./status";
 
 type ReconcileOrRecoveryEntry = {
@@ -147,6 +148,21 @@ export function renderDoctorBrief(report: DoctorReport): string {
     report.actions.map((action) => `- ${compactText(action, 180)}`),
     8
   );
+
+  return lines.join("\n");
+}
+
+export function renderSweepBrief(result: SweepTasksResult): string {
+  const lines = [
+    `sweep: ${result.action}${result.dry_run ? " (dry-run)" : ""}`,
+    `summary: matched ${result.matched}, actionable ${result.changed}`
+  ];
+
+  const taskLines = result.tasks.map((entry) => {
+    const marker = entry.changed ? `${entry.previous_state} -> ${entry.next_state}` : `${entry.previous_state} (skipped)`;
+    return `- ${entry.task_id} [${marker}] ${compactText(entry.goal, 100)} :: ${compactText(entry.reason, 140)}`;
+  });
+  pushLimitedSection(lines, "tasks:", taskLines, 8);
 
   return lines.join("\n");
 }

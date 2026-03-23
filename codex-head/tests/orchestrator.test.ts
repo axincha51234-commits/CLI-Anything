@@ -1808,6 +1808,136 @@ test("recoverRunningTasks can requeue interrupted local tasks", async () => {
   assert.equal(record.last_error, null);
 });
 
+test("sweepTasks can dry-run cancel selected backlog tasks without mutating state", async () => {
+  const root = createTempDir("codex-head-sweep-dry-run-");
+  const registry = new AdapterRegistry();
+  const orchestrator = createAppWithRegistry(root, registry);
+
+  const queuedTask = orchestrator.submitTask(createTaskSpec({
+    task_id: "task-sweep-queued",
+    goal: "Summarize the current orchestration state",
+    repo: root,
+    worker_target: "codex-cli",
+    expected_output: { kind: "analysis", format: "markdown", code_change: false }
+  }));
+  orchestrator.enqueueTask(queuedTask.task.task_id);
+
+  const failedTask = orchestrator.submitTask(createTaskSpec({
+    task_id: "task-sweep-failed",
+    goal: "Summarize the current orchestration state",
+    repo: root,
+    worker_target: "gemini-cli",
+    expected_output: { kind: "analysis", format: "markdown", code_change: false }
+  }));
+  orchestrator.enqueueTask(failedTask.task.task_id);
+  orchestrator.taskStore.claimTask(failedTask.task.task_id);
+  orchestrator.taskStore.finish(
+    failedTask.task.task_id,
+    "failed",
+    {
+      task_id: failedTask.task.task_id,
+      worker_target: "gemini-cli",
+      status: "failed",
+      review_verdict: null,
+      summary: "Task failed",
+      artifacts: [],
+      patch_ref: null,
+      log_ref: null,
+      cost: 0,
+      duration_ms: 0,
+      next_action: "manual",
+      review_notes: []
+    },
+    routing("gemini-cli", "local"),
+    "Task failed"
+  );
+
+  const result = orchestrator.sweepTasks({
+    action: "cancel",
+    states: ["queued", "failed"],
+    goal_contains: "summarize",
+    dry_run: true
+  });
+
+  assert.equal(result.matched, 2);
+  assert.equal(result.changed, 2);
+  assert.deepEqual(result.tasks.map((entry) => entry.task_id), ["task-sweep-queued", "task-sweep-failed"]);
+  assert.equal(orchestrator.getTask("task-sweep-queued").state, "queued");
+  assert.equal(orchestrator.getTask("task-sweep-failed").state, "failed");
+});
+
+test("sweepTasks can requeue planned and failed tasks while skipping unsupported states", async () => {
+  const root = createTempDir("codex-head-sweep-requeue-");
+  const registry = new AdapterRegistry();
+  const orchestrator = createAppWithRegistry(root, registry);
+
+  const plannedTask = orchestrator.submitTask(createTaskSpec({
+    task_id: "task-sweep-planned",
+    goal: "Retry planned task",
+    repo: root,
+    worker_target: "codex-cli",
+    expected_output: { kind: "analysis", format: "markdown", code_change: false }
+  }));
+
+  const failedTask = orchestrator.submitTask(createTaskSpec({
+    task_id: "task-sweep-failed-requeue",
+    goal: "Retry failed task",
+    repo: root,
+    worker_target: "gemini-cli",
+    expected_output: { kind: "analysis", format: "markdown", code_change: false }
+  }));
+  orchestrator.enqueueTask(failedTask.task.task_id);
+  orchestrator.taskStore.claimTask(failedTask.task.task_id);
+  orchestrator.taskStore.finish(
+    failedTask.task.task_id,
+    "failed",
+    {
+      task_id: failedTask.task.task_id,
+      worker_target: "gemini-cli",
+      status: "failed",
+      review_verdict: null,
+      summary: "Task failed",
+      artifacts: [],
+      patch_ref: null,
+      log_ref: null,
+      cost: 0,
+      duration_ms: 0,
+      next_action: "manual",
+      review_notes: []
+    },
+    routing("gemini-cli", "local"),
+    "Task failed"
+  );
+
+  const queuedTask = orchestrator.submitTask(createTaskSpec({
+    task_id: "task-sweep-queued-skip",
+    goal: "Already queued task",
+    repo: root,
+    worker_target: "codex-cli",
+    expected_output: { kind: "analysis", format: "markdown", code_change: false }
+  }));
+  orchestrator.enqueueTask(queuedTask.task.task_id);
+
+  const result = orchestrator.sweepTasks({
+    action: "requeue",
+    task_ids: [
+      plannedTask.task.task_id,
+      failedTask.task.task_id,
+      queuedTask.task.task_id
+    ]
+  });
+
+  assert.equal(result.matched, 3);
+  assert.equal(result.changed, 2);
+  assert.equal(orchestrator.getTask(plannedTask.task.task_id).state, "queued");
+  assert.equal(orchestrator.getTask(failedTask.task.task_id).state, "queued");
+  assert.equal(orchestrator.getTask(queuedTask.task.task_id).state, "queued");
+  assert.equal(
+    result.tasks.find((entry) => entry.task_id === queuedTask.task.task_id)?.reason.includes("cannot be requeued"),
+    true
+  );
+});
+
 test("fallback execution accepts the actual routed worker target", async () => {
   const root = createTempDir("codex-head-fallback-worker-");
   const registry = new AdapterRegistry();

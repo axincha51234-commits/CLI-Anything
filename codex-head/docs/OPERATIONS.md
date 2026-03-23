@@ -80,6 +80,7 @@ node dist/src/index.js reconcile-github-running [timeout-sec] [interval-sec] [--
 node dist/src/index.js recover-running [timeout-sec] [interval-sec] [--requeue-local] [--brief]
 node dist/src/index.js status [task-id] [--brief]
 node dist/src/index.js doctor [--brief] [--all-tasks] [--task-window-hours N]
+node dist/src/index.js sweep-tasks <cancel|requeue> [--state a,b] [--older-than-hours N] [--goal-contains TEXT] [--worker-target TARGET] [--task-id ID] [--limit N] [--all] [--dry-run] [--brief]
 node dist/src/index.js dispatch <task-id>
 node dist/src/index.js dispatch-and-wait <task-id> [timeout-sec] [interval-sec]
 node dist/src/index.js dispatch-next
@@ -117,9 +118,11 @@ node dist/src/index.js complete-from-file <worker-result.json>
     `awaiting_review`.
 14. Run `doctor` when you want one read-only triage surface that combines
     worker health, self-hosted GitHub runtime, and task/operator guidance.
-15. Run `clear-penalties` when a local provider recovered and you want to stop
+15. Run `sweep-tasks` when you want to bulk-cancel stale backlog or requeue a
+    filtered set of planned/failed tasks without touching task history.
+16. Run `clear-penalties` when a local provider recovered and you want to stop
     honoring remembered cooldowns immediately.
-16. Run `complete-from-file` to ingest an external callback artifact such as
+17. Run `complete-from-file` to ingest an external callback artifact such as
     `github-callback.json`.
 
 `status [task-id]` now returns an enriched JSON snapshot. For GitHub queue
@@ -149,6 +152,16 @@ By default, `doctor` highlights active tasks plus recent failures and suppresses
 older failed backlog into summary counts so the operator view stays current.
 Use `--all-tasks` to include the full backlog, or `--task-window-hours N` to
 change the recency window used for failed-task triage.
+
+`sweep-tasks` is intentionally conservative:
+
+- it never deletes task rows from SQLite
+- it supports `--dry-run` before making changes
+- `cancel` defaults to `planned,queued,failed`
+- `requeue` defaults to `failed,planned`
+- you must provide a narrowing filter such as `--state`, `--goal-contains`,
+  `--worker-target`, `--task-id`, `--older-than-hours`, or explicitly opt into
+  broad matching with `--all`
 
 ## Runtime Paths
 

@@ -1,8 +1,8 @@
 import { resolve } from "node:path";
 
-import { renderDoctorBrief, renderOutcomeBrief, renderStatusBrief } from "./brief";
+import { renderDoctorBrief, renderOutcomeBrief, renderStatusBrief, renderSweepBrief } from "./brief";
 import { normalizeGitHubRepository, updateGitHubConfig } from "./config";
-import { REVIEW_VERDICTS, WORKER_TARGETS } from "./contracts";
+import { REVIEW_VERDICTS, TASK_STATES, WORKER_TARGETS } from "./contracts";
 import { buildDoctorReport } from "./doctor";
 import { executeGitHubPayloadFile } from "./github/workflowRunner";
 import { CodexHeadOrchestrator } from "./orchestrator";
@@ -194,6 +194,127 @@ function parseDoctorArgs(args: string[]): {
   };
 }
 
+function parseSweepArgs(args: string[]): {
+  action: "cancel" | "requeue";
+  states?: typeof TASK_STATES[number][];
+  olderThanHours?: number;
+  goalContains?: string;
+  workerTarget?: typeof WORKER_TARGETS[number];
+  taskIds: string[];
+  limit?: number;
+  dryRun: boolean;
+  brief: boolean;
+} {
+  const action = args[0];
+  if (action !== "cancel" && action !== "requeue") {
+    throw new Error("sweep-tasks requires an action: cancel or requeue");
+  }
+
+  let states: typeof TASK_STATES[number][] | undefined;
+  let olderThanHours: number | undefined;
+  let goalContains: string | undefined;
+  let workerTarget: typeof WORKER_TARGETS[number] | undefined;
+  const taskIds: string[] = [];
+  let limit: number | undefined;
+  let dryRun = false;
+  let brief = false;
+  let allowBroad = false;
+  let explicitStateFilter = false;
+
+  for (let index = 1; index < args.length; index += 1) {
+    const current = args[index];
+    if (current === "--state") {
+      states = (args[index + 1] ?? "")
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean) as typeof TASK_STATES[number][];
+      if (states.some((value) => !TASK_STATES.includes(value))) {
+        throw new Error(`--state must only include: ${TASK_STATES.join(", ")}`);
+      }
+      explicitStateFilter = true;
+      index += 1;
+      continue;
+    }
+    if (current === "--older-than-hours") {
+      olderThanHours = Number(args[index + 1]);
+      if (!Number.isFinite(olderThanHours) || olderThanHours < 0) {
+        throw new Error("--older-than-hours must be a non-negative number");
+      }
+      index += 1;
+      continue;
+    }
+    if (current === "--goal-contains") {
+      goalContains = args[index + 1];
+      if (!goalContains) {
+        throw new Error("--goal-contains requires a value");
+      }
+      index += 1;
+      continue;
+    }
+    if (current === "--worker-target") {
+      const next = args[index + 1];
+      if (!next || !WORKER_TARGETS.includes(next as typeof WORKER_TARGETS[number])) {
+        throw new Error(`--worker-target must be one of: ${WORKER_TARGETS.join(", ")}`);
+      }
+      workerTarget = next as typeof WORKER_TARGETS[number];
+      index += 1;
+      continue;
+    }
+    if (current === "--task-id") {
+      const next = args[index + 1];
+      if (!next) {
+        throw new Error("--task-id requires a value");
+      }
+      taskIds.push(next);
+      index += 1;
+      continue;
+    }
+    if (current === "--limit") {
+      limit = Number(args[index + 1]);
+      if (!Number.isFinite(limit) || limit <= 0) {
+        throw new Error("--limit must be a positive number");
+      }
+      index += 1;
+      continue;
+    }
+    if (current === "--all") {
+      allowBroad = true;
+      continue;
+    }
+    if (current === "--dry-run") {
+      dryRun = true;
+      continue;
+    }
+    if (current === "--brief") {
+      brief = true;
+      continue;
+    }
+    throw new Error("sweep-tasks only accepts known filter flags");
+  }
+
+  const hasNarrowingFilter = allowBroad
+    || explicitStateFilter
+    || olderThanHours !== undefined
+    || Boolean(goalContains)
+    || Boolean(workerTarget)
+    || taskIds.length > 0;
+  if (!hasNarrowingFilter) {
+    throw new Error("sweep-tasks requires a narrowing filter or --all");
+  }
+
+  return {
+    action,
+    states,
+    olderThanHours,
+    goalContains,
+    workerTarget,
+    taskIds,
+    limit,
+    dryRun,
+    brief
+  };
+}
+
 function usage(): void {
   process.stdout.write(
     [
@@ -212,6 +333,7 @@ function usage(): void {
       "  node dist/src/index.js recover-running [timeout-sec] [interval-sec] [--requeue-local] [--brief]",
       "  node dist/src/index.js status [task-id] [--brief]",
       "  node dist/src/index.js doctor [--brief] [--all-tasks] [--task-window-hours N]",
+      "  node dist/src/index.js sweep-tasks <cancel|requeue> [--state a,b] [--older-than-hours N] [--goal-contains TEXT] [--worker-target TARGET] [--task-id ID] [--limit N] [--all] [--dry-run] [--brief]",
       "  node dist/src/index.js dispatch <task-id>",
       "  node dist/src/index.js dispatch-and-wait <task-id> [timeout-sec] [interval-sec]",
       "  node dist/src/index.js dispatch-next",
@@ -504,6 +626,26 @@ async function main(): Promise<void> {
     );
     if (parsed.brief) {
       printText(renderDoctorBrief(result));
+      return;
+    }
+    printJson(result);
+    return;
+  }
+
+  if (command === "sweep-tasks") {
+    const parsed = parseSweepArgs(rest);
+    const result = orchestrator.sweepTasks({
+      action: parsed.action,
+      states: parsed.states,
+      older_than_hours: parsed.olderThanHours,
+      goal_contains: parsed.goalContains,
+      worker_target: parsed.workerTarget,
+      task_ids: parsed.taskIds,
+      limit: parsed.limit,
+      dry_run: parsed.dryRun
+    });
+    if (parsed.brief) {
+      printText(renderSweepBrief(result));
       return;
     }
     printJson(result);

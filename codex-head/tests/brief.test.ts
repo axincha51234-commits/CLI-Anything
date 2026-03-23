@@ -1,8 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { renderDoctorBrief, renderOutcomeBrief, renderStatusBrief } from "../src/brief";
+import { renderDoctorBrief, renderOutcomeBrief, renderStatusBrief, renderSweepBrief } from "../src/brief";
 import type { DoctorReport } from "../src/doctor";
+import type { SweepTasksResult } from "../src/orchestrator";
 import { createTaskSpec } from "../src/schema";
 import type { TaskStatusSnapshot } from "../src/status";
 
@@ -240,4 +241,45 @@ test("renderDoctorBrief summarizes operator findings and next actions", () => {
   assert.match(rendered, /github:\n- \[error\] GitHub dispatch is enabled but gh is not authenticated/i);
   assert.match(rendered, /tasks:\n- task-brief-doctor \[failed\/error\] Review the latest PR in GitHub/i);
   assert.match(rendered, /next:\n- Inspect the claude-code health command and local runtime\./i);
+});
+
+test("renderSweepBrief summarizes bulk task actions", () => {
+  const rendered = renderSweepBrief({
+    action: "cancel",
+    dry_run: true,
+    filters: {
+      states: ["queued", "failed"],
+      older_than_hours: 6,
+      goal_contains: "summarize",
+      worker_target: null,
+      task_ids: [],
+      limit: 10
+    },
+    matched: 2,
+    changed: 2,
+    tasks: [
+      {
+        task_id: "task-sweep-1",
+        goal: "Summarize the current orchestration state",
+        worker_target: "codex-cli",
+        previous_state: "queued",
+        next_state: "canceled",
+        changed: true,
+        reason: "Would cancel the selected task."
+      },
+      {
+        task_id: "task-sweep-2",
+        goal: "Summarize the current orchestration state",
+        worker_target: "gemini-cli",
+        previous_state: "failed",
+        next_state: "canceled",
+        changed: true,
+        reason: "Would cancel the selected task."
+      }
+    ]
+  } satisfies SweepTasksResult);
+
+  assert.match(rendered, /^sweep: cancel \(dry-run\)$/im);
+  assert.match(rendered, /summary: matched 2, actionable 2/i);
+  assert.match(rendered, /tasks:\n- task-sweep-1 \[queued -> canceled\]/i);
 });
