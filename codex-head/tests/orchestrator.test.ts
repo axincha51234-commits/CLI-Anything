@@ -2043,10 +2043,98 @@ test("showOperatorReceipt returns one stored operator receipt and rejects unknow
   assert.equal(shown.receipt_path, receipt.receipt_path);
   assert.equal(shown.receipt.command, "sweep-tasks");
   assert.equal(shown.receipt.summary.matched, 1);
+  assert.equal(shown.lookup.mode, "path");
 
   assert.throws(
     () => orchestrator.showOperatorReceipt("operator-actions/missing.json"),
     /operator receipt operator-actions\/missing\.json was not found/i
+  );
+});
+
+test("showLatestOperatorReceipt and showOperatorReceiptForTask resolve the newest matching receipt", async () => {
+  const root = createTempDir("codex-head-show-operator-receipt-lookups-");
+  const registry = new AdapterRegistry();
+  const orchestrator = createAppWithRegistry(root, registry);
+
+  const queuedTask = orchestrator.submitTask(createTaskSpec({
+    task_id: "task-show-operator-receipt-latest",
+    goal: "Summarize the current orchestration state",
+    repo: root,
+    worker_target: "codex-cli",
+    expected_output: { kind: "analysis", format: "markdown", code_change: false }
+  }));
+  orchestrator.enqueueTask(queuedTask.task.task_id);
+
+  const first = orchestrator.runSweepTasks({
+    action: "cancel",
+    task_ids: [queuedTask.task.task_id],
+    dry_run: true
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 5));
+
+  const second = orchestrator.runSweepTasks({
+    action: "cancel",
+    task_ids: [queuedTask.task.task_id],
+    dry_run: true
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 5));
+
+  const third = await orchestrator.runDoctorHints({
+    kind: "queued_backlog",
+    limit: 1
+  });
+
+  const latest = orchestrator.showLatestOperatorReceipt();
+  assert.equal(latest.receipt_path, third.receipt_path);
+  assert.equal(latest.lookup.mode, "latest");
+
+  const latestSweep = orchestrator.showLatestOperatorReceipt({
+    command: "sweep-tasks",
+    dry_run_only: true
+  });
+  assert.equal(latestSweep.receipt_path, second.receipt_path);
+  assert.equal(latestSweep.lookup.filters.command, "sweep-tasks");
+  assert.equal(latestSweep.lookup.filters.dry_run_only, true);
+
+  const taskReceipt = orchestrator.showOperatorReceiptForTask(queuedTask.task.task_id, {
+    command: "sweep-tasks"
+  });
+  assert.equal(taskReceipt.receipt_path, second.receipt_path);
+  assert.equal(taskReceipt.lookup.mode, "task_id");
+  assert.equal(taskReceipt.lookup.task_id, queuedTask.task.task_id);
+
+  const selectionOnlyReceiptPath = orchestrator.artifactStore.writeOperatorReceipt("run-doctor-hint", {
+    schema_version: 1,
+    command: "run-doctor-hint",
+    created_at: new Date(Date.now() + 5_000).toISOString(),
+    dry_run: true,
+    apply: false,
+    selection: {
+      hint_id: "manual-selection-only",
+      task_ids: ["task-show-operator-receipt-selection-only"]
+    },
+    summary: {
+      matched: 1,
+      actionable: 1,
+      changed: 0
+    }
+  });
+  const selectionOnlyReceipt = orchestrator.showOperatorReceiptForTask("task-show-operator-receipt-selection-only");
+  assert.equal(selectionOnlyReceipt.receipt_path, selectionOnlyReceiptPath);
+  assert.equal(selectionOnlyReceipt.lookup.task_id, "task-show-operator-receipt-selection-only");
+
+  assert.equal(first.receipt_path === second.receipt_path, false);
+  assert.throws(
+    () => orchestrator.showOperatorReceiptForTask("task-missing"),
+    /no operator receipt matched task task-missing/i
+  );
+  assert.throws(
+    () => orchestrator.showLatestOperatorReceipt({
+      command: "run-doctor-hint"
+    }),
+    /no operator receipt matched the requested latest lookup/i
   );
 });
 

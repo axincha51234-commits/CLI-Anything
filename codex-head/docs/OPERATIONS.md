@@ -82,6 +82,8 @@ node dist/src/index.js status [task-id] [--brief]
 node dist/src/index.js doctor [--brief] [--all-tasks] [--task-window-hours N]
 node dist/src/index.js operator-history [--brief] [--limit N] [--command NAME] [--apply-only] [--dry-run-only]
 node dist/src/index.js show-operator-receipt <receipt-path> [--brief]
+node dist/src/index.js show-operator-receipt --latest [--command NAME] [--apply-only|--dry-run-only] [--brief]
+node dist/src/index.js show-operator-receipt --task-id ID [--command NAME] [--apply-only|--dry-run-only] [--brief]
 node dist/src/index.js run-doctor-hint <hint-id> [--apply] [--brief] [--all-tasks] [--task-window-hours N]
 node dist/src/index.js run-doctor-hints [--kind KIND] [--limit N] [--apply] [--allow-multi-task-apply] [--brief] [--all-tasks] [--task-window-hours N]
 node dist/src/index.js sweep-tasks <cancel|requeue> [--state a,b] [--older-than-hours N] [--goal-contains TEXT] [--worker-target TARGET] [--task-id ID] [--limit N] [--all] [--dry-run] [--brief]
@@ -131,7 +133,8 @@ node dist/src/index.js complete-from-file <worker-result.json>
 18. Run `operator-history` when you want a read-only audit trail of recent
     sweep and doctor-hint actions under `runtime/artifacts/operator-actions/`.
 19. Run `show-operator-receipt` when you want to inspect one specific receipt
-    from that history in more detail.
+    from that history in more detail, either by explicit path or by resolving
+    the newest matching receipt for a task/filter.
 20. Run `clear-penalties` when a local provider recovered and you want to stop
     honoring remembered cooldowns immediately.
 21. Run `complete-from-file` to ingest an external callback artifact such as
@@ -202,6 +205,12 @@ operator command instead of only describing the problem.
 
 - `show-operator-receipt operator-actions/...json --brief` prints a compact
   summary with selection, hints, and task effects
+- `show-operator-receipt --latest --brief` resolves the newest receipt without
+  copying the path out of history first
+- `show-operator-receipt --task-id TASK_ID --brief` resolves the newest receipt
+  that touched that task
+- `show-operator-receipt --task-id TASK_ID --command sweep-tasks --brief`
+  narrows that lookup to one operator command type
 - omitting `--brief` returns the stored JSON receipt verbatim
 
 `sweep-tasks` is intentionally conservative:

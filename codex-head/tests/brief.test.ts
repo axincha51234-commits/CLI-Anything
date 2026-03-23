@@ -598,6 +598,15 @@ test("renderOperatorReceiptBrief summarizes one operator receipt", () => {
           reason: "Would cancel the selected task."
         }
       ]
+    },
+    lookup: {
+      mode: "task_id",
+      task_id: "task-1",
+      filters: {
+        command: "run-doctor-hints",
+        apply_only: false,
+        dry_run_only: true
+      }
     }
   } satisfies OperatorReceiptResult);
 
@@ -605,6 +614,8 @@ test("renderOperatorReceiptBrief summarizes one operator receipt", () => {
   assert.match(rendered, /command: run-doctor-hints/i);
   assert.match(rendered, /mode: dry-run/i);
   assert.match(rendered, /summary: matched 2, actionable 2, changed 0/i);
+  assert.match(rendered, /lookup: latest receipt for task task-1/i);
+  assert.match(rendered, /lookup-filters: command=run-doctor-hints, mode=dry-run-only/i);
   assert.match(rendered, /selection:\n- kind=queued_backlog/i);
   assert.match(rendered, /hints:\n- queued-backlog-1 \[queued_backlog\]/i);
   assert.match(rendered, /tasks:\n- task-1 \[queued -> canceled\]/i);

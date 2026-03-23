@@ -523,22 +523,89 @@ function parseOperatorHistoryArgs(args: string[]): {
 }
 
 function parseShowOperatorReceiptArgs(args: string[]): {
-  receiptPath: string;
+  receiptPath?: string;
+  latest: boolean;
+  taskId?: string;
+  command?: typeof OPERATOR_RECEIPT_COMMANDS[number];
+  applyOnly: boolean;
+  dryRunOnly: boolean;
   brief: boolean;
 } {
-  const stripped = stripFlag(args, "--brief");
-  const receiptPath = stripped.values[0];
-  if (!receiptPath) {
-    throw new Error("show-operator-receipt requires a receipt path");
+  let brief = false;
+  let latest = false;
+  let taskId: string | undefined;
+  let command: typeof OPERATOR_RECEIPT_COMMANDS[number] | undefined;
+  let applyOnly = false;
+  let dryRunOnly = false;
+  const positionals: string[] = [];
+
+  for (let index = 0; index < args.length; index += 1) {
+    const current = args[index];
+    if (current === "--brief") {
+      brief = true;
+      continue;
+    }
+    if (current === "--latest") {
+      latest = true;
+      continue;
+    }
+    if (current === "--task-id") {
+      taskId = args[index + 1];
+      if (!taskId) {
+        throw new Error("--task-id requires a value");
+      }
+      index += 1;
+      continue;
+    }
+    if (current === "--command") {
+      const next = args[index + 1];
+      if (!next || !OPERATOR_RECEIPT_COMMANDS.includes(next as typeof OPERATOR_RECEIPT_COMMANDS[number])) {
+        throw new Error(`--command must be one of: ${OPERATOR_RECEIPT_COMMANDS.join(", ")}`);
+      }
+      command = next as typeof OPERATOR_RECEIPT_COMMANDS[number];
+      index += 1;
+      continue;
+    }
+    if (current === "--apply-only") {
+      applyOnly = true;
+      continue;
+    }
+    if (current === "--dry-run-only") {
+      dryRunOnly = true;
+      continue;
+    }
+    if (current.startsWith("--")) {
+      throw new Error(
+        "show-operator-receipt only accepts a receipt path or lookup flags: --latest, --task-id ID, --command NAME, --apply-only, --dry-run-only, and --brief"
+      );
+    }
+    positionals.push(current);
   }
 
-  if (stripped.values.length > 1) {
-    throw new Error("show-operator-receipt only accepts a receipt path and optional --brief");
+  if (applyOnly && dryRunOnly) {
+    throw new Error("show-operator-receipt cannot combine --apply-only with --dry-run-only");
+  }
+
+  const receiptPath = positionals[0];
+  const modeCount = Number(Boolean(receiptPath)) + Number(latest) + Number(Boolean(taskId));
+  if (modeCount === 0) {
+    throw new Error("show-operator-receipt requires a receipt path, --latest, or --task-id ID");
+  }
+  if (modeCount > 1 || positionals.length > 1) {
+    throw new Error("show-operator-receipt accepts exactly one lookup mode: a receipt path, --latest, or --task-id ID");
+  }
+  if (receiptPath && (command || applyOnly || dryRunOnly)) {
+    throw new Error("show-operator-receipt path mode does not accept --command, --apply-only, or --dry-run-only");
   }
 
   return {
     receiptPath,
-    brief: stripped.present
+    latest,
+    taskId,
+    command,
+    applyOnly,
+    dryRunOnly,
+    brief
   };
 }
 
@@ -562,6 +629,8 @@ function usage(): void {
       "  node dist/src/index.js doctor [--brief] [--all-tasks] [--task-window-hours N]",
       "  node dist/src/index.js operator-history [--brief] [--limit N] [--command NAME] [--apply-only] [--dry-run-only]",
       "  node dist/src/index.js show-operator-receipt <receipt-path> [--brief]",
+      "  node dist/src/index.js show-operator-receipt --latest [--command NAME] [--apply-only|--dry-run-only] [--brief]",
+      "  node dist/src/index.js show-operator-receipt --task-id ID [--command NAME] [--apply-only|--dry-run-only] [--brief]",
       "  node dist/src/index.js run-doctor-hint <hint-id> [--apply] [--brief] [--all-tasks] [--task-window-hours N]",
       "  node dist/src/index.js run-doctor-hints [--kind KIND] [--limit N] [--apply] [--allow-multi-task-apply] [--confirm-token TOKEN] [--brief] [--all-tasks] [--task-window-hours N]",
       "  node dist/src/index.js sweep-tasks <cancel|requeue> [--state a,b] [--older-than-hours N] [--goal-contains TEXT] [--worker-target TARGET] [--task-id ID] [--limit N] [--all] [--dry-run] [--brief]",
@@ -877,7 +946,19 @@ async function main(): Promise<void> {
 
   if (command === "show-operator-receipt") {
     const parsed = parseShowOperatorReceiptArgs(rest);
-    const result = orchestrator.showOperatorReceipt(parsed.receiptPath);
+    const result = parsed.receiptPath
+      ? orchestrator.showOperatorReceipt(parsed.receiptPath)
+      : parsed.latest
+        ? orchestrator.showLatestOperatorReceipt({
+          command: parsed.command,
+          apply_only: parsed.applyOnly,
+          dry_run_only: parsed.dryRunOnly
+        })
+        : orchestrator.showOperatorReceiptForTask(parsed.taskId ?? "", {
+          command: parsed.command,
+          apply_only: parsed.applyOnly,
+          dry_run_only: parsed.dryRunOnly
+        });
     if (parsed.brief) {
       printText(renderOperatorReceiptBrief(result));
       return;

@@ -233,6 +233,15 @@ export interface OperatorHistoryEntry {
 export interface OperatorReceiptResult {
   receipt_path: string;
   receipt: OperatorActionReceipt;
+  lookup: {
+    mode: "path" | "latest" | "task_id";
+    task_id: string | null;
+    filters: {
+      command: OperatorReceiptCommand | null;
+      apply_only: boolean;
+      dry_run_only: boolean;
+    };
+  };
 }
 
 export interface OperatorHistoryResult {
@@ -245,6 +254,12 @@ export interface OperatorHistoryResult {
   scanned: number;
   returned: number;
   receipts: OperatorHistoryEntry[];
+}
+
+interface OperatorReceiptLookupFilters {
+  command?: OperatorReceiptCommand | null;
+  apply_only?: boolean;
+  dry_run_only?: boolean;
 }
 
 interface WorkerPenalty {
@@ -1355,6 +1370,73 @@ export class CodexHeadOrchestrator {
     };
   }
 
+  private normalizeOperatorReceiptLookupFilters(options: OperatorReceiptLookupFilters): {
+    command: OperatorReceiptCommand | null;
+    apply_only: boolean;
+    dry_run_only: boolean;
+  } {
+    if (options.apply_only && options.dry_run_only) {
+      throw new Error("show-operator-receipt cannot combine --apply-only with --dry-run-only");
+    }
+
+    return {
+      command: options.command ?? null,
+      apply_only: Boolean(options.apply_only),
+      dry_run_only: Boolean(options.dry_run_only)
+    };
+  }
+
+  private operatorReceiptMatchesTaskId(receipt: OperatorActionReceipt, taskId: string): boolean {
+    if ((receipt.tasks ?? []).some((task) => task.task_id === taskId)) {
+      return true;
+    }
+
+    const directTaskId = receipt.selection.task_id;
+    if (typeof directTaskId === "string" && directTaskId === taskId) {
+      return true;
+    }
+
+    const taskIds = receipt.selection.task_ids;
+    if (Array.isArray(taskIds) && taskIds.some((value) => value === taskId)) {
+      return true;
+    }
+
+    return false;
+  }
+
+  private findOperatorReceiptEntry(options: OperatorReceiptLookupFilters & {
+    task_id?: string;
+  }): OperatorHistoryEntry | null {
+    const filters = this.normalizeOperatorReceiptLookupFilters(options);
+    const taskId = options.task_id?.trim();
+
+    for (const receiptPath of this.artifactStore.listOperatorReceipts()) {
+      const receipt = this.artifactStore.readOperatorReceiptIfExists<OperatorActionReceipt>(receiptPath);
+      if (!receipt) {
+        continue;
+      }
+      if (filters.command && receipt.command !== filters.command) {
+        continue;
+      }
+      if (filters.apply_only && !receipt.apply) {
+        continue;
+      }
+      if (filters.dry_run_only && !receipt.dry_run) {
+        continue;
+      }
+      if (taskId && !this.operatorReceiptMatchesTaskId(receipt, taskId)) {
+        continue;
+      }
+
+      return {
+        receipt_path: receiptPath,
+        receipt
+      };
+    }
+
+    return null;
+  }
+
   showOperatorReceipt(receiptPath: string): OperatorReceiptResult {
     const receipt = this.artifactStore.readOperatorReceiptIfExists<OperatorActionReceipt>(receiptPath);
     if (!receipt) {
@@ -1363,7 +1445,60 @@ export class CodexHeadOrchestrator {
 
     return {
       receipt_path: receiptPath.replace(/\\/g, "/").replace(/^\/+/, ""),
-      receipt
+      receipt,
+      lookup: {
+        mode: "path",
+        task_id: null,
+        filters: {
+          command: null,
+          apply_only: false,
+          dry_run_only: false
+        }
+      }
+    };
+  }
+
+  showLatestOperatorReceipt(options: OperatorReceiptLookupFilters = {}): OperatorReceiptResult {
+    const filters = this.normalizeOperatorReceiptLookupFilters(options);
+    const entry = this.findOperatorReceiptEntry(filters);
+    if (!entry) {
+      throw new Error("no operator receipt matched the requested latest lookup");
+    }
+
+    return {
+      receipt_path: entry.receipt_path,
+      receipt: entry.receipt,
+      lookup: {
+        mode: "latest",
+        task_id: null,
+        filters
+      }
+    };
+  }
+
+  showOperatorReceiptForTask(taskId: string, options: OperatorReceiptLookupFilters = {}): OperatorReceiptResult {
+    const normalizedTaskId = taskId.trim();
+    if (!normalizedTaskId) {
+      throw new Error("show-operator-receipt --task-id requires a value");
+    }
+
+    const filters = this.normalizeOperatorReceiptLookupFilters(options);
+    const entry = this.findOperatorReceiptEntry({
+      ...filters,
+      task_id: normalizedTaskId
+    });
+    if (!entry) {
+      throw new Error(`no operator receipt matched task ${normalizedTaskId}`);
+    }
+
+    return {
+      receipt_path: entry.receipt_path,
+      receipt: entry.receipt,
+      lookup: {
+        mode: "task_id",
+        task_id: normalizedTaskId,
+        filters
+      }
     };
   }
 

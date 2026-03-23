@@ -271,6 +271,25 @@ export function renderOperatorReceiptBrief(result: OperatorReceiptResult): strin
     `summary: matched ${result.receipt.summary.matched}, actionable ${result.receipt.summary.actionable}, changed ${result.receipt.summary.changed}`
   ];
 
+  if (result.lookup.mode === "latest") {
+    lines.push("lookup: latest receipt");
+  } else if (result.lookup.mode === "task_id") {
+    lines.push(`lookup: latest receipt for task ${result.lookup.task_id}`);
+  }
+
+  const lookupFilters: string[] = [];
+  if (result.lookup.filters.command) {
+    lookupFilters.push(`command=${result.lookup.filters.command}`);
+  }
+  if (result.lookup.filters.apply_only) {
+    lookupFilters.push("mode=apply-only");
+  } else if (result.lookup.filters.dry_run_only) {
+    lookupFilters.push("mode=dry-run-only");
+  }
+  if (lookupFilters.length > 0) {
+    lines.push(`lookup-filters: ${lookupFilters.join(", ")}`);
+  }
+
   const selectionEntries = Object.entries(result.receipt.selection)
     .filter(([, value]) => value !== null && value !== undefined && value !== "")
     .map(([key, value]) => `${key}=${String(value)}`);
