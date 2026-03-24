@@ -1869,6 +1869,15 @@ export class CodexHeadOrchestrator {
       const featureEnabled = featureFlagEnabled && templateConfig.enabled;
       const hasLocalTemplate = Boolean(templateConfig.local);
       const penalty = penaltiesByWorker.get(entry.worker_target);
+      const githubWorkerReady = entry.healthy
+        && featureEnabled
+        && adapter.capability.supports_local
+        && hasLocalTemplate
+        && this.config.github.enabled
+        && !penalty;
+      const githubReviewReady = featureEnabled
+        && adapter.capability.supports_github
+        && this.config.github.enabled;
 
       return {
         worker_target: entry.worker_target,
@@ -1882,7 +1891,9 @@ export class CodexHeadOrchestrator {
           && adapter.capability.supports_local
           && hasLocalTemplate
           && !penalty,
-        github_ready: featureEnabled && adapter.capability.supports_github && this.config.github.enabled,
+        github_ready: githubWorkerReady || githubReviewReady,
+        github_worker_ready: githubWorkerReady,
+        github_review_ready: githubReviewReady,
         cooldown_until: penalty?.penalized_until ?? null,
         cooldown_reason: penalty?.detail ?? null
       };

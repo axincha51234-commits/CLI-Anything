@@ -258,6 +258,8 @@ Each readiness entry includes:
 - `has_local_template`
 - `local_ready`
 - `github_ready`
+- `github_worker_ready`
+- `github_review_ready`
 - `cooldown_until`
 - `cooldown_reason`
 

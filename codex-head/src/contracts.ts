@@ -211,6 +211,8 @@ export interface AdapterRuntimeReadiness {
   has_local_template: boolean;
   local_ready: boolean;
   github_ready: boolean;
+  github_worker_ready?: boolean;
+  github_review_ready?: boolean;
   cooldown_until?: number | null;
   cooldown_reason?: string | null;
 }

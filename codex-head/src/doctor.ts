@@ -203,7 +203,9 @@ function summarizeWorkerFinding(
   }
 
   if (readiness.supports_local && !readiness.has_local_template) {
-    if (readiness.supports_github && readiness.github_ready) {
+    const githubReviewReady = readiness.github_review_ready
+      ?? (readiness.supports_github && readiness.github_ready);
+    if (githubReviewReady) {
       return null;
     }
     return {

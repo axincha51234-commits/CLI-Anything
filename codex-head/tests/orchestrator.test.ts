@@ -2845,6 +2845,8 @@ test("smokeAdapters separates binary health from local readiness", async () => {
   const geminiReadiness = health.readiness.find((entry: any) => entry.worker_target === "gemini-cli");
   assert.ok(geminiReadiness);
   assert.equal(geminiReadiness.github_ready, true);
+  assert.equal(geminiReadiness.github_worker_ready, true);
+  assert.equal(geminiReadiness.github_review_ready, true);
 });
 
 test("smokeAdapters treats template-disabled workers as opted out", async () => {
