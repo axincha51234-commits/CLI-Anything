@@ -5,6 +5,8 @@ on:
     paths:
       - "codex-head/**"
       - ".github/workflows/codex-head-tests.yml"
+      - ".github/workflows/codex-head-worker.yml"
+      - ".github/workflows/codex-head-gemini-review.yml"
   workflow_dispatch:
 
 jobs:

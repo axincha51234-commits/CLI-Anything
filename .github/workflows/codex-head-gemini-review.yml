@@ -49,12 +49,18 @@ jobs:
       run:
         working-directory: codex-head
     steps:
-      - name: Checkout
+      - name: Checkout codex-head control repo
+        uses: actions/checkout@v5
+        with:
+          path: codex-head
+
+      - name: Checkout target repository
         uses: actions/checkout@v5
         with:
           repository: ${{ github.event.inputs.target_repository }}
           ref: ${{ github.event.inputs.base_branch }}
           fetch-depth: 0
+          path: target-repo
 
       - name: Setup Node.js
         uses: actions/setup-node@v5
@@ -70,8 +76,9 @@ jobs:
       - name: Build review diff
         id: build_review_diff
         shell: pwsh
+        working-directory: target-repo
         run: |
-          New-Item -ItemType Directory -Force -Path runtime | Out-Null
+          New-Item -ItemType Directory -Force -Path ../codex-head/runtime | Out-Null
           & git fetch origin "${{ github.event.inputs.base_branch }}" --depth=1
           if ($LASTEXITCODE -ne 0) {
             throw "Failed to fetch base branch ${{ github.event.inputs.base_branch }} from origin."
@@ -86,7 +93,7 @@ jobs:
           }
 
           if ($workBranchAvailable) {
-            & git diff "origin/${{ github.event.inputs.base_branch }}...$workBranchRef" | Set-Content -Path runtime/review.diff -Encoding utf8NoBOM
+            & git diff "origin/${{ github.event.inputs.base_branch }}...$workBranchRef" | Set-Content -Path ../codex-head/runtime/review.diff -Encoding utf8NoBOM
             if ($LASTEXITCODE -ne 0) {
               throw "Failed to build review diff from $workBranchRef."
             }
@@ -95,7 +102,7 @@ jobs:
             @(
               "Work branch '${{ github.event.inputs.work_branch }}' was not available on origin."
               "Falling back to base branch context only."
-            ) | Set-Content -Path runtime/review.diff -Encoding utf8NoBOM
+            ) | Set-Content -Path ../codex-head/runtime/review.diff -Encoding utf8NoBOM
             "work_branch_available=false" | Add-Content -Path $env:GITHUB_OUTPUT
             $global:LASTEXITCODE = 0
           }
