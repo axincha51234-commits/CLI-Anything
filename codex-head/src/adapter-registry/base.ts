@@ -123,7 +123,7 @@ export abstract class BaseWorkerAdapter implements WorkerAdapter {
   ) {}
 
   protected resolveLocalTemplate(): CommandTemplate | undefined {
-    return this.templateConfig.local;
+    return this.templateConfig.local ?? undefined;
   }
 
   async healthCheck(): Promise<AdapterHealth> {

@@ -203,6 +203,9 @@ function summarizeWorkerFinding(
   }
 
   if (readiness.supports_local && !readiness.has_local_template) {
+    if (readiness.supports_github && readiness.github_ready) {
+      return null;
+    }
     return {
       worker_target: readiness.worker_target,
       severity: "warning",

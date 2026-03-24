@@ -144,7 +144,7 @@ jobs:
 
       - name: Run OpenAI-compatible review
         id: openai_review
-        if: ${{ steps.review_auth.outputs.provider == 'openai-compatible' }}
+        if: ${{ steps.review_auth.outputs.provider == 'openai-compatible' && steps.build_review_diff.outputs.work_branch_available == 'true' }}
         continue-on-error: true
         shell: pwsh
         env:
@@ -314,7 +314,7 @@ jobs:
 
       - name: Run Gemini review
         id: gemini_review
-        if: ${{ steps.review_auth.outputs.provider == 'gemini' }}
+        if: ${{ steps.review_auth.outputs.provider == 'gemini' && steps.build_review_diff.outputs.work_branch_available == 'true' }}
         continue-on-error: true
         uses: google-github-actions/run-gemini-cli@v0.1.21
         with:
@@ -392,7 +392,9 @@ jobs:
             : "";
 
           let review;
-          if (!configured) {
+          if (process.env.WORK_BRANCH_AVAILABLE !== "true") {
+            review = buildFallbackGeminiReview(`Remote review skipped because work branch '${process.env.WORK_BRANCH}' was not available on origin.`);
+          } else if (!configured) {
             review = buildFallbackGeminiReview("Remote review skipped because no supported workflow credential was configured.");
           } else if (providerOutcome !== "success") {
             review = buildFallbackGeminiReview(`Remote review failed or was skipped with provider ${provider} and outcome: ${providerOutcome || "unknown"}.`);

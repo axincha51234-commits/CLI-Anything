@@ -337,6 +337,10 @@ For Antigravity-Manager, the practical local-only pattern is:
   `GOOGLE_GEMINI_BASE_URL=http://127.0.0.1:8045`
 - pass the manager API key through the matching worker env vars instead of
   rewriting your global CLI setup
+- if a worker should remain available only for GitHub dispatch on this machine,
+  set `command_templates.<worker>.local` to `null` in
+  `config/workers.machine.json`; `doctor` treats that as an intentional
+  GitHub-only posture
 
 If you also want a local front router in front of Antigravity-Manager, use:
 

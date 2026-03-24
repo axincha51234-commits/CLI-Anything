@@ -272,6 +272,10 @@ currently local-ready and exposes the matching cooldown reason.
   `ANTHROPIC_BASE_URL` for Claude. For Gemini, prefer a repo-local home/profile
   that sets `.gemini/settings.json` auth to `gemini-api-key`, otherwise the CLI
   may keep preferring cached Google login instead of your proxy env.
+- If a worker should stay enabled for GitHub dispatch but must not run locally
+  on this machine, set `command_templates.<worker>.local` to `null` in
+  `config/workers.machine.json`. `doctor` treats that as an intentional
+  GitHub-only configuration rather than a missing local setup.
 - `antigravity` is disabled by default behind a feature flag.
 - Legacy config files may still use camelCase keys, but the loader now accepts
   both camelCase and snake_case overrides.

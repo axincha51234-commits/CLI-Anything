@@ -14,9 +14,14 @@ export interface CommandTemplate {
 export interface WorkerTemplateConfig {
   enabled: boolean;
   binary: string;
-  health?: CommandTemplate;
-  local?: CommandTemplate;
+  health?: CommandTemplate | null;
+  local?: CommandTemplate | null;
 }
+
+type ExternalWorkerTemplateConfig = Partial<Omit<WorkerTemplateConfig, "health" | "local">> & {
+  health?: CommandTemplate | null;
+  local?: CommandTemplate | null;
+};
 
 export interface GitHubConfig {
   enabled: boolean;
@@ -46,9 +51,9 @@ type ExternalConfig = Omit<Partial<CodexHeadConfig>, "github" | "command_templat
     autoRecycleStaleRunner?: GitHubConfig["auto_recycle_stale_runner"];
   };
   feature_flags?: Record<string, boolean>;
-  command_templates?: Partial<Record<WorkerTarget, Partial<WorkerTemplateConfig>>>;
+  command_templates?: Partial<Record<WorkerTarget, ExternalWorkerTemplateConfig>>;
   featureFlags?: Record<string, boolean>;
-  commandTemplates?: Partial<Record<WorkerTarget, Partial<WorkerTemplateConfig>>>;
+  commandTemplates?: Partial<Record<WorkerTarget, ExternalWorkerTemplateConfig>>;
 };
 
 const DEFAULT_GITHUB_REPOSITORY = "OWNER/REPO";
@@ -199,7 +204,7 @@ export function createDefaultConfig(appRoot: string): CodexHeadConfig {
 
 function mergeCommandTemplate(
   base: WorkerTemplateConfig,
-  override?: Partial<WorkerTemplateConfig>
+  override?: ExternalWorkerTemplateConfig
 ): WorkerTemplateConfig {
   if (!override) {
     return { ...base };
@@ -208,8 +213,12 @@ function mergeCommandTemplate(
   return {
     enabled: override.enabled ?? base.enabled,
     binary: override.binary ?? base.binary,
-    health: override.health ?? base.health,
-    local: override.local ?? base.local
+    health: Object.prototype.hasOwnProperty.call(override, "health")
+      ? (override.health ?? undefined)
+      : base.health,
+    local: Object.prototype.hasOwnProperty.call(override, "local")
+      ? (override.local ?? undefined)
+      : base.local
   };
 }
 

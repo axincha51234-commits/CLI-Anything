@@ -203,3 +203,35 @@ test("loadConfig honors CODEX_HEAD_MACHINE_CONFIG override", () => {
     }
   }
 });
+
+test("loadConfig allows clearing a local template in machine config", () => {
+  const root = createTempDir("codex-head-machine-null-local-");
+  const configDir = join(root, "config");
+  mkdirSync(configDir, { recursive: true });
+
+  writeFileSync(join(configDir, "workers.local.json"), JSON.stringify({
+    command_templates: {
+      "gemini-cli": {
+        local: {
+          name: "gemini-local",
+          executable: "gemini",
+          args: ["-p", "{{task_prompt}}"],
+          env: {
+            GEMINI_API_KEY: "shared-placeholder"
+          }
+        }
+      }
+    }
+  }, null, 2), "utf8");
+
+  writeFileSync(resolveMachineConfigPath(root), JSON.stringify({
+    command_templates: {
+      "gemini-cli": {
+        local: null
+      }
+    }
+  }, null, 2), "utf8");
+
+  const config = loadConfig(root);
+  assert.equal(config.command_templates["gemini-cli"].local, undefined);
+});

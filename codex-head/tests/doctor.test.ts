@@ -403,6 +403,37 @@ test("buildDoctorReport stays healthy when workers and completed tasks are clean
   assert.match(report.summary, /No blocking issues found/i);
 });
 
+test("buildDoctorReport accepts GitHub-only workers without local templates", () => {
+  const health: DoctorHealthSnapshot = {
+    adapters: [
+      { worker_target: "gemini-cli", healthy: true, reason: "ok", detected_binary: "gemini.exe" }
+    ],
+    readiness: [
+      {
+        worker_target: "gemini-cli",
+        healthy: true,
+        feature_enabled: true,
+        supports_local: true,
+        supports_github: true,
+        has_local_template: false,
+        local_ready: false,
+        github_ready: true,
+        cooldown_until: null,
+        cooldown_reason: null
+      }
+    ],
+    recent_penalties: [],
+    github: createGitHubRuntime(),
+    local_stack: createLocalStack(),
+    database_path: "C:/repo/codex-head/runtime/codex-head.sqlite",
+    artifacts_dir: "C:/repo/codex-head/runtime/artifacts"
+  };
+
+  const report = buildDoctorReport(health, []);
+  assert.equal(report.ok, true);
+  assert.deepEqual(report.attention.workers, []);
+});
+
 test("buildDoctorReport hides older failed backlog by default but can include all history", () => {
   const health: DoctorHealthSnapshot = {
     adapters: [
