@@ -47,7 +47,7 @@ jobs:
       pull-requests: read
     defaults:
       run:
-        working-directory: codex-head
+        working-directory: codex-head/codex-head
     steps:
       - name: Checkout codex-head control repo
         uses: actions/checkout@v5
@@ -78,7 +78,7 @@ jobs:
         shell: pwsh
         working-directory: target-repo
         run: |
-          New-Item -ItemType Directory -Force -Path ../codex-head/runtime | Out-Null
+          New-Item -ItemType Directory -Force -Path ../codex-head/codex-head/runtime | Out-Null
           & git fetch origin "${{ github.event.inputs.base_branch }}" --depth=1
           if ($LASTEXITCODE -ne 0) {
             throw "Failed to fetch base branch ${{ github.event.inputs.base_branch }} from origin."
@@ -93,7 +93,7 @@ jobs:
           }
 
           if ($workBranchAvailable) {
-            & git diff "origin/${{ github.event.inputs.base_branch }}...$workBranchRef" | Set-Content -Path ../codex-head/runtime/review.diff -Encoding utf8NoBOM
+            & git diff "origin/${{ github.event.inputs.base_branch }}...$workBranchRef" | Set-Content -Path ../codex-head/codex-head/runtime/review.diff -Encoding utf8NoBOM
             if ($LASTEXITCODE -ne 0) {
               throw "Failed to build review diff from $workBranchRef."
             }
@@ -102,7 +102,7 @@ jobs:
             @(
               "Work branch '${{ github.event.inputs.work_branch }}' was not available on origin."
               "Falling back to base branch context only."
-            ) | Set-Content -Path ../codex-head/runtime/review.diff -Encoding utf8NoBOM
+            ) | Set-Content -Path ../codex-head/codex-head/runtime/review.diff -Encoding utf8NoBOM
             "work_branch_available=false" | Add-Content -Path $env:GITHUB_OUTPUT
             $global:LASTEXITCODE = 0
           }
@@ -425,4 +425,4 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: codex-head-github-callback-${{ github.event.inputs.task_id }}
-          path: codex-head/runtime/artifacts/${{ github.event.inputs.task_id }}/github-callback.json
+          path: codex-head/codex-head/runtime/artifacts/${{ github.event.inputs.task_id }}/github-callback.json
