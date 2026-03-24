@@ -87,15 +87,35 @@ jobs:
           & git fetch origin "${{ github.event.inputs.work_branch }}" --depth=1 *> $null
           $workBranchRef = "origin/${{ github.event.inputs.work_branch }}"
           $workBranchAvailable = $LASTEXITCODE -eq 0
+          $reviewInputReady = $false
+          $reviewDiffReason = "missing_work_branch"
           if ($workBranchAvailable) {
             & git rev-parse --verify $workBranchRef *> $null
             $workBranchAvailable = $LASTEXITCODE -eq 0
           }
 
           if ($workBranchAvailable) {
-            & git diff "origin/${{ github.event.inputs.base_branch }}...$workBranchRef" | Set-Content -Path ../codex-head/codex-head/runtime/review.diff -Encoding utf8NoBOM
-            if ($LASTEXITCODE -ne 0) {
-              throw "Failed to build review diff from $workBranchRef."
+            & git merge-base "origin/${{ github.event.inputs.base_branch }}" $workBranchRef *> $null
+            if ($LASTEXITCODE -eq 0) {
+              & git diff "origin/${{ github.event.inputs.base_branch }}...$workBranchRef" | Set-Content -Path ../codex-head/codex-head/runtime/review.diff -Encoding utf8NoBOM
+              if ($LASTEXITCODE -eq 0) {
+                $reviewInputReady = $true
+                $reviewDiffReason = "ready"
+              } else {
+                @(
+                  "Remote review skipped because the diff between '${{ github.event.inputs.base_branch }}' and '${{ github.event.inputs.work_branch }}' could not be generated."
+                  "The work branch exists on origin, but git diff failed."
+                ) | Set-Content -Path ../codex-head/codex-head/runtime/review.diff -Encoding utf8NoBOM
+                $reviewDiffReason = "diff_failed"
+                $global:LASTEXITCODE = 0
+              }
+            } else {
+              @(
+                "Remote review skipped because '${{ github.event.inputs.base_branch }}' and '${{ github.event.inputs.work_branch }}' do not share a merge base."
+                "The work branch exists on origin, but a three-dot diff is not available."
+              ) | Set-Content -Path ../codex-head/codex-head/runtime/review.diff -Encoding utf8NoBOM
+              $reviewDiffReason = "no_merge_base"
+              $global:LASTEXITCODE = 0
             }
             "work_branch_available=true" | Add-Content -Path $env:GITHUB_OUTPUT
           } else {
@@ -104,8 +124,11 @@ jobs:
               "Falling back to base branch context only."
             ) | Set-Content -Path ../codex-head/codex-head/runtime/review.diff -Encoding utf8NoBOM
             "work_branch_available=false" | Add-Content -Path $env:GITHUB_OUTPUT
+            $reviewDiffReason = "missing_work_branch"
             $global:LASTEXITCODE = 0
           }
+          "review_input_ready=$($reviewInputReady.ToString().ToLowerInvariant())" | Add-Content -Path $env:GITHUB_OUTPUT
+          "review_diff_reason=$reviewDiffReason" | Add-Content -Path $env:GITHUB_OUTPUT
 
       - name: Detect remote review auth
         id: review_auth
@@ -144,7 +167,7 @@ jobs:
 
       - name: Run OpenAI-compatible review
         id: openai_review
-        if: ${{ steps.review_auth.outputs.provider == 'openai-compatible' && steps.build_review_diff.outputs.work_branch_available == 'true' }}
+        if: ${{ steps.review_auth.outputs.provider == 'openai-compatible' && steps.build_review_diff.outputs.review_input_ready == 'true' }}
         continue-on-error: true
         shell: pwsh
         env:
@@ -314,7 +337,7 @@ jobs:
 
       - name: Run Gemini review
         id: gemini_review
-        if: ${{ steps.review_auth.outputs.provider == 'gemini' && steps.build_review_diff.outputs.work_branch_available == 'true' }}
+        if: ${{ steps.review_auth.outputs.provider == 'gemini' && steps.build_review_diff.outputs.review_input_ready == 'true' }}
         continue-on-error: true
         uses: google-github-actions/run-gemini-cli@v0.1.21
         with:
@@ -358,6 +381,8 @@ jobs:
           PRIOR_RESULT_STATUS: ${{ github.event.inputs.prior_result_status }}
           EXPECTED_OUTPUT: ${{ github.event.inputs.expected_output }}
           WORK_BRANCH_AVAILABLE: ${{ steps.build_review_diff.outputs.work_branch_available }}
+          REVIEW_INPUT_READY: ${{ steps.build_review_diff.outputs.review_input_ready }}
+          REVIEW_DIFF_REASON: ${{ steps.build_review_diff.outputs.review_diff_reason }}
           REVIEW_PROVIDER: ${{ steps.review_auth.outputs.provider }}
           REVIEW_CREDENTIAL_SOURCE: ${{ steps.review_auth.outputs.credential_source }}
           REVIEW_CONFIGURED: ${{ steps.review_auth.outputs.configured }}
@@ -394,6 +419,15 @@ jobs:
           let review;
           if (process.env.WORK_BRANCH_AVAILABLE !== "true") {
             review = buildFallbackGeminiReview(`Remote review skipped because work branch '${process.env.WORK_BRANCH}' was not available on origin.`);
+          } else if (process.env.REVIEW_INPUT_READY !== "true") {
+            const reason = process.env.REVIEW_DIFF_REASON || "diff_unavailable";
+            if (reason === "no_merge_base") {
+              review = buildFallbackGeminiReview(`Remote review skipped because '${process.env.BASE_BRANCH}' and '${process.env.WORK_BRANCH}' do not share a merge base.`);
+            } else if (reason === "diff_failed") {
+              review = buildFallbackGeminiReview(`Remote review skipped because the diff between '${process.env.BASE_BRANCH}' and '${process.env.WORK_BRANCH}' could not be generated.`);
+            } else {
+              review = buildFallbackGeminiReview(`Remote review skipped because review input was not ready (${reason}).`);
+            }
           } else if (!configured) {
             review = buildFallbackGeminiReview("Remote review skipped because no supported workflow credential was configured.");
           } else if (providerOutcome !== "success") {
@@ -415,6 +449,8 @@ jobs:
             `Base branch was ${process.env.BASE_BRANCH}.`,
             `Work branch was ${process.env.WORK_BRANCH}.`,
             `Work branch was available on origin: ${process.env.WORK_BRANCH_AVAILABLE}.`,
+            `Review input was ready: ${process.env.REVIEW_INPUT_READY}.`,
+            `Review diff reason was ${process.env.REVIEW_DIFF_REASON || "unknown"}.`,
             `Primary execution target was ${process.env.EXECUTION_TARGET}.`,
             `Prior worker status was ${process.env.PRIOR_RESULT_STATUS}.`,
             `Expected output was ${process.env.EXPECTED_OUTPUT}.`
