@@ -79,12 +79,12 @@ jobs:
         working-directory: target-repo
         run: |
           New-Item -ItemType Directory -Force -Path ../codex-head/codex-head/runtime | Out-Null
-          & git fetch origin "${{ github.event.inputs.base_branch }}" --depth=1
+          & git fetch origin "${{ github.event.inputs.base_branch }}"
           if ($LASTEXITCODE -ne 0) {
             throw "Failed to fetch base branch ${{ github.event.inputs.base_branch }} from origin."
           }
 
-          & git fetch origin "${{ github.event.inputs.work_branch }}" --depth=1 *> $null
+          & git fetch origin "${{ github.event.inputs.work_branch }}" *> $null
           $workBranchRef = "origin/${{ github.event.inputs.work_branch }}"
           $workBranchAvailable = $LASTEXITCODE -eq 0
           $reviewInputReady = $false
