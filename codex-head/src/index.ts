@@ -806,7 +806,11 @@ async function main(): Promise<void> {
     if (!filePath) {
       throw new Error("payload json path is required");
     }
-    printJson(await executeGitHubPayloadFile(resolve(filePath)));
+    const execution = await executeGitHubPayloadFile(resolve(filePath));
+    printJson(execution);
+    if (execution.result.status !== "completed") {
+      process.exitCode = 1;
+    }
     return;
   }
 
