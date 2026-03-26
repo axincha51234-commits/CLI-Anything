@@ -1,14 +1,20 @@
 [CmdletBinding()]
 param(
-  [string]$AntigravityManagerRoot = "",
-  [string]$AntigravityBinary = "",
   [string]$RouterRoot = "",
   [string]$RouterDataDir = "",
   [string]$RouterHost = "127.0.0.1",
-  [int]$AntigravityPort = 8045,
   [int]$RouterPort = 20128,
+  [int]$BlackboxManagerPort = 8083,
+  [string]$NodePrefix = "bbxapp",
+  [string]$NodeName = "Blackbox Account Manager Local",
+  [string]$DefaultModel = "bbxapp/app-agent",
+  [string]$ManagerApiKey = "local-blackbox",
+  [string]$StateDbPath = "",
+  [string]$UpstreamBaseUrl = "https://oi-vscode-server-985058387028.europe-west1.run.app",
+  [string]$UpstreamModel = "custom/blackbox-base-2",
+  [string]$CustomerId = "placeholder",
   [switch]$SkipRouterBuild = $false,
-  [switch]$SkipResponsesNode = $false
+  [switch]$ForceRefreshManager = $false
 )
 
 $ErrorActionPreference = "Stop"
@@ -67,15 +73,6 @@ function Require-Command {
   }
 }
 
-function Start-AntigravityManager {
-  param(
-    [Parameter(Mandatory = $true)]
-    [string]$BinaryPath
-  )
-
-  Start-Process -FilePath $BinaryPath -ArgumentList "--headless" -WindowStyle Hidden | Out-Null
-}
-
 function Start-NineRouter {
   param(
     [Parameter(Mandatory = $true)]
@@ -88,8 +85,8 @@ function Start-NineRouter {
     [int]$Port
   )
 
-  $stdoutPath = Join-Path $WorkingDirectory "runtime-9router.log"
-  $stderrPath = Join-Path $WorkingDirectory "runtime-9router.err.log"
+  $stdoutPath = Join-Path $env:TEMP "9router-bbx.stdout.log"
+  $stderrPath = Join-Path $env:TEMP "9router-bbx.stderr.log"
   $command = @(
     "set DATA_DIR=$DataDir",
     "set PORT=$Port",
@@ -151,12 +148,14 @@ function Ensure-ProviderNode {
     [Parameter(Mandatory = $true)]
     [ValidateSet("chat", "responses")]
     [string]$ApiType,
+    [Parameter(Mandatory = $true)]
+    [string]$UpstreamBaseUrl,
     [ref]$Created
   )
 
   $nodesResponse = Invoke-RestMethod -Uri "$BaseUrl/api/provider-nodes" -Method Get -TimeoutSec 10
   $existing = @($nodesResponse.nodes) | Where-Object {
-    $_.prefix -eq $Prefix -and $_.apiType -eq $ApiType -and $_.baseUrl -eq "http://127.0.0.1:$AntigravityPort/v1"
+    $_.prefix -eq $Prefix -and $_.apiType -eq $ApiType -and $_.baseUrl -eq $UpstreamBaseUrl
   } | Select-Object -First 1
   if ($existing) {
     $Created.Value = $false
@@ -167,7 +166,7 @@ function Ensure-ProviderNode {
     name = $Name
     prefix = $Prefix
     apiType = $ApiType
-    baseUrl = "http://127.0.0.1:$AntigravityPort/v1"
+    baseUrl = $UpstreamBaseUrl
     type = "openai-compatible"
   } | ConvertTo-Json
 
@@ -220,7 +219,7 @@ function Remove-ConflictingProviderNodes {
     [Parameter(Mandatory = $true)]
     [string]$KeepNodeId,
     [Parameter(Mandatory = $true)]
-    [string[]]$Prefixes,
+    [string]$Prefix,
     [Parameter(Mandatory = $true)]
     [ValidateSet("chat", "responses")]
     [string]$ApiType
@@ -228,7 +227,7 @@ function Remove-ConflictingProviderNodes {
 
   $nodesResponse = Invoke-RestMethod -Uri "$BaseUrl/api/provider-nodes" -Method Get -TimeoutSec 10
   $staleNodes = @($nodesResponse.nodes) | Where-Object {
-    $_.id -ne $KeepNodeId -and $Prefixes -contains $_.prefix -and $_.apiType -eq $ApiType
+    $_.id -ne $KeepNodeId -and $_.prefix -eq $Prefix -and $_.apiType -eq $ApiType
   }
 
   foreach ($staleNode in $staleNodes) {
@@ -245,7 +244,7 @@ function Remove-ConflictingProviderConnections {
     [Parameter(Mandatory = $true)]
     [string]$KeepConnectionId,
     [Parameter(Mandatory = $true)]
-    [string[]]$Prefixes,
+    [string]$Prefix,
     [Parameter(Mandatory = $true)]
     [ValidateSet("chat", "responses")]
     [string]$ApiType
@@ -254,7 +253,7 @@ function Remove-ConflictingProviderConnections {
   $providersResponse = Invoke-RestMethod -Uri "$BaseUrl/api/providers" -Method Get -TimeoutSec 10
   $staleConnections = @($providersResponse.connections) | Where-Object {
     $_.id -ne $KeepConnectionId `
-      -and $Prefixes -contains $_.providerSpecificData.prefix `
+      -and $_.providerSpecificData.prefix -eq $Prefix `
       -and $_.providerSpecificData.apiType -eq $ApiType
   }
 
@@ -269,32 +268,6 @@ Require-Command "npm"
 Require-Command "node"
 
 $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\\.."))
-$documentsRoot = [Environment]::GetFolderPath("MyDocuments")
-$resolvedAntigravityRoot = if ([string]::IsNullOrWhiteSpace($AntigravityManagerRoot)) {
-  Resolve-ExistingPath -Candidates @(
-    (Join-Path $documentsRoot "Antigravity-Manager-main")
-  )
-} else {
-  Resolve-ExistingPath -Candidates @($AntigravityManagerRoot)
-}
-
-if (-not $resolvedAntigravityRoot) {
-  throw "Could not resolve Antigravity-Manager root."
-}
-
-$resolvedAntigravityBinary = if ([string]::IsNullOrWhiteSpace($AntigravityBinary)) {
-  Resolve-ExistingPath -Candidates @(
-    (Join-Path $resolvedAntigravityRoot "src-tauri\\target\\debug\\antigravity_tools.exe"),
-    (Join-Path $resolvedAntigravityRoot "src-tauri\\target\\release\\antigravity_tools.exe")
-  )
-} else {
-  Resolve-ExistingPath -Candidates @($AntigravityBinary)
-}
-
-if (-not $resolvedAntigravityBinary) {
-  throw "Could not resolve antigravity_tools.exe."
-}
-
 $resolvedRouterRoot = if ([string]::IsNullOrWhiteSpace($RouterRoot)) {
   Resolve-ExistingPath -Candidates @(
     (Join-Path $repoRoot "vendor\\9router")
@@ -315,28 +288,40 @@ $resolvedRouterDataDir = if ([string]::IsNullOrWhiteSpace($RouterDataDir)) {
 $resolvedRouterDataDir = [System.IO.Path]::GetFullPath($resolvedRouterDataDir)
 New-Item -ItemType Directory -Force -Path $resolvedRouterDataDir | Out-Null
 
-$managerConfigPath = Join-Path $HOME ".antigravity_tools\\gui_config.json"
-if (-not (Test-Path $managerConfigPath)) {
-  throw "Could not find Antigravity-Manager config at $managerConfigPath"
-}
-$managerConfig = Get-Content $managerConfigPath | ConvertFrom-Json
-$managerApiKey = [string]$managerConfig.proxy.api_key
-if ([string]::IsNullOrWhiteSpace($managerApiKey)) {
-  throw "Antigravity-Manager API key is missing in $managerConfigPath"
+$startManagerScript = Join-Path $PSScriptRoot "start-blackbox-manager.ps1"
+if (-not (Test-Path $startManagerScript)) {
+  throw "Blackbox account manager bootstrap script not found at $startManagerScript"
 }
 
-$antigravityBaseUrl = "http://127.0.0.1:$AntigravityPort"
+$startManagerArgs = @(
+  "-NoProfile",
+  "-ExecutionPolicy", "Bypass",
+  "-File", $startManagerScript,
+  "-ManagerPort", $BlackboxManagerPort,
+  "-ApiKey", $ManagerApiKey,
+  "-Models", $DefaultModel
+)
+
+if (-not [string]::IsNullOrWhiteSpace($StateDbPath)) {
+  $startManagerArgs += @("-StateDbPath", $StateDbPath)
+}
+$startManagerArgs += @(
+  "-UpstreamBaseUrl", $UpstreamBaseUrl,
+  "-UpstreamModel", $UpstreamModel,
+  "-CustomerId", $CustomerId
+)
+
+if ($ForceRefreshManager) {
+  Get-CimInstance Win32_Process |
+    Where-Object {
+      $_.Name -match '^node(\.exe)?$' -and $_.CommandLine -match 'blackbox-account-manager\.mjs'
+    } |
+    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+}
+
+& powershell.exe @startManagerArgs | Out-Null
+
 $routerBaseUrl = "http://$RouterHost`:$RouterPort"
-$managerStarted = $false
-$routerStarted = $false
-
-$managerHealth = Test-HttpJson -Uri "$antigravityBaseUrl/health"
-if ($null -eq $managerHealth) {
-  Start-AntigravityManager -BinaryPath $resolvedAntigravityBinary
-  $managerHealth = Wait-HttpReady -Uri "$antigravityBaseUrl/health"
-  $managerStarted = $true
-}
-
 $routerHealth = Test-HttpJson -Uri "$routerBaseUrl/api/version"
 if ($null -eq $routerHealth) {
   Ensure-NpmInstall -WorkingDirectory $resolvedRouterRoot
@@ -345,117 +330,73 @@ if ($null -eq $routerHealth) {
   }
   Start-NineRouter -WorkingDirectory $resolvedRouterRoot -DataDir $resolvedRouterDataDir -Host $RouterHost -Port $RouterPort
   $routerHealth = Wait-HttpReady -Uri "$routerBaseUrl/api/version" -TimeoutSeconds 90
-  $routerStarted = $true
 }
 
-$proxyStatus = Wait-HttpReady -Uri "$antigravityBaseUrl/api/proxy/status" -Headers @{ Authorization = "Bearer $managerApiKey" }
-$routerModels = Wait-HttpReady -Uri "$routerBaseUrl/v1/models" -Headers @{ Authorization = "Bearer local-9router" }
+$managerBaseUrl = "http://127.0.0.1:$BlackboxManagerPort/v1"
+$managerHealth = Wait-HttpReady -Uri "http://127.0.0.1:$BlackboxManagerPort/health" -TimeoutSeconds 60
 
-$chatNodeCreated = $false
-$chatNode = Ensure-ProviderNode -BaseUrl $routerBaseUrl -Name "Antigravity Manager Local" -Prefix "agm" -ApiType "chat" -Created ([ref]$chatNodeCreated)
-$chatConnectionCreated = $false
-$chatConnection = Ensure-ProviderConnection -BaseUrl $routerBaseUrl -ProviderId $chatNode.id -Name "Antigravity Manager Local" -ApiKey $managerApiKey -DefaultModel "agm/gpt-4o-mini" -Created ([ref]$chatConnectionCreated)
-$removedChatConnections = Remove-ConflictingProviderConnections -BaseUrl $routerBaseUrl -KeepConnectionId $chatConnection.id -Prefixes @("agm") -ApiType "chat"
-$removedChatNodes = Remove-ConflictingProviderNodes -BaseUrl $routerBaseUrl -KeepNodeId $chatNode.id -Prefixes @("agm") -ApiType "chat"
+$nodeCreated = $false
+$node = Ensure-ProviderNode -BaseUrl $routerBaseUrl -Name $NodeName -Prefix $NodePrefix -ApiType "chat" -UpstreamBaseUrl $managerBaseUrl -Created ([ref]$nodeCreated)
+$connectionCreated = $false
+$connection = Ensure-ProviderConnection -BaseUrl $routerBaseUrl -ProviderId $node.id -Name $NodeName -ApiKey $ManagerApiKey -DefaultModel $DefaultModel -Created ([ref]$connectionCreated)
+$removedConnections = Remove-ConflictingProviderConnections -BaseUrl $routerBaseUrl -KeepConnectionId $connection.id -Prefix $NodePrefix -ApiType "chat"
+$removedNodes = Remove-ConflictingProviderNodes -BaseUrl $routerBaseUrl -KeepNodeId $node.id -Prefix $NodePrefix -ApiType "chat"
 
-$responsesNode = $null
-$responsesConnection = $null
-$responsesNodeCreated = $false
-$responsesConnectionCreated = $false
- $removedResponsesConnections = @()
- $removedResponsesNodes = @()
-if (-not $SkipResponsesNode) {
-  $responsesNode = Ensure-ProviderNode -BaseUrl $routerBaseUrl -Name "Antigravity Manager Responses" -Prefix "agr" -ApiType "responses" -Created ([ref]$responsesNodeCreated)
-  $responsesConnection = Ensure-ProviderConnection -BaseUrl $routerBaseUrl -ProviderId $responsesNode.id -Name "Antigravity Manager Responses" -ApiKey $managerApiKey -DefaultModel "agr/gpt-4o-mini" -Created ([ref]$responsesConnectionCreated)
-  $removedResponsesConnections = Remove-ConflictingProviderConnections -BaseUrl $routerBaseUrl -KeepConnectionId $responsesConnection.id -Prefixes @("agr") -ApiType "responses"
-  $removedResponsesNodes = Remove-ConflictingProviderNodes -BaseUrl $routerBaseUrl -KeepNodeId $responsesNode.id -Prefixes @("agr") -ApiType "responses"
-}
-
-$chatProbeBody = @{
-  model = "agm/gpt-4o-mini"
+$managerProbeBody = @{
+  model = "app-agent"
   messages = @(
     @{
       role = "user"
-      content = "Reply with OK only."
+      content = "Reply exactly BBX_MANAGER_OK"
     }
   )
-} | ConvertTo-Json -Depth 8
-$chatProbe = Invoke-RestMethod -Uri "$routerBaseUrl/v1/chat/completions" -Method Post -Headers @{
-  Authorization = "Bearer local-9router"
-  "Content-Type" = "application/json"
-} -Body $chatProbeBody -TimeoutSec 30
+} | ConvertTo-Json -Depth 6
 
-$responsesProbeBody = @{
-  model = "agr/gpt-4o-mini"
-  input = @(
+$managerProbeResponse = Invoke-RestMethod -Uri "$managerBaseUrl/chat/completions" `
+  -Method Post `
+  -Headers @{ Authorization = "Bearer $ManagerApiKey" } `
+  -ContentType "application/json" `
+  -Body $managerProbeBody `
+  -TimeoutSec 120
+
+$managerCompletion = [string]$managerProbeResponse.choices[0].message.content
+if ([string]::IsNullOrWhiteSpace($managerCompletion)) {
+  throw "Blackbox account manager probe returned an empty completion."
+}
+
+$routerProbeBody = @{
+  model = $DefaultModel
+  messages = @(
     @{
       role = "user"
-      content = @(
-        @{
-          type = "input_text"
-          text = "Reply with OK only."
-        }
-      )
+      content = "Reply exactly BBX_9ROUTER_OK"
     }
   )
-} | ConvertTo-Json -Depth 10
-$responsesProbe = if (-not $SkipResponsesNode) {
-  Invoke-RestMethod -Uri "$routerBaseUrl/v1/responses" -Method Post -Headers @{
-    Authorization = "Bearer local-9router"
-    "Content-Type" = "application/json"
-  } -Body $responsesProbeBody -TimeoutSec 30
-} else {
-  $null
+} | ConvertTo-Json -Depth 6
+
+$routerProbeResponse = Invoke-RestMethod -Uri "$routerBaseUrl/v1/chat/completions" `
+  -Method Post `
+  -Headers @{ Authorization = "Bearer local-9router" } `
+  -ContentType "application/json" `
+  -Body $routerProbeBody `
+  -TimeoutSec 120
+
+$routerCompletion = [string]$routerProbeResponse.choices[0].message.content
+if ([string]::IsNullOrWhiteSpace($routerCompletion)) {
+  throw "Blackbox 9router probe returned an empty completion."
 }
 
 [pscustomobject]@{
-  antigravity = [pscustomobject]@{
-    base_url = $antigravityBaseUrl
-    started_now = $managerStarted
-    version = $managerHealth.version
-    active_accounts = $proxyStatus.active_accounts
-    api_key_source = $managerConfigPath
-  }
-  router = [pscustomobject]@{
-    base_url = "$routerBaseUrl/v1"
-    started_now = $routerStarted
-    version = $routerHealth.currentVersion
-    data_dir = $resolvedRouterDataDir
-    model_count = @($routerModels.data).Count
-  }
-  routes = [pscustomobject]@{
-    chat = [pscustomobject]@{
-      prefix = "agm"
-      provider_id = $chatNode.id
-      connection_id = $chatConnection.id
-      created_node = $chatNodeCreated
-      created_connection = $chatConnectionCreated
-      removed_stale_nodes = @($removedChatNodes | ForEach-Object { $_.id })
-      removed_stale_connections = @($removedChatConnections | ForEach-Object { $_.id })
-      probe_text = $chatProbe.choices[0].message.content
-    }
-    responses = if ($SkipResponsesNode) {
-      $null
-    } else {
-      [pscustomobject]@{
-        prefix = "agr"
-        provider_id = $responsesNode.id
-        connection_id = $responsesConnection.id
-        created_node = $responsesNodeCreated
-        created_connection = $responsesConnectionCreated
-        removed_stale_nodes = @($removedResponsesNodes | ForEach-Object { $_.id })
-        removed_stale_connections = @($removedResponsesConnections | ForEach-Object { $_.id })
-        probe_object = $responsesProbe.object
-      }
-    }
-  }
-  recommended_review_workflow = [pscustomobject]@{
-    review_api_url = "$routerBaseUrl/v1"
-    review_api_key = "local-9router"
-    review_model = "agm/gpt-4o-mini"
-  }
-  notes = @(
-    "Use agm/gpt-4o-mini for GitHub review workflow through 9router.",
-    "The agr responses path is useful for experimentation, but Antigravity-backed replies are still completion-shaped, so keep Codex CLI local execution on a native Responses-compatible endpoint for now."
-  )
-} | ConvertTo-Json -Depth 8
+  router_base_url = $routerBaseUrl
+  blackbox_manager_base_url = "http://127.0.0.1:$BlackboxManagerPort"
+  node_prefix = $NodePrefix
+  default_model = $DefaultModel
+  manager_status = $managerHealth.status
+  router_version = $routerHealth.currentVersion
+  node_created = $nodeCreated
+  connection_created = $connectionCreated
+  removed_conflicting_connections = @($removedConnections | ForEach-Object { $_.id })
+  removed_conflicting_nodes = @($removedNodes | ForEach-Object { $_.id })
+  manager_probe_completion = $managerCompletion
+  router_probe_completion = $routerCompletion
+} | ConvertTo-Json -Depth 6

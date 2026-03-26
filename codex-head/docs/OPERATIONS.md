@@ -39,6 +39,12 @@ What each command does:
   `9router -> Antigravity-Manager`, confirms whether the `agm` chat route is
   active, and records that the experimental `agr` responses route should not be
   treated as a native Responses endpoint for `codex-cli`
+- when present, that same `local_stack` snapshot also reports optional local
+  provider paths such as `pplxapp/*` for Perplexity and `bbxapp/*` for
+  BLACKBOXAI
+- it also exposes both the Antigravity-only helper command and the full-stack
+  helper command, so operator tooling can bootstrap the review path or the
+  entire local provider stack without guessing script names
 
 ## First Successful Run
 
@@ -84,6 +90,7 @@ node dist/src/index.js reconcile-github-running [timeout-sec] [interval-sec] [--
 node dist/src/index.js recover-running [timeout-sec] [interval-sec] [--requeue-local] [--brief]
 node dist/src/index.js status [task-id] [--brief]
 node dist/src/index.js doctor [--brief] [--all-tasks] [--task-window-hours N]
+node dist/src/index.js review-workflow-status [--brief]
 node dist/src/index.js operator-history [--brief] [--limit N] [--command NAME] [--apply-only] [--dry-run-only]
 node dist/src/index.js show-operator-receipt <receipt-path> [--brief]
 node dist/src/index.js show-operator-receipt --latest [--command NAME] [--apply-only|--dry-run-only] [--brief]
@@ -128,20 +135,23 @@ node dist/src/index.js complete-from-file <worker-result.json>
     `awaiting_review`.
 14. Run `doctor` when you want one read-only triage surface that combines
     worker health, self-hosted GitHub runtime, and task/operator guidance.
-15. Run `sweep-tasks` when you want to bulk-cancel stale backlog or requeue a
+15. Run `review-workflow-status` when you want the focused local-vs-remote
+    view of the GitHub review workflow shape and whether live `review_profile`
+    routing is currently degraded.
+16. Run `sweep-tasks` when you want to bulk-cancel stale backlog or requeue a
     filtered set of planned/failed tasks without touching task history.
-16. Run `run-doctor-hint` when you want to execute one of `doctor`'s
+17. Run `run-doctor-hint` when you want to execute one of `doctor`'s
     structured dry-run sweep suggestions without copying the command by hand.
-17. Run `run-doctor-hints` when you want to batch the currently visible doctor
+18. Run `run-doctor-hints` when you want to batch the currently visible doctor
     hints by `kind` or `limit` while staying in dry-run mode by default.
-18. Run `operator-history` when you want a read-only audit trail of recent
+19. Run `operator-history` when you want a read-only audit trail of recent
     sweep and doctor-hint actions under `runtime/artifacts/operator-actions/`.
-19. Run `show-operator-receipt` when you want to inspect one specific receipt
+20. Run `show-operator-receipt` when you want to inspect one specific receipt
     from that history in more detail, either by explicit path or by resolving
     the newest matching receipt for a task/filter.
-20. Run `clear-penalties` when a local provider recovered and you want to stop
+21. Run `clear-penalties` when a local provider recovered and you want to stop
     honoring remembered cooldowns immediately.
-21. Run `complete-from-file` to ingest an external callback artifact such as
+22. Run `complete-from-file` to ingest an external callback artifact such as
     `github-callback.json`.
 
 `status [task-id]` now returns an enriched JSON snapshot. For GitHub queue
@@ -166,6 +176,14 @@ inspection. The JSON form keeps the full `health` payload and categorized
 attention lists for workers, GitHub/runtime, integrations, and tasks. `doctor --brief`
 renders the same report as a short checklist when you only need the operator
 summary and next actions.
+
+`review-workflow-status --brief` is the focused companion for one specific
+GitHub drift case: it compares the local
+`.github/workflows/codex-head-gemini-review.yml` file with the remote workflow
+visible through `gh workflow view ... --yaml`, tells you whether each side
+supports `review_profile`, shows the current branch plus how that workflow file
+relates to `origin/main`, and prints the exact inspect/sync guidance plus any
+safe git commands for that workflow.
 
 By default, `doctor` highlights active tasks plus recent failures and suppresses
 older failed backlog into summary counts so the operator view stays current.
@@ -354,6 +372,8 @@ That helper:
 - starts `9router` on `127.0.0.1:20128` when needed
 - ensures `agm/*` chat routing to Antigravity-Manager inside `9router`
 - ensures an experimental `agr/*` responses route for translator testing
+- removes stale duplicate 9router nodes and connections for the managed `agm/*`
+  and `agr/*` prefixes
 - prints the recommended GitHub review secrets for the self-hosted runner
 
 For GitHub review on the same Windows host, the recommended route is now:
@@ -362,8 +382,116 @@ For GitHub review on the same Windows host, the recommended route is now:
 - `REVIEW_API_KEY=local-9router`
 - `REVIEW_MODEL=agm/gpt-4o-mini`
 
+Planner-driven review now also carries a `review_profile` so the local provider
+stack is used by strength instead of forcing one model for every review:
+
+- `standard` -> `agm/gpt-4o-mini` by default for balanced repository review
+  and triage through Antigravity
+- `research` -> `pplxapp/app-chat` by default for citation-heavy review,
+  current docs, releases, and dependency context through Perplexity
+- `code_assist` -> `bbxapp/app-agent` by default for snippet-oriented feedback,
+  API usage ideas, and implementation help through BLACKBOXAI
+
+If you need different aliases, set these GitHub Secrets on the control repo:
+
+- `REVIEW_MODEL_STANDARD`
+- `REVIEW_MODEL_RESEARCH`
+- `REVIEW_MODEL_CODE_ASSIST`
+
+A single generic `REVIEW_MODEL` is still supported, but it now behaves as a
+fallback so the profile-specific routing above can keep using the right local
+provider by default.
+
+Operationally, the current stack is intended to be used like this:
+
+- `codex-cli` for primary local repo execution, patches, and stable artifacts
+- `gemini-cli` for GitHub review orchestration and lightweight review fallback
+- `agm/*` for balanced review and general-purpose remote triage
+- `pplxapp/*` for release notes, docs, citations, dependency context, and other
+  current-information review
+- `bbxapp/*` for snippet-heavy review, API usage ideas, and code-assist style
+  feedback
+
+`doctor` also validates the remote review workflow shape. If the GitHub default
+branch is still serving an older `codex-head-gemini-review.yml` without the
+`review_profile` input, `doctor` raises a GitHub warning and live dispatch
+automatically retries without that input, which keeps review dispatch working
+but falls back to legacy standard routing until the workflow is synced.
+
 That stack has been verified end-to-end through
 `codex-head-gemini-review.yml` on the self-hosted runner.
+
+If you also want to add the Perplexity desktop app to the same `9router`, use:
+
+```powershell
+pwsh -File .\codex-head\scripts\ensure-9router-perplexity-stack.ps1
+```
+
+That helper:
+
+- starts Perplexity with `--remote-debugging-port=9233` when needed
+- starts the local Perplexity runtime manager on `127.0.0.1:20129`
+- ensures `pplxapp/*` chat routing to the runtime manager inside `9router`
+- removes stale duplicate 9router nodes and connections for the managed
+  `pplxapp/*` route
+- normalizes trailing citation markers in live probe completions and waits for
+  the runtime manager plus CDP target to settle after restart
+- verifies the route with a live `chat/completions` probe that uses
+  `app-health`, not the main `app-chat` session
+
+The runtime-manager path is intentionally conservative:
+
+- it exposes `GET /health`, `GET /v1/models`, `GET /sessions`,
+  `POST /session/reset`, and `POST /v1/chat/completions`
+- it does not support streaming
+- it serializes requests because it executes authenticated runtime `SSE ask`
+  calls inside the Perplexity app session
+- it persists session state in
+  `codex-head/runtime/perplexity-manager-sessions.json`
+- it reuses one stable Perplexity thread per session key instead of spawning a
+  fresh thread for every request
+- `app-chat` is the main reusable session and `app-health` is reserved for
+  isolated health/bootstrap probes
+- old Perplexity History rows created before this change remain in the app,
+  but new manager traffic should now stay within one reusable `chat` thread
+  plus one reusable `health` thread
+- it no longer types, clicks, or waits on rendered answer blocks in the UI
+
+If you also want to add a no-UI BLACKBOXAI account-manager path to the same
+`9router`, use:
+
+```powershell
+pwsh -File .\codex-head\scripts\ensure-9router-blackbox-stack.ps1
+```
+
+That helper:
+
+- starts the local BLACKBOXAI account manager on `127.0.0.1:8083`
+- reads the local BLACKBOXAI identity from `state.vscdb`
+- ensures `bbxapp/*` chat routing to that account manager inside `9router`
+- removes stale duplicate 9router nodes and connections for the managed
+  `bbxapp/*` route
+- verifies the route with a live `chat/completions` probe
+
+The BLACKBOXAI account-manager path is intentionally conservative:
+
+- it exposes `GET /health`, `GET /v1/models`, and `POST /v1/chat/completions`
+- it does not support streaming
+- it keeps the local identity discovery on the operator machine
+- it proxies directly to the BLACKBOX backend instead of driving the desktop UI
+
+If you want to warm the entire local stack in one operator command, use:
+
+```powershell
+pwsh -File .\codex-head\scripts\ensure-9router-full-stack.ps1
+```
+
+That helper:
+
+- runs the Antigravity, Perplexity, and BLACKBOX bootstrap helpers in order
+- keeps `9router` warm while those routes are seeded
+- returns a compact JSON summary for `agm`, `pplxapp`, and `bbxapp`
+- inherits the duplicate-route cleanup behavior from the managed helpers
 
 For WSL-backed `codex-cli`, `127.0.0.1` may still resolve inside Linux instead
 of the Windows host. In that case, use the Windows-side WSL vEthernet address

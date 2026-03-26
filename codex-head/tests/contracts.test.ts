@@ -12,6 +12,7 @@ test("createTaskSpec applies defaults", () => {
   assert.equal(task.worker_target, "codex-cli");
   assert.equal(task.base_branch, "main");
   assert.equal(task.expected_output.kind, "analysis");
+  assert.equal(task.review_profile, null);
   assert.equal(task.review_policy.required_reviewers.length, 0);
   assert.match(task.work_branch, /^codex\//);
 });
@@ -22,6 +23,16 @@ test("validateTaskSpec rejects invalid worker_target", () => {
     repo: "/tmp/repo"
   }) as unknown as Record<string, unknown>;
   task.worker_target = "bad-target";
+
+  assert.throws(() => validateTaskSpec(task), TaskValidationError);
+});
+
+test("validateTaskSpec rejects invalid review_profile", () => {
+  const task = createTaskSpec({
+    goal: "Review the patch",
+    repo: "/tmp/repo"
+  }) as unknown as Record<string, unknown>;
+  task.review_profile = "bad-profile";
 
   assert.throws(() => validateTaskSpec(task), TaskValidationError);
 });

@@ -9,6 +9,25 @@ import type {
 } from "./orchestrator";
 import type { TaskOperatorStatus, TaskStatusSnapshot } from "./status";
 
+export interface ReviewWorkflowStatusBrief {
+  repository: string;
+  workflow: string | null;
+  local_workflow_path: string | null;
+  git_branch: string | null;
+  git_tracking_status: string | null;
+  local_git_file_status: string | null;
+  local_vs_origin_status: string | null;
+  local_supports_review_profile: boolean | null;
+  local_declared_inputs: string[];
+  remote_supports_review_profile: boolean | null;
+  remote_declared_inputs: string[];
+  missing_on_remote: string[];
+  remote_check_detail: string | null;
+  inspect_command: string | null;
+  sync_action: string | null;
+  sync_commands: string[];
+}
+
 type ReconcileOrRecoveryEntry = {
   task_id: string;
   status: string;
@@ -58,6 +77,10 @@ function buildDoctorCommand(): string {
   return `${CLI_BRIEF_PREFIX} doctor --brief`;
 }
 
+function buildInspectWorkflowCommand(workflow: string): string {
+  return `${CLI_BRIEF_PREFIX} review-workflow-status --brief`;
+}
+
 function renderLocalStackSummary(report: DoctorReport): string | null {
   const stack = report.health.local_stack;
   if (!stack.detected) {
@@ -70,6 +93,20 @@ function renderLocalStackSummary(report: DoctorReport): string | null {
     `agm-chat=${stack.router9.agm_chat.present && stack.router9.agm_chat.active_connection === true ? "ready" : "missing"}`,
     `antigravity=${stack.antigravity.reachable ? "up" : "down"}`
   ];
+
+  if (stack.perplexity) {
+    parts.push(`pplx-manager=${stack.perplexity.manager_reachable ? "up" : "down"}`);
+    parts.push(
+      `pplxapp-chat=${stack.perplexity.pplxapp_chat.present && stack.perplexity.pplxapp_chat.active_connection === true ? "ready" : "missing"}`
+    );
+  }
+
+  if (stack.blackbox) {
+    parts.push(`bbx-manager=${stack.blackbox.manager_reachable ? "up" : "down"}`);
+    parts.push(
+      `bbxapp-chat=${stack.blackbox.bbxapp_chat.present && stack.blackbox.bbxapp_chat.active_connection === true ? "ready" : "missing"}`
+    );
+  }
 
   if (typeof stack.antigravity.active_accounts === "number") {
     parts.push(`accounts=${stack.antigravity.active_accounts}`);
@@ -88,6 +125,7 @@ function extractReceiptTaskIds(selection: Record<string, unknown>): string[] {
 
 function shouldRenderDoctorArtifactFiles(finding: DoctorReport["attention"]["tasks"][number]): boolean {
   return finding.severity === "error"
+    || finding.review_dispatch_degraded
     || finding.manual_intervention_required
     || finding.state === "failed"
     || finding.has_operator_actions;
@@ -109,10 +147,12 @@ function isRoutineDoctorTaskFinding(finding: DoctorReport["attention"]["tasks"][
 }
 
 function renderDoctorTaskLine(finding: DoctorReport["attention"]["tasks"][number]): string {
+  const profileSuffix = finding.review_profile ? ` :: profile=${finding.review_profile}` : "";
+  const dispatchSuffix = finding.review_dispatch_degraded ? " :: dispatch=legacy-standard" : "";
   const receiptSuffix = finding.operator_receipt_path
     ? ` :: receipt=${finding.operator_receipt_path}${finding.operator_receipt_command ? ` [${finding.operator_receipt_command}]` : ""}`
     : "";
-  return `- ${finding.task_id} [${finding.state}/${finding.severity}] ${compactText(finding.goal, 90)} :: ${compactText(finding.summary, 180)}${receiptSuffix}`;
+  return `- ${finding.task_id} [${finding.state}/${finding.severity}] ${compactText(finding.goal, 90)}${profileSuffix}${dispatchSuffix} :: ${compactText(finding.summary, 180)}${receiptSuffix}`;
 }
 
 function filterDoctorNextActions(report: DoctorReport): string[] {
@@ -193,6 +233,7 @@ function summarizeDoctorTaskLines(findings: DoctorReport["attention"]["tasks"]):
 function renderArtifactRefLines(refs: {
   worker_result: { path: string; freshness: string } | null;
   execution_attempts: { path: string; freshness: string } | null;
+  dispatch_receipt: { path: string; freshness: string } | null;
   primary_output: { path: string; freshness: string } | null;
   primary_log: { path: string; freshness: string } | null;
 }): string[] {
@@ -210,6 +251,9 @@ function renderArtifactRefLines(refs: {
   }
   if (refs.execution_attempts) {
     lines.push(`${formatLabel("attempts", refs.execution_attempts.freshness)}: ${refs.execution_attempts.path}`);
+  }
+  if (refs.dispatch_receipt) {
+    lines.push(`${formatLabel("dispatch-receipt", refs.dispatch_receipt.freshness)}: ${refs.dispatch_receipt.path}`);
   }
   if (refs.primary_output) {
     lines.push(`${formatLabel("output", refs.primary_output.freshness)}: ${refs.primary_output.path}`);
@@ -251,7 +295,7 @@ function renderOperatorLines(operator: TaskOperatorStatus | null): string[] {
 function renderStatusBlock(snapshot: TaskStatusSnapshot): string {
   const lines = [
     `task ${snapshot.task.task_id} [${snapshot.state}] ${snapshot.task.goal}`,
-    `worker: ${snapshot.task.worker_target}${snapshot.routing ? ` via ${snapshot.routing.mode}` : ""}`,
+    `worker: ${snapshot.task.worker_target}${snapshot.routing ? ` via ${snapshot.routing.mode}` : ""}${snapshot.task.review_profile ? ` :: profile=${snapshot.task.review_profile}` : ""}`,
     `artifacts: ${snapshot.artifact_dir_path}`
   ];
 
@@ -261,6 +305,12 @@ function renderStatusBlock(snapshot: TaskStatusSnapshot): string {
     if (snapshot.github_run.run_url) {
       lines.push(`github-url: ${snapshot.github_run.run_url}`);
     }
+  }
+
+  if (snapshot.review_dispatch?.degraded) {
+    lines.push(
+      `dispatch: requested profile=${snapshot.review_dispatch.requested_profile ?? "unknown"} -> legacy standard routing`
+    );
   }
 
   return [
@@ -315,9 +365,14 @@ export function renderDoctorBrief(report: DoctorReport): string {
   const visibleTaskFindings = report.attention.tasks.slice(0, 8);
   const taskSummary = summarizeDoctorTaskLines(visibleTaskFindings);
   const nextActions = filterDoctorNextActions(report);
+  const reviewWorkflowDriftPresent = report.health.github.review_workflow_supports_review_profile === false
+    && typeof report.health.github.review_workflow === "string"
+    && report.health.github.review_workflow.trim().length > 0;
   const nextCommand = report.ok
     ? null
-    : report.command_hints[0]?.command
+    : reviewWorkflowDriftPresent
+      ? buildInspectWorkflowCommand(report.health.github.review_workflow!)
+      : report.command_hints[0]?.command
       ?? (() => {
         const receiptPath = visibleTaskFindings.find((finding) => finding.operator_receipt_path)?.operator_receipt_path ?? null;
         return receiptPath ? buildShowOperatorReceiptCommand(receiptPath) : null;
@@ -344,7 +399,7 @@ export function renderDoctorBrief(report: DoctorReport): string {
   pushLimitedSection(
     lines,
     "github:",
-    report.attention.github.map((finding) => `- [${finding.severity}] ${compactText(finding.summary, 180)}`),
+    report.attention.github.map((finding) => `- [${finding.severity}] ${compactText(finding.summary, 280)}`),
     5
   );
   pushLimitedSection(
@@ -397,6 +452,9 @@ export function renderDoctorBrief(report: DoctorReport): string {
           finding.artifact_refs.execution_attempts
             ? `attempts${finding.artifact_refs.execution_attempts.freshness === "current" ? "" : `(${finding.artifact_refs.execution_attempts.freshness.replace(/_/g, "-")})`}=${finding.artifact_refs.execution_attempts.path}`
             : null,
+          finding.artifact_refs.dispatch_receipt
+            ? `dispatch-receipt${finding.artifact_refs.dispatch_receipt.freshness === "current" ? "" : `(${finding.artifact_refs.dispatch_receipt.freshness.replace(/_/g, "-")})`}=${finding.artifact_refs.dispatch_receipt.path}`
+            : null,
           finding.artifact_refs.primary_output
             ? `output${finding.artifact_refs.primary_output.freshness === "current" ? "" : `(${finding.artifact_refs.primary_output.freshness.replace(/_/g, "-")})`}=${finding.artifact_refs.primary_output.path}`
             : null,
@@ -435,6 +493,63 @@ export function renderDoctorBrief(report: DoctorReport): string {
       6
     );
   }
+
+  return lines.join("\n");
+}
+
+export function renderReviewWorkflowStatusBrief(status: ReviewWorkflowStatusBrief): string {
+  const lines = [
+    `review-workflow: ${status.workflow ?? "not configured"}`,
+    `repository: ${status.repository}`
+  ];
+
+  if (status.local_workflow_path) {
+    lines.push(
+      `local: ${status.local_supports_review_profile ? "supports review_profile" : "missing review_profile"} :: ${status.local_workflow_path}`
+    );
+  } else {
+    lines.push("local: workflow file not found");
+  }
+  if (status.git_branch) {
+    lines.push(`git-branch: ${status.git_branch}`);
+  }
+  if (status.git_tracking_status) {
+    lines.push(`git-tracking: ${status.git_tracking_status}`);
+  }
+  if (status.local_git_file_status) {
+    lines.push(`git-file-status: ${status.local_git_file_status}`);
+  }
+  if (status.local_vs_origin_status) {
+    lines.push(`git-origin-status: ${status.local_vs_origin_status}`);
+  }
+  if (status.local_declared_inputs.length > 0) {
+    lines.push(`local-inputs: ${compactText(status.local_declared_inputs.join(", "), 240)}`);
+  }
+
+  if (status.remote_supports_review_profile === true) {
+    lines.push("remote: supports review_profile");
+  } else if (status.remote_supports_review_profile === false) {
+    lines.push("remote: legacy workflow without review_profile");
+  } else {
+    lines.push("remote: support for review_profile is unknown");
+  }
+  if (status.remote_declared_inputs.length > 0) {
+    lines.push(`remote-inputs: ${compactText(status.remote_declared_inputs.join(", "), 240)}`);
+  }
+  if (status.missing_on_remote.length > 0) {
+    lines.push(`missing-on-remote: ${status.missing_on_remote.join(", ")}`);
+  }
+
+  if (status.remote_check_detail) {
+    lines.push(`detail: ${compactText(status.remote_check_detail)}`);
+  }
+  if (status.inspect_command) {
+    lines.push(`inspect-command: ${status.inspect_command}`);
+  }
+  if (status.sync_action) {
+    lines.push(`next: ${compactText(status.sync_action)}`);
+  }
+  pushLimitedSection(lines, "sync-commands:", status.sync_commands.map((command) => `- ${command}`), 6);
 
   return lines.join("\n");
 }

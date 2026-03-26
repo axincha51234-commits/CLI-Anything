@@ -24,6 +24,10 @@ on:
         description: "primary worker target"
         required: true
         type: string
+      review_profile:
+        description: "review provider profile"
+        required: true
+        type: string
       review_policy:
         description: "review policy"
         required: true
@@ -174,6 +178,9 @@ jobs:
           REVIEW_API_URL: ${{ secrets.REVIEW_API_URL }}
           REVIEW_API_KEY: ${{ secrets.REVIEW_API_KEY }}
           REVIEW_MODEL: ${{ secrets.REVIEW_MODEL }}
+          REVIEW_MODEL_STANDARD: ${{ secrets.REVIEW_MODEL_STANDARD }}
+          REVIEW_MODEL_RESEARCH: ${{ secrets.REVIEW_MODEL_RESEARCH }}
+          REVIEW_MODEL_CODE_ASSIST: ${{ secrets.REVIEW_MODEL_CODE_ASSIST }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
           OPENAI_REVIEW_MODEL: ${{ secrets.OPENAI_REVIEW_MODEL }}
@@ -181,6 +188,7 @@ jobs:
           BASE_BRANCH: ${{ github.event.inputs.base_branch }}
           WORK_BRANCH: ${{ github.event.inputs.work_branch }}
           EXECUTION_TARGET: ${{ github.event.inputs.execution_target }}
+          REVIEW_PROFILE: ${{ github.event.inputs.review_profile }}
           PRIOR_RESULT_STATUS: ${{ github.event.inputs.prior_result_status }}
           REVIEW_POLICY: ${{ github.event.inputs.review_policy }}
           EXPECTED_OUTPUT: ${{ github.event.inputs.expected_output }}
@@ -191,7 +199,21 @@ jobs:
 
           const baseUrl = String(process.env.REVIEW_API_URL || process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").trim().replace(/\/$/, "");
           const apiKey = String(process.env.REVIEW_API_KEY || process.env.OPENAI_API_KEY || "").trim();
-          const model = String(process.env.REVIEW_MODEL || process.env.OPENAI_REVIEW_MODEL || "gpt-4.1-mini").trim();
+          const reviewProfile = String(process.env.REVIEW_PROFILE || "standard").trim();
+          const profileModelEnv = {
+            standard: String(process.env.REVIEW_MODEL_STANDARD || "").trim(),
+            research: String(process.env.REVIEW_MODEL_RESEARCH || "").trim(),
+            code_assist: String(process.env.REVIEW_MODEL_CODE_ASSIST || "").trim()
+          };
+          const localProfileDefaults = {
+            standard: "agm/gpt-4o-mini",
+            research: "pplxapp/app-chat",
+            code_assist: "bbxapp/app-agent"
+          };
+          const genericOverrideModel = String(process.env.REVIEW_MODEL || process.env.OPENAI_REVIEW_MODEL || "").trim();
+          const profileDefaultModel = profileModelEnv[reviewProfile]
+            || (process.env.REVIEW_API_URL ? localProfileDefaults[reviewProfile] : "");
+          const model = String(profileDefaultModel || genericOverrideModel || "gpt-4.1-mini").trim();
           const diffPath = path.join("runtime", "review.diff");
           const outputPath = path.join("runtime", "review-model-output.txt");
           const diff = fs.existsSync(diffPath) ? fs.readFileSync(diffPath, "utf8") : "";
@@ -320,7 +342,8 @@ jobs:
               fs.writeFileSync(path.join("runtime", "review-provider.json"), JSON.stringify({
                 provider: "openai-compatible",
                 protocol: attempt.name,
-                model
+                model,
+                review_profile: reviewProfile
               }, null, 2), "utf8");
               fs.writeFileSync(outputPath, normalizedContent, "utf8");
               return;
@@ -378,6 +401,7 @@ jobs:
           BASE_BRANCH: ${{ github.event.inputs.base_branch }}
           WORK_BRANCH: ${{ github.event.inputs.work_branch }}
           EXECUTION_TARGET: ${{ github.event.inputs.execution_target }}
+          REVIEW_PROFILE: ${{ github.event.inputs.review_profile }}
           PRIOR_RESULT_STATUS: ${{ github.event.inputs.prior_result_status }}
           EXPECTED_OUTPUT: ${{ github.event.inputs.expected_output }}
           WORK_BRANCH_AVAILABLE: ${{ steps.build_review_diff.outputs.work_branch_available }}
@@ -445,6 +469,7 @@ jobs:
             `Credential source was ${process.env.REVIEW_CREDENTIAL_SOURCE}.`,
             `Review transport was ${providerMeta?.protocol || "unknown"}.`,
             `Review model was ${providerMeta?.model || "unknown"}.`,
+            `Review profile was ${process.env.REVIEW_PROFILE || providerMeta?.review_profile || "standard"}.`,
             `Target repository was ${process.env.TARGET_REPOSITORY}.`,
             `Base branch was ${process.env.BASE_BRANCH}.`,
             `Work branch was ${process.env.WORK_BRANCH}.`,

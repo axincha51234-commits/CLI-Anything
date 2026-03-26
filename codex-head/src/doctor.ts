@@ -1,4 +1,5 @@
-import type { AdapterHealth, AdapterRuntimeReadiness, TaskState, WorkerTarget } from "./contracts";
+import { dirname, join } from "node:path";
+import type { AdapterHealth, AdapterRuntimeReadiness, ReviewProviderProfile, TaskState, WorkerTarget } from "./contracts";
 import type { GitHubRuntimeStatus } from "./github/controlPlane";
 import type { LocalReviewStackSnapshot } from "./localStack";
 import type { TaskArtifactRefs, TaskStatusSnapshot } from "./status";
@@ -54,6 +55,8 @@ export interface DoctorTaskFinding {
   state: TaskState;
   goal: string;
   worker_target: WorkerTarget;
+  review_profile?: ReviewProviderProfile | null;
+  review_dispatch_degraded: boolean;
   routing_mode: "local" | "github" | null;
   artifact_dir_path: string;
   artifact_refs: TaskArtifactRefs;
@@ -309,6 +312,23 @@ function buildGitHubFindings(runtime: GitHubRuntimeStatus): DoctorGitHubFinding[
     }
   }
 
+  if (runtime.review_workflow && runtime.review_workflow_supports_review_profile === false) {
+    const syncAction = runtime.review_workflow_sync_action
+      ?? `Push or sync .github/workflows/${runtime.review_workflow} to the GitHub default branch so review_profile is accepted during workflow_dispatch and research/code-assist routing works live.`;
+    const syncCommands = runtime.review_workflow_sync_commands ?? [];
+    const localDriftDetail = runtime.review_workflow_local_vs_origin_status
+      ? ` Local workflow status: ${runtime.review_workflow_local_vs_origin_status}.`
+      : "";
+    findings.push({
+      severity: "warning",
+      summary: `Remote review workflow ${runtime.review_workflow} is missing the review_profile workflow_dispatch input, so live review dispatch will fall back to legacy standard routing.${localDriftDetail}`,
+      actions: dedupe([
+        syncAction,
+        ...syncCommands
+      ])
+    });
+  }
+
   if (runtime.auto_recycle_stale_runner && !runtime.recycle_script_available) {
     findings.push({
       severity: "warning",
@@ -328,9 +348,16 @@ function buildIntegrationFindings(health: DoctorHealthSnapshot): DoctorIntegrati
   }
 
   const stack = health.local_stack;
+  const helperDirectory = stack.helper_script_available ? dirname(stack.helper_script_path) : null;
   const bootstrapAction = stack.helper_bootstrap_command
     ? `Run ${stack.helper_bootstrap_command} to start or repair the local review stack.`
     : "Start the local 9router and Antigravity-Manager services on this machine.";
+  const perplexityBootstrapCommand = helperDirectory
+    ? `powershell -ExecutionPolicy Bypass -File "${join(helperDirectory, "ensure-9router-perplexity-stack.ps1")}"`
+    : null;
+  const blackboxBootstrapCommand = helperDirectory
+    ? `powershell -ExecutionPolicy Bypass -File "${join(helperDirectory, "ensure-9router-blackbox-stack.ps1")}"`
+    : null;
   const findings: DoctorIntegrationFinding[] = [];
 
   if (!stack.antigravity.reachable && !stack.router9.reachable) {
@@ -391,12 +418,83 @@ function buildIntegrationFindings(health: DoctorHealthSnapshot): DoctorIntegrati
     });
   }
 
+  if (stack.perplexity) {
+    if (!stack.perplexity.manager_reachable) {
+      findings.push({
+        integration: "local_review_stack",
+        severity: "info",
+        summary: `Perplexity runtime manager is not reachable at ${stack.perplexity.manager_base_url}.`,
+        actions: perplexityBootstrapCommand
+          ? [`Run ${perplexityBootstrapCommand} to start or repair the Perplexity runtime manager and seed the pplxapp route.`]
+          : ["Start the Perplexity runtime manager and seed the pplxapp route if you want that optional provider path available."]
+      });
+    } else if (!stack.perplexity.cdp_reachable) {
+      findings.push({
+        integration: "local_review_stack",
+        severity: "info",
+        summary: `Perplexity runtime manager responded, but CDP is not reachable at ${stack.perplexity.cdp_base_url}.`,
+        actions: perplexityBootstrapCommand
+          ? [`Run ${perplexityBootstrapCommand} to relaunch Perplexity with remote debugging enabled and repair the pplxapp route.`]
+          : ["Restart Perplexity with remote debugging enabled if you want the optional pplxapp route available."]
+      });
+    } else if (!stack.perplexity.pplxapp_chat.present || stack.perplexity.pplxapp_chat.active_connection !== true) {
+      findings.push({
+        integration: "local_review_stack",
+        severity: "info",
+        summary: "Perplexity runtime manager is up, but the pplxapp chat route is not active in 9router.",
+        actions: perplexityBootstrapCommand
+          ? [
+              `Run ${perplexityBootstrapCommand} to seed or reactivate the pplxapp route.`,
+              `Inspect ${stack.router9.base_url}/api/provider-nodes and ${stack.router9.base_url}/api/providers to confirm the pplxapp route is active.`
+            ]
+          : [`Inspect ${stack.router9.base_url}/api/provider-nodes and ${stack.router9.base_url}/api/providers to confirm the pplxapp route is active.`]
+      });
+    }
+  }
+
+  if (stack.blackbox) {
+    if (!stack.blackbox.manager_reachable) {
+      findings.push({
+        integration: "local_review_stack",
+        severity: "info",
+        summary: `BLACKBOXAI account manager is not reachable at ${stack.blackbox.manager_base_url}.`,
+        actions: blackboxBootstrapCommand
+          ? [`Run ${blackboxBootstrapCommand} to start or repair the BLACKBOXAI account manager and seed the bbxapp route.`]
+          : ["Start the BLACKBOXAI account manager and seed the bbxapp route if you want that optional provider path available."]
+      });
+    } else if (stack.blackbox.identity_loaded === false || stack.blackbox.user_id_present === false) {
+      findings.push({
+        integration: "local_review_stack",
+        severity: "info",
+        summary: "BLACKBOXAI account manager responded, but local identity is not fully loaded from state.vscdb.",
+        actions: blackboxBootstrapCommand
+          ? [`Run ${blackboxBootstrapCommand} to refresh the BLACKBOXAI account manager identity and route wiring.`]
+          : ["Refresh the BLACKBOXAI account manager identity from state.vscdb if you want the optional bbxapp route available."]
+      });
+    } else if (!stack.blackbox.bbxapp_chat.present || stack.blackbox.bbxapp_chat.active_connection !== true) {
+      findings.push({
+        integration: "local_review_stack",
+        severity: "info",
+        summary: "BLACKBOXAI account manager is up, but the bbxapp chat route is not active in 9router.",
+        actions: blackboxBootstrapCommand
+          ? [
+              `Run ${blackboxBootstrapCommand} to seed or reactivate the bbxapp route.`,
+              `Inspect ${stack.router9.base_url}/api/provider-nodes and ${stack.router9.base_url}/api/providers to confirm the bbxapp route is active.`
+            ]
+          : [`Inspect ${stack.router9.base_url}/api/provider-nodes and ${stack.router9.base_url}/api/providers to confirm the bbxapp route is active.`]
+      });
+    }
+  }
+
   return findings.sort((left, right) => severityRank(left.severity) - severityRank(right.severity));
 }
 
 function deriveTaskSummary(task: TaskStatusSnapshot): string {
   if (task.operator.summary) {
     return task.operator.summary;
+  }
+  if (task.review_dispatch?.degraded) {
+    return "Review dispatch used legacy standard routing because the remote workflow did not accept review_profile.";
   }
   if (task.state === "failed") {
     return task.last_error ?? task.result?.summary ?? "Task failed and needs attention.";
@@ -419,6 +517,10 @@ function deriveTaskSummary(task: TaskStatusSnapshot): string {
 
 function deriveTaskActions(task: TaskStatusSnapshot): string[] {
   const actions = new Set(task.operator.actions);
+
+  if (task.review_dispatch?.degraded) {
+    actions.add("Sync the remote review workflow on the default branch if this task should use research/code-assist routing live.");
+  }
 
   if (actions.size > 0) {
     return [...actions];
@@ -481,6 +583,7 @@ function summarizeTaskFinding(
   const activeState = task.state === "running" || task.state === "queued" || task.state === "awaiting_review";
   const needsAttention = task.operator.manual_intervention_required
     || task.operator.actions.length > 0
+    || (task.review_dispatch?.degraded ?? false)
     || task.state === "failed"
     || activeState;
 
@@ -491,7 +594,12 @@ function summarizeTaskFinding(
   let severity: DoctorFindingSeverity = "info";
   if (task.operator.manual_intervention_required || task.state === "failed") {
     severity = "error";
-  } else if (task.operator.actions.length > 0 || task.state === "queued" || task.state === "awaiting_review") {
+  } else if (
+    task.operator.actions.length > 0
+    || (task.review_dispatch?.degraded ?? false)
+    || task.state === "queued"
+    || task.state === "awaiting_review"
+  ) {
     severity = "warning";
   }
 
@@ -500,6 +608,8 @@ function summarizeTaskFinding(
     state: task.state,
     goal: task.task.goal,
     worker_target: task.task.worker_target,
+    review_profile: task.task.review_profile ?? null,
+    review_dispatch_degraded: task.review_dispatch?.degraded ?? false,
     routing_mode: task.routing?.mode ?? null,
     artifact_dir_path: task.artifact_dir_path,
     artifact_refs: task.artifact_refs,

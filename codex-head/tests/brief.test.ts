@@ -6,6 +6,7 @@ import {
   renderOperatorReceiptBrief,
   renderOperatorHistoryBrief,
   renderOutcomeBrief,
+  renderReviewWorkflowStatusBrief,
   renderRunDoctorHintsBrief,
   renderStatusBrief,
   renderSweepBrief
@@ -21,6 +22,9 @@ function createBriefLocalStack(overrides: Partial<DoctorReport["health"]["local_
     helper_script_path: "C:/repo/codex-head/scripts/ensure-9router-antigravity-stack.ps1",
     helper_script_available: true,
     helper_bootstrap_command: "powershell -ExecutionPolicy Bypass -File \"C:/repo/codex-head/scripts/ensure-9router-antigravity-stack.ps1\"",
+    full_stack_helper_script_path: "C:/repo/codex-head/scripts/ensure-9router-full-stack.ps1",
+    full_stack_helper_script_available: true,
+    full_stack_bootstrap_command: "powershell -ExecutionPolicy Bypass -File \"C:/repo/codex-head/scripts/ensure-9router-full-stack.ps1\"",
     gui_config_path: "C:/Users/test/.antigravity_tools/gui_config.json",
     gui_config_exists: true,
     recommended_review_path_ready: true,
@@ -63,6 +67,110 @@ function createBriefLocalStack(overrides: Partial<DoctorReport["health"]["local_
   };
 }
 
+test("renderDoctorBrief summarizes optional Perplexity and BLACKBOX managers", () => {
+  const rendered = renderDoctorBrief({
+    ok: true,
+    generated_at: "2026-03-25T00:00:00.000Z",
+    summary: "No blocking issues found across 3 task(s) and 2 enabled worker(s).",
+    health: {
+      adapters: [],
+      readiness: [],
+      recent_penalties: [],
+      github: {
+        enabled: true,
+        dispatch_mode: "gh_cli",
+        execution_preference: "local_preferred",
+        auto_recycle_stale_runner: false,
+        repository: "example/repo",
+        workflow: "codex-head-worker.yml",
+        review_workflow: "codex-head-gemini-review.yml",
+        cli_binary: "gh",
+        gh_cli_available: true,
+        gh_cli_path: "C:/Program Files/GitHub CLI/gh.exe",
+        gh_authenticated: true,
+        machine_config_path: "C:/repo/codex-head/config/workers.machine.json",
+        machine_config_exists: true,
+        runs_on_json: "[\"self-hosted\",\"Windows\",\"codex-head\"]",
+        runs_on_labels: ["self-hosted", "Windows", "codex-head"],
+        self_hosted_targeted: true,
+        recycle_script_path: "C:/repo/codex-head/scripts/recycle-self-hosted-runner.ps1",
+        recycle_script_available: true,
+        matching_runners: [],
+        runner_lookup_detail: null
+      },
+      local_stack: createBriefLocalStack({
+        perplexity: {
+          manager_base_url: "http://127.0.0.1:20129",
+          manager_reachable: true,
+          manager_status: "ok",
+          manager_model_aliases: ["pplxapp/app-chat"],
+          cdp_base_url: "http://127.0.0.1:9233",
+          cdp_reachable: true,
+          cdp_browser: "Perplexity/1.0",
+          runtime_target_available: true,
+          pplxapp_chat: {
+            prefix: "pplxapp",
+            api_type: "chat",
+            present: true,
+            active_connection: true,
+            default_model: "pplxapp/app-chat",
+            upstream_base_url: "http://127.0.0.1:20129/v1"
+          }
+        },
+        blackbox: {
+          manager_base_url: "http://127.0.0.1:8083",
+          manager_reachable: true,
+          manager_status: "ok",
+          manager_model_aliases: ["bbxapp/app-agent"],
+          state_db_path: "C:/Users/test/AppData/Roaming/BLACKBOXAI/User/globalStorage/state.vscdb",
+          state_db_exists: true,
+          identity_loaded: true,
+          user_id_present: true,
+          upstream_base_url: "https://oi-vscode-server-985058387028.europe-west1.run.app",
+          bbxapp_chat: {
+            prefix: "bbxapp",
+            api_type: "chat",
+            present: true,
+            active_connection: true,
+            default_model: "bbxapp/app-agent",
+            upstream_base_url: "http://127.0.0.1:8083/v1"
+          }
+        }
+      }),
+      database_path: "C:/repo/codex-head/runtime/codex-head.sqlite",
+      artifacts_dir: "C:/repo/codex-head/runtime/artifacts"
+    },
+    attention: {
+      workers: [],
+      github: [],
+      integrations: [],
+      tasks: []
+    },
+    task_filter: {
+      include_all_task_history: false,
+      task_window_hours: 6,
+      cutoff_at: "2026-03-24T18:00:00.000Z",
+      suppressed_task_findings: 0
+    },
+    counts: {
+      total_tasks: 3,
+      task_states: {},
+      enabled_workers: 2,
+      workers_needing_attention: 0,
+      github_findings: 0,
+      integration_findings: 0,
+      tasks_needing_attention: 0,
+      suppressed_task_findings: 0,
+      blocking_findings: 0,
+      informational_findings: 0
+    },
+    actions: [],
+    command_hints: []
+  } satisfies DoctorReport);
+
+  assert.match(rendered, /local-stack: review-ready :: 9router=up :: agm-chat=ready :: antigravity=up :: pplx-manager=up :: pplxapp-chat=ready :: bbx-manager=up :: bbxapp-chat=ready :: accounts=7/i);
+});
+
 test("renderStatusBrief summarizes one task with operator guidance", () => {
   const task = createTaskSpec({
     task_id: "task-brief-1",
@@ -70,6 +178,7 @@ test("renderStatusBrief summarizes one task with operator guidance", () => {
     repo: "C:/repo",
     worker_target: "gemini-cli",
     expected_output: { kind: "review", format: "markdown", code_change: false },
+    review_profile: "research",
     requires_github: true
   });
 
@@ -79,6 +188,7 @@ test("renderStatusBrief summarizes one task with operator guidance", () => {
     artifact_refs: {
       worker_result: { path: "C:/repo/codex-head/runtime/artifacts/task-brief-1/worker-result.json", freshness: "current" },
       execution_attempts: { path: "C:/repo/codex-head/runtime/artifacts/task-brief-1/execution-attempts.json", freshness: "history" },
+      dispatch_receipt: { path: "C:/repo/codex-head/runtime/artifacts/task-brief-1/github-dispatch-receipt.json", freshness: "history" },
       primary_output: { path: "C:/repo/codex-head/runtime/artifacts/task-brief-1/worker-output.md", freshness: "current" },
       primary_log: { path: "C:/repo/codex-head/runtime/artifacts/task-brief-1/gemini-cli-local.combined.log", freshness: "current" }
     },
@@ -108,6 +218,13 @@ test("renderStatusBrief summarizes one task with operator guidance", () => {
     },
     github_mirror: null,
     reviews: [],
+    review_dispatch: {
+      receipt_path: "C:/repo/codex-head/runtime/artifacts/task-brief-1/github-dispatch-receipt.json",
+      requested_profile: "research",
+      dispatched_profile: null,
+      dispatch_mode: "legacy_without_input",
+      degraded: true
+    },
     operator: {
       queue_diagnosis_path: "C:/artifacts/task-brief-1/github-queue-diagnosis.json",
       queue_diagnosis: null,
@@ -125,13 +242,15 @@ test("renderStatusBrief summarizes one task with operator guidance", () => {
   } satisfies TaskStatusSnapshot);
 
   assert.match(rendered, /task task-brief-1 \[failed\] Review the latest PR in GitHub/i);
-  assert.match(rendered, /worker: gemini-cli via github/i);
+  assert.match(rendered, /worker: gemini-cli via github :: profile=research/i);
   assert.match(rendered, /artifacts: C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-1/i);
   assert.match(rendered, /worker-result: C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-1\/worker-result\.json/i);
   assert.match(rendered, /attempts \(history\): C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-1\/execution-attempts\.json/i);
+  assert.match(rendered, /dispatch-receipt \(history\): C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-1\/github-dispatch-receipt\.json/i);
   assert.match(rendered, /output: C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-1\/worker-output\.md/i);
   assert.match(rendered, /log: C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-1\/gemini-cli-local\.combined\.log/i);
   assert.match(rendered, /github-url: https:\/\/github\.com\/example\/repo\/actions\/runs\/321/i);
+  assert.match(rendered, /dispatch: requested profile=research -> legacy standard routing/i);
   assert.match(rendered, /operator: Automatic stale-runner recovery was already attempted/i);
   assert.match(rendered, /receipt: operator-actions\/2026-03-23T08-09-05\.877Z-run-doctor-hint\.json \[run-doctor-hint\]/i);
   assert.match(rendered, /next-command: node --disable-warning=ExperimentalWarning dist\/src\/index\.js show-operator-receipt operator-actions\/2026-03-23T08-09-05\.877Z-run-doctor-hint\.json --brief/i);
@@ -184,6 +303,7 @@ test("renderStatusBrief omits the no-action line when only follow-up actions exi
     artifact_refs: {
       worker_result: null,
       execution_attempts: null,
+      dispatch_receipt: null,
       primary_output: null,
       primary_log: null
     },
@@ -206,6 +326,7 @@ test("renderStatusBrief omits the no-action line when only follow-up actions exi
     github_run: null,
     github_mirror: null,
     reviews: [],
+    review_dispatch: null,
     operator: {
       queue_diagnosis_path: null,
       queue_diagnosis: null,
@@ -241,6 +362,7 @@ test("renderStatusBrief omits the no-action line when a receipt is available", (
     artifact_refs: {
       worker_result: { path: "C:/repo/codex-head/runtime/artifacts/task-brief-4/worker-result.json", freshness: "last_attempt" },
       execution_attempts: { path: "C:/repo/codex-head/runtime/artifacts/task-brief-4/execution-attempts.json", freshness: "history" },
+      dispatch_receipt: null,
       primary_output: null,
       primary_log: { path: "C:/repo/codex-head/runtime/artifacts/task-brief-4/gemini-cli-local.combined.log", freshness: "last_attempt" }
     },
@@ -263,6 +385,7 @@ test("renderStatusBrief omits the no-action line when a receipt is available", (
     github_run: null,
     github_mirror: null,
     reviews: [],
+    review_dispatch: null,
     operator: {
       queue_diagnosis_path: null,
       queue_diagnosis: null,
@@ -396,11 +519,14 @@ test("renderDoctorBrief summarizes operator findings and next actions", () => {
           state: "failed",
           goal: "Review the latest PR in GitHub",
           worker_target: "gemini-cli",
+          review_profile: "research",
+          review_dispatch_degraded: true,
           routing_mode: "github",
           artifact_dir_path: "C:/repo/codex-head/runtime/artifacts/task-brief-doctor",
           artifact_refs: {
             worker_result: { path: "C:/repo/codex-head/runtime/artifacts/task-brief-doctor/worker-result.json", freshness: "current" },
             execution_attempts: { path: "C:/repo/codex-head/runtime/artifacts/task-brief-doctor/execution-attempts.json", freshness: "history" },
+            dispatch_receipt: { path: "C:/repo/codex-head/runtime/artifacts/task-brief-doctor/github-dispatch-receipt.json", freshness: "history" },
             primary_output: { path: "C:/repo/codex-head/runtime/artifacts/task-brief-doctor/worker-output.md", freshness: "current" },
             primary_log: { path: "C:/repo/codex-head/runtime/artifacts/task-brief-doctor/gemini-cli-local.combined.log", freshness: "current" }
           },
@@ -443,12 +569,12 @@ test("renderDoctorBrief summarizes operator findings and next actions", () => {
   assert.match(rendered, /workers:\n- claude-code \[error\] Worker claude-code health check failed/i);
   assert.match(rendered, /github:\n- \[error\] GitHub dispatch is enabled but gh is not authenticated/i);
   assert.match(rendered, /integrations:\n- \[error\] 9router is not reachable at http:\/\/127\.0\.0\.1:20128\./i);
-  assert.match(rendered, /tasks:\n- task-brief-doctor \[failed\/error\] Review the latest PR in GitHub/i);
+  assert.match(rendered, /tasks:\n- task-brief-doctor \[failed\/error\] Review the latest PR in GitHub :: profile=research :: dispatch=legacy-standard/i);
   assert.match(rendered, /receipt=operator-actions\/2026-03-23T08-09-05\.877Z-run-doctor-hint\.json \[run-doctor-hint\]/i);
   assert.match(rendered, /receipt-commands:\n- task-brief-doctor :: node --disable-warning=ExperimentalWarning dist\/src\/index\.js show-operator-receipt operator-actions\/2026-03-23T08-09-05\.877Z-run-doctor-hint\.json --brief/i);
   assert.match(rendered, /next-command: node --disable-warning=ExperimentalWarning dist\/src\/index\.js sweep-tasks cancel --state failed --older-than-hours 6 --dry-run --brief/i);
   assert.match(rendered, /task-links:\n- task-brief-doctor :: artifacts=C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-doctor :: github=https:\/\/github\.com\/example\/repo\/actions\/runs\/321/i);
-  assert.match(rendered, /artifact-files:\n- task-brief-doctor :: result=C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-doctor\/worker-result\.json :: attempts\(history\)=C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-doctor\/execution-attempts\.json :: output=C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-doctor\/worker-output\.md :: log=C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-doctor\/gemini-cli-local\.combined\.log/i);
+  assert.match(rendered, /artifact-files:\n- task-brief-doctor :: result=C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-doctor\/worker-result\.json :: attempts\(history\)=C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-doctor\/execution-attempts\.json :: dispatch-receipt\(history\)=C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-doctor\/github-dispatch-receipt\.json :: output=C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-doctor\/worker-output\.md :: log=C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-doctor\/gemini-cli-local\.combined\.log/i);
   assert.match(rendered, /next:\n- Inspect the claude-code health command and local runtime\./i);
   assert.match(rendered, /commands:\n- \[suppressed-failed-backlog\] node --disable-warning=ExperimentalWarning dist\/src\/index\.js sweep-tasks cancel --state failed --older-than-hours 6 --dry-run --brief/i);
 });
@@ -459,6 +585,7 @@ test("renderDoctorBrief keeps receipt commands aligned with visible task rows", 
     state: "queued",
     goal: index < 2 ? `Queued task ${index + 1}` : "Queued task backlog",
     worker_target: "codex-cli",
+    review_dispatch_degraded: false,
     routing_mode: "local",
     artifact_dir_path: `C:/repo/codex-head/runtime/artifacts/task-brief-visible-${index + 1}`,
     artifact_refs: {
@@ -468,6 +595,7 @@ test("renderDoctorBrief keeps receipt commands aligned with visible task rows", 
       execution_attempts: index < 2
         ? { path: `C:/repo/codex-head/runtime/artifacts/task-brief-visible-${index + 1}/execution-attempts.json`, freshness: "history" }
         : null,
+      dispatch_receipt: null,
       primary_output: null,
       primary_log: index < 2
         ? { path: `C:/repo/codex-head/runtime/artifacts/task-brief-visible-${index + 1}/codex-cli-local.combined.log`, freshness: "last_attempt" }
@@ -593,6 +721,100 @@ test("renderDoctorBrief keeps receipt commands aligned with visible task rows", 
   assert.doesNotMatch(rendered, /next:[\s\S]*Dispatch the queued task when the workspace and workers are ready\./i);
 });
 
+test("renderDoctorBrief prioritizes review workflow inspection when live profile routing is degraded", () => {
+  const report: DoctorReport = {
+    ok: false,
+    generated_at: "2026-03-25T01:00:00.000Z",
+    summary: "Found 1 blocking item across 1 GitHub finding.",
+    task_filter: {
+      include_all_task_history: false,
+      task_window_hours: 6,
+      cutoff_at: "2026-03-24T19:00:00.000Z",
+      suppressed_task_findings: 0
+    },
+    counts: {
+      total_tasks: 0,
+      task_states: {},
+      enabled_workers: 0,
+      workers_needing_attention: 0,
+      github_findings: 1,
+      integration_findings: 0,
+      tasks_needing_attention: 0,
+      suppressed_task_findings: 0,
+      blocking_findings: 1,
+      informational_findings: 0
+    },
+    health: {
+      adapters: [],
+      readiness: [],
+      recent_penalties: [],
+      github: {
+        enabled: true,
+        dispatch_mode: "gh_cli",
+        execution_preference: "local_preferred",
+        auto_recycle_stale_runner: false,
+        repository: "example/repo",
+        workflow: "codex-head-worker.yml",
+        review_workflow: "codex-head-gemini-review.yml",
+        review_workflow_supports_review_profile: false,
+        review_workflow_input_check_detail: "Remote review workflow codex-head-gemini-review.yml does not declare workflow_dispatch input review_profile.",
+        cli_binary: "gh",
+        gh_cli_available: true,
+        gh_cli_path: "gh",
+        gh_authenticated: true,
+        machine_config_path: null,
+        machine_config_exists: false,
+        runs_on_json: null,
+        runs_on_labels: [],
+        self_hosted_targeted: false,
+        recycle_script_path: null,
+        recycle_script_available: false,
+        matching_runners: [],
+        runner_lookup_detail: null
+      },
+      local_stack: createBriefLocalStack(),
+      database_path: "C:/repo/codex-head/runtime/codex-head.sqlite",
+      artifacts_dir: "C:/repo/codex-head/runtime/artifacts"
+    },
+    attention: {
+      workers: [],
+      github: [
+        {
+          severity: "warning",
+          summary: "Remote review workflow codex-head-gemini-review.yml is missing the review_profile workflow_dispatch input, so live review dispatch will fall back to legacy standard routing.",
+          actions: [
+            "Push or sync .github/workflows/codex-head-gemini-review.yml to the GitHub default branch so review_profile is accepted during workflow_dispatch and research/code-assist routing works live."
+          ]
+        }
+      ],
+      integrations: [],
+      tasks: []
+    },
+    actions: [
+      "Push or sync .github/workflows/codex-head-gemini-review.yml to the GitHub default branch so review_profile is accepted during workflow_dispatch and research/code-assist routing works live."
+    ],
+    command_hints: [
+      {
+        id: "suppressed-failed-backlog",
+        kind: "suppressed_failed_backlog",
+        reason: "Inspect older failed tasks hidden by the current doctor window before canceling them in bulk.",
+        command: "node --disable-warning=ExperimentalWarning dist/src/index.js sweep-tasks cancel --state failed --older-than-hours 6 --dry-run --brief",
+        sweep: {
+          action: "cancel",
+          states: ["failed"],
+          older_than_hours: 6
+        }
+      }
+    ]
+  };
+
+  const rendered = renderDoctorBrief(report);
+  assert.match(rendered, /github:\n- \[warning\] Remote review workflow codex-head-gemini-review\.yml is missing the review_profile workflow_dispatch input/i);
+  assert.match(rendered, /next-command: node --disable-warning=ExperimentalWarning dist\/src\/index\.js review-workflow-status --brief/i);
+  assert.match(rendered, /next:\n- Push or sync \.github\/workflows\/codex-head-gemini-review\.yml to the GitHub default branch/i);
+  assert.match(rendered, /commands:\n- \[suppressed-failed-backlog\] node --disable-warning=ExperimentalWarning dist\/src\/index\.js sweep-tasks cancel --state failed --older-than-hours 6 --dry-run --brief/i);
+});
+
 test("renderDoctorBrief omits cleanup commands when the report is otherwise healthy", () => {
   const report: DoctorReport = {
     ok: true,
@@ -674,6 +896,68 @@ test("renderDoctorBrief omits cleanup commands when the report is otherwise heal
   assert.match(rendered, /history: hidden 10 older task finding\(s\) outside the 6h window/i);
   assert.doesNotMatch(rendered, /^next-command:/im);
   assert.doesNotMatch(rendered, /^commands:/im);
+});
+
+test("renderReviewWorkflowStatusBrief summarizes local and remote workflow drift", () => {
+  const rendered = renderReviewWorkflowStatusBrief({
+    repository: "example/repo",
+    workflow: "codex-head-gemini-review.yml",
+    local_workflow_path: "C:/repo/.github/workflows/codex-head-gemini-review.yml",
+    git_branch: "main",
+    git_tracking_status: "in sync with origin/main",
+    local_git_file_status: "modified",
+    local_vs_origin_status: "uncommitted local changes only; HEAD still matches origin/main",
+    local_supports_review_profile: true,
+    local_declared_inputs: [
+      "task_id",
+      "target_repository",
+      "base_branch",
+      "work_branch",
+      "execution_target",
+      "review_profile",
+      "review_policy",
+      "expected_output",
+      "prior_result_status"
+    ],
+    remote_supports_review_profile: false,
+    remote_declared_inputs: [
+      "task_id",
+      "target_repository",
+      "base_branch",
+      "work_branch",
+      "execution_target",
+      "review_policy",
+      "expected_output",
+      "prior_result_status"
+    ],
+    missing_on_remote: ["review_profile"],
+    remote_check_detail: "Remote review workflow codex-head-gemini-review.yml does not declare workflow_dispatch input review_profile.",
+    inspect_command: "gh workflow view codex-head-gemini-review.yml --yaml",
+    sync_action: "Commit and push .github/workflows/codex-head-gemini-review.yml from main so review_profile is accepted during workflow_dispatch and research/code-assist routing works live.",
+    sync_commands: [
+      "git add .github/workflows/codex-head-gemini-review.yml",
+      "git commit --only .github/workflows/codex-head-gemini-review.yml -m \"Update codex-head-gemini-review.yml workflow_dispatch inputs\"",
+      "git push origin main"
+    ]
+  });
+
+  assert.match(rendered, /^review-workflow: codex-head-gemini-review\.yml/im);
+  assert.match(rendered, /^repository: example\/repo/im);
+  assert.match(rendered, /^local: supports review_profile :: C:\/repo\/\.github\/workflows\/codex-head-gemini-review\.yml/im);
+  assert.match(rendered, /^git-branch: main/im);
+  assert.match(rendered, /^git-tracking: in sync with origin\/main/im);
+  assert.match(rendered, /^git-file-status: modified/im);
+  assert.match(rendered, /^git-origin-status: uncommitted local changes only; HEAD still matches origin\/main/im);
+  assert.match(rendered, /local-inputs: task_id, target_repository, base_branch, work_branch, execution_target, review_profile/i);
+  assert.match(rendered, /^remote: legacy workflow without review_profile/im);
+  assert.match(rendered, /remote-inputs: task_id, target_repository, base_branch, work_branch, execution_target, review_policy/i);
+  assert.match(rendered, /missing-on-remote: review_profile/i);
+  assert.match(rendered, /^inspect-command: gh workflow view codex-head-gemini-review\.yml --yaml/im);
+  assert.match(rendered, /^next: Commit and push \.github\/workflows\/codex-head-gemini-review\.yml from main/im);
+  assert.match(rendered, /^sync-commands:/im);
+  assert.match(rendered, /- git add \.github\/workflows\/codex-head-gemini-review\.yml/i);
+  assert.match(rendered, /- git commit --only \.github\/workflows\/codex-head-gemini-review\.yml -m "Update codex-head-gemini-review\.yml workflow_dispatch inputs"/i);
+  assert.match(rendered, /- git push origin main/i);
 });
 
 test("renderSweepBrief summarizes bulk task actions", () => {

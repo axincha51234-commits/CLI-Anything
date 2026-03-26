@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 
-import type { TaskRecord, TaskState } from "./contracts";
+import type { ReviewProviderProfile, TaskRecord, TaskState } from "./contracts";
 import { FileArtifactStore } from "./artifacts/fileArtifactStore";
 
 interface QueueDiagnosisArtifact {
@@ -48,14 +48,30 @@ export interface TaskArtifactRef {
 export interface TaskArtifactRefs {
   worker_result: TaskArtifactRef | null;
   execution_attempts: TaskArtifactRef | null;
+  dispatch_receipt: TaskArtifactRef | null;
   primary_output: TaskArtifactRef | null;
   primary_log: TaskArtifactRef | null;
+}
+
+export interface TaskReviewDispatchStatus {
+  receipt_path: string | null;
+  requested_profile: ReviewProviderProfile | null;
+  dispatched_profile: ReviewProviderProfile | null;
+  dispatch_mode: "native" | "legacy_without_input" | null;
+  degraded: boolean;
 }
 
 export interface TaskStatusSnapshot extends TaskRecord {
   artifact_dir_path: string;
   artifact_refs: TaskArtifactRefs;
   operator: TaskOperatorStatus;
+  review_dispatch: TaskReviewDispatchStatus | null;
+}
+
+interface DispatchReceiptArtifact {
+  requested_review_profile?: ReviewProviderProfile | null;
+  dispatched_review_profile?: ReviewProviderProfile | null;
+  review_profile_dispatch_mode?: "native" | "legacy_without_input" | null;
 }
 
 function hasText(value: string | null | undefined): value is string {
@@ -221,10 +237,12 @@ function buildTaskArtifactRefs(
       : "last_attempt";
   const workerResultPath = resolveExistingArtifactPath(artifactStore, record.task.task_id, "worker-result.json");
   const executionAttemptsPath = resolveExistingArtifactPath(artifactStore, record.task.task_id, "execution-attempts.json");
+  const dispatchReceiptPath = resolveExistingArtifactPath(artifactStore, record.task.task_id, "github-dispatch-receipt.json");
 
   return {
     worker_result: workerResultPath ? { path: workerResultPath, freshness: resultFreshness } : null,
     execution_attempts: executionAttemptsPath ? { path: executionAttemptsPath, freshness: "history" } : null,
+    dispatch_receipt: dispatchReceiptPath ? { path: dispatchReceiptPath, freshness: "history" } : null,
     primary_output: (record.result?.patch_ref ?? record.result?.artifacts[0])
       ? {
           path: record.result?.patch_ref ?? record.result?.artifacts[0] ?? "",
@@ -237,6 +255,39 @@ function buildTaskArtifactRefs(
           freshness: resultFreshness
         }
       : null
+  };
+}
+
+function buildTaskReviewDispatchStatus(
+  record: TaskRecord,
+  artifactStore: FileArtifactStore
+): TaskReviewDispatchStatus | null {
+  const receiptPath = resolveExistingArtifactPath(artifactStore, record.task.task_id, "github-dispatch-receipt.json");
+  if (!receiptPath) {
+    return null;
+  }
+
+  const receipt = artifactStore.readJsonIfExists<DispatchReceiptArtifact>(record.task.task_id, "github-dispatch-receipt.json");
+  if (!receipt) {
+    return {
+      receipt_path: receiptPath,
+      requested_profile: null,
+      dispatched_profile: null,
+      dispatch_mode: null,
+      degraded: false
+    };
+  }
+
+  const requestedProfile = receipt.requested_review_profile ?? null;
+  const dispatchedProfile = receipt.dispatched_review_profile ?? null;
+  const dispatchMode = receipt.review_profile_dispatch_mode ?? null;
+
+  return {
+    receipt_path: receiptPath,
+    requested_profile: requestedProfile,
+    dispatched_profile: dispatchedProfile,
+    dispatch_mode: dispatchMode,
+    degraded: dispatchMode === "legacy_without_input" && requestedProfile !== null
   };
 }
 
@@ -290,7 +341,8 @@ export function buildTaskStatusSnapshot(
     ...record,
     artifact_dir_path: artifactStore.resolveTaskDir(record.task.task_id),
     artifact_refs: buildTaskArtifactRefs(record, artifactStore),
-    operator: buildTaskOperatorStatus(record, artifactStore)
+    operator: buildTaskOperatorStatus(record, artifactStore),
+    review_dispatch: buildTaskReviewDispatchStatus(record, artifactStore)
   };
 }
 

@@ -11,6 +11,9 @@ function createLocalStack(overrides: Partial<DoctorHealthSnapshot["local_stack"]
     helper_script_path: "C:/repo/codex-head/scripts/ensure-9router-antigravity-stack.ps1",
     helper_script_available: true,
     helper_bootstrap_command: "powershell -ExecutionPolicy Bypass -File \"C:/repo/codex-head/scripts/ensure-9router-antigravity-stack.ps1\"",
+    full_stack_helper_script_path: "C:/repo/codex-head/scripts/ensure-9router-full-stack.ps1",
+    full_stack_helper_script_available: true,
+    full_stack_bootstrap_command: "powershell -ExecutionPolicy Bypass -File \"C:/repo/codex-head/scripts/ensure-9router-full-stack.ps1\"",
     gui_config_path: "C:/Users/test/.antigravity_tools/gui_config.json",
     gui_config_exists: true,
     recommended_review_path_ready: true,
@@ -107,6 +110,7 @@ function createStatusSnapshot(
     artifact_refs: {
       worker_result: null,
       execution_attempts: null,
+      dispatch_receipt: null,
       primary_output: null,
       primary_log: null
     },
@@ -124,6 +128,7 @@ function createStatusSnapshot(
     github_run: null,
     github_mirror: null,
     reviews: [],
+    review_dispatch: null,
     operator: {
       queue_diagnosis_path: null,
       queue_diagnosis: null,
@@ -311,6 +316,7 @@ test("buildDoctorReport aggregates worker, GitHub, and task findings", () => {
   assert.deepEqual(report.attention.tasks[0]?.artifact_refs, {
     worker_result: null,
     execution_attempts: null,
+    dispatch_receipt: null,
     primary_output: null,
     primary_log: null
   });
@@ -319,6 +325,79 @@ test("buildDoctorReport aggregates worker, GitHub, and task findings", () => {
   assert.equal(
     report.attention.tasks[0]?.operator_receipt_path,
     "operator-actions/2026-03-23T08-09-05.877Z-run-doctor-hint.json"
+  );
+});
+
+test("buildDoctorReport warns when the remote review workflow is missing review_profile input", () => {
+  const health: DoctorHealthSnapshot = {
+    adapters: [
+      { worker_target: "codex-cli", healthy: true, reason: "ok", detected_binary: "codex.exe" },
+      { worker_target: "gemini-cli", healthy: true, reason: "ok", detected_binary: "gemini.exe" }
+    ],
+    readiness: [
+      {
+        worker_target: "codex-cli",
+        healthy: true,
+        feature_enabled: true,
+        supports_local: true,
+        supports_github: false,
+        has_local_template: true,
+        local_ready: true,
+        github_ready: true,
+        github_worker_ready: true,
+        github_review_ready: false,
+        cooldown_until: null,
+        cooldown_reason: null
+      },
+      {
+        worker_target: "gemini-cli",
+        healthy: true,
+        feature_enabled: true,
+        supports_local: true,
+        supports_github: true,
+        has_local_template: false,
+        local_ready: false,
+        github_ready: true,
+        github_worker_ready: false,
+        github_review_ready: true,
+        cooldown_until: null,
+        cooldown_reason: null
+      }
+    ],
+    recent_penalties: [],
+    github: createGitHubRuntime({
+      review_workflow_supports_review_profile: false,
+      review_workflow_input_check_detail: "Remote review workflow codex-head-gemini-review.yml does not declare workflow_dispatch input review_profile.",
+      review_workflow_local_vs_origin_status: "uncommitted local changes only; HEAD still matches origin/main",
+      review_workflow_sync_action: "Commit and push .github/workflows/codex-head-gemini-review.yml from main so review_profile is accepted during workflow_dispatch and research/code-assist routing works live.",
+      review_workflow_sync_commands: [
+        "git add .github/workflows/codex-head-gemini-review.yml",
+        "git commit --only .github/workflows/codex-head-gemini-review.yml -m \"Update codex-head-gemini-review.yml workflow_dispatch inputs\"",
+        "git push origin main"
+      ]
+    }),
+    local_stack: createLocalStack(),
+    database_path: "C:/repo/codex-head/runtime/codex-head.sqlite",
+    artifacts_dir: "C:/repo/codex-head/runtime/artifacts"
+  };
+
+  const report = buildDoctorReport(health, []);
+  assert.equal(report.ok, false);
+  assert.match(
+    report.attention.github.map((entry) => entry.summary).join("\n"),
+    /missing the review_profile workflow_dispatch input/i
+  );
+  assert.match(
+    report.attention.github.map((entry) => entry.summary).join("\n"),
+    /Local workflow status: uncommitted local changes only; HEAD still matches origin\/main\./i
+  );
+  assert.match(
+    report.attention.github.flatMap((entry) => entry.actions).join("\n"),
+    /git add \.github\/workflows\/codex-head-gemini-review\.yml/i
+  );
+  assert.match(
+    report.attention.github.flatMap((entry) => entry.actions).join("\n"),
+    /git push origin main/i
   );
 });
 
@@ -401,6 +480,86 @@ test("buildDoctorReport stays healthy when workers and completed tasks are clean
   assert.equal(report.actions.length, 0);
   assert.equal(report.command_hints.length, 0);
   assert.match(report.summary, /No blocking issues found/i);
+});
+
+test("buildDoctorReport surfaces optional Perplexity and BLACKBOX manager issues as info", () => {
+  const health: DoctorHealthSnapshot = {
+    adapters: [
+      { worker_target: "codex-cli", healthy: true, reason: "ok", detected_binary: "codex.exe" }
+    ],
+    readiness: [
+      {
+        worker_target: "codex-cli",
+        healthy: true,
+        feature_enabled: true,
+        supports_local: true,
+        supports_github: false,
+        has_local_template: true,
+        local_ready: true,
+        github_ready: false,
+        cooldown_until: null,
+        cooldown_reason: null
+      }
+    ],
+    recent_penalties: [],
+    github: createGitHubRuntime(),
+    local_stack: createLocalStack({
+      perplexity: {
+        manager_base_url: "http://127.0.0.1:20129",
+        manager_reachable: false,
+        manager_status: null,
+        manager_model_aliases: [],
+        cdp_base_url: "http://127.0.0.1:9233",
+        cdp_reachable: false,
+        cdp_browser: null,
+        runtime_target_available: null,
+        pplxapp_chat: {
+          prefix: "pplxapp",
+          api_type: "chat",
+          present: false,
+          active_connection: null,
+          default_model: null,
+          upstream_base_url: null
+        }
+      },
+      blackbox: {
+        manager_base_url: "http://127.0.0.1:8083",
+        manager_reachable: false,
+        manager_status: null,
+        manager_model_aliases: [],
+        state_db_path: "C:/Users/test/AppData/Roaming/BLACKBOXAI/User/globalStorage/state.vscdb",
+        state_db_exists: true,
+        identity_loaded: false,
+        user_id_present: false,
+        upstream_base_url: null,
+        bbxapp_chat: {
+          prefix: "bbxapp",
+          api_type: "chat",
+          present: false,
+          active_connection: null,
+          default_model: null,
+          upstream_base_url: null
+        }
+      }
+    }),
+    database_path: "C:/repo/codex-head/runtime/codex-head.sqlite",
+    artifacts_dir: "C:/repo/codex-head/runtime/artifacts"
+  };
+
+  const report = buildDoctorReport(health, []);
+  assert.equal(report.ok, true);
+  assert.equal(report.attention.integrations.length, 2);
+  assert.equal(report.attention.integrations.every((entry) => entry.severity === "info"), true);
+  assert.equal(report.attention.integrations.some((entry) => /Perplexity runtime manager is not reachable/i.test(entry.summary)), true);
+  assert.equal(report.attention.integrations.some((entry) => /BLACKBOXAI account manager is not reachable/i.test(entry.summary)), true);
+  assert.equal(
+    report.actions.some((value) => /ensure-9router-perplexity-stack\.ps1/i.test(value)),
+    true
+  );
+  assert.equal(
+    report.actions.some((value) => /ensure-9router-blackbox-stack\.ps1/i.test(value)),
+    true
+  );
 });
 
 test("buildDoctorReport accepts GitHub-only workers without local templates", () => {

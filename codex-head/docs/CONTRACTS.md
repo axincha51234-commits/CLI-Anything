@@ -39,6 +39,12 @@ The source of truth for these contracts is:
 - `patch`
 - `text`
 
+### Review provider profiles
+
+- `standard`
+- `research`
+- `code_assist`
+
 ### Worker result statuses
 
 - `running`
@@ -76,6 +82,7 @@ The source of truth for these contracts is:
 | `allowed_tools` | `string[]` | Worker tool budget metadata | `["read","write","test"]` |
 | `input_artifacts` | `string[]` | Upstream artifacts used as input | `[]` |
 | `expected_output` | `ExpectedOutput` | Expected kind, format, and code-change flag | `{ kind: "analysis", format: "markdown", code_change: false }` |
+| `review_profile` | `ReviewProviderProfile \| null` | Optional provider-strength hint for GitHub review workflows | `null` |
 | `budget` | `BudgetSpec` | Budget and retry metadata | `{ max_cost_usd: 5, max_attempts: 3 }` |
 | `timeout_sec` | `number` | Local execution timeout | `900` |
 | `review_policy` | `ReviewPolicy` | Review routing metadata | `{ required_reviewers: [], require_all: true }` |
@@ -89,6 +96,8 @@ The source of truth for these contracts is:
   non-empty.
 - `allowed_tools`, `input_artifacts`, and reviewer lists must be string arrays.
 - `expected_output.kind` and `expected_output.format` must be valid enum values.
+- `review_profile`, when present, must be one of `standard`, `research`, or
+  `code_assist`.
 - `requires_github` must be explicit boolean data.
 
 ### Review policy note

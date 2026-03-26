@@ -126,6 +126,7 @@ test("buildTaskStatusSnapshot surfaces queue diagnosis and recycle state", () =>
   assert.deepEqual(snapshot.artifact_refs, {
     worker_result: null,
     execution_attempts: null,
+    dispatch_receipt: null,
     primary_output: null,
     primary_log: null
   });
@@ -173,6 +174,7 @@ test("buildTaskStatusSnapshots stays read-only when queue artifacts do not exist
   assert.deepEqual(snapshot?.artifact_refs, {
     worker_result: null,
     execution_attempts: null,
+    dispatch_receipt: null,
     primary_output: null,
     primary_log: null
   });
@@ -254,6 +256,7 @@ test("buildTaskStatusSnapshot surfaces canonical artifact refs when present", ()
   assert.equal(snapshot.artifact_refs.worker_result?.freshness, "current");
   assert.match(snapshot.artifact_refs.execution_attempts?.path ?? "", /execution-attempts\.json$/i);
   assert.equal(snapshot.artifact_refs.execution_attempts?.freshness, "history");
+  assert.equal(snapshot.artifact_refs.dispatch_receipt, null);
   assert.match(snapshot.artifact_refs.primary_output?.path ?? "", /worker-output\.md$/i);
   assert.equal(snapshot.artifact_refs.primary_output?.freshness, "current");
   assert.match(snapshot.artifact_refs.primary_log?.path ?? "", /gemini-cli-local\.combined\.log$/i);
@@ -295,7 +298,39 @@ test("buildTaskStatusSnapshot marks active-task result refs as last_attempt", ()
   const snapshot = buildTaskStatusSnapshot(record, artifactStore);
   assert.equal(snapshot.artifact_refs.worker_result?.freshness, "last_attempt");
   assert.equal(snapshot.artifact_refs.execution_attempts?.freshness, "history");
+  assert.equal(snapshot.artifact_refs.dispatch_receipt, null);
   assert.equal(snapshot.artifact_refs.primary_log?.freshness, "last_attempt");
+});
+
+test("buildTaskStatusSnapshot surfaces legacy review dispatch degradation from github-dispatch-receipt", () => {
+  const root = createTempDir("codex-head-status-dispatch-receipt-");
+  const artifactStore = new FileArtifactStore(resolve(root, "artifacts"));
+  const record = createRecord({
+    task: createTaskSpec({
+      task_id: "task-dispatch-legacy",
+      goal: "Review dependency release notes in GitHub",
+      repo: "C:/repo",
+      worker_target: "gemini-cli",
+      expected_output: { kind: "review", format: "markdown", code_change: false },
+      review_profile: "research",
+      requires_github: true
+    }),
+    state: "running"
+  });
+
+  artifactStore.writeJson(record.task.task_id, "github-dispatch-receipt.json", {
+    requested_review_profile: "research",
+    dispatched_review_profile: null,
+    review_profile_dispatch_mode: "legacy_without_input"
+  });
+
+  const snapshot = buildTaskStatusSnapshot(record, artifactStore);
+  assert.match(snapshot.artifact_refs.dispatch_receipt?.path ?? "", /github-dispatch-receipt\.json$/i);
+  assert.equal(snapshot.artifact_refs.dispatch_receipt?.freshness, "history");
+  assert.equal(snapshot.review_dispatch?.requested_profile, "research");
+  assert.equal(snapshot.review_dispatch?.dispatched_profile, null);
+  assert.equal(snapshot.review_dispatch?.dispatch_mode, "legacy_without_input");
+  assert.equal(snapshot.review_dispatch?.degraded, true);
 });
 
 test("buildTaskStatusSnapshot recommends concrete actions for busy runners and gh auth failures", () => {

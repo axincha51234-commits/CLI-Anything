@@ -4,6 +4,7 @@ import {
   NEXT_ACTIONS,
   OUTPUT_FORMATS,
   OUTPUT_KINDS,
+  REVIEW_PROVIDER_PROFILES,
   REVIEW_VERDICTS,
   TASK_STATES,
   WORKER_RESULT_STATUSES,
@@ -97,6 +98,7 @@ export function createTaskSpec(input: PartialTaskSpec): TaskSpec {
       format: expectedOutput.format,
       code_change: Boolean(expectedOutput.code_change)
     },
+    review_profile: input.review_profile ?? null,
     budget: {
       max_cost_usd: input.budget?.max_cost_usd ?? 5,
       max_attempts: input.budget?.max_attempts ?? 3
@@ -145,6 +147,9 @@ export function validateTaskSpec(input: unknown): TaskSpec {
       format: ensureString(expectedOutput.format, "expected_output.format") as TaskSpec["expected_output"]["format"],
       code_change: ensureBoolean(expectedOutput.code_change, "expected_output.code_change")
     },
+    review_profile: task.review_profile === null || task.review_profile === undefined
+      ? null
+      : ensureString(task.review_profile, "review_profile") as TaskSpec["review_profile"],
     budget: {
       max_cost_usd: ensureNumber(budget.max_cost_usd, "budget.max_cost_usd"),
       max_attempts: ensureNumber(budget.max_attempts, "budget.max_attempts")
@@ -168,6 +173,10 @@ export function validateTaskSpec(input: unknown): TaskSpec {
 
   if (!OUTPUT_FORMATS.includes(taskSpec.expected_output.format)) {
     throw new TaskValidationError("expected_output.format is invalid");
+  }
+
+  if (taskSpec.review_profile && !REVIEW_PROVIDER_PROFILES.includes(taskSpec.review_profile)) {
+    throw new TaskValidationError("review_profile is invalid");
   }
 
   return taskSpec;

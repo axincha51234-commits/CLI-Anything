@@ -44,7 +44,42 @@ use
 [scripts/ensure-9router-antigravity-stack.ps1](C:/Users/khoa%20phan/Documents/CLI-Anything-main/codex-head/scripts/ensure-9router-antigravity-stack.ps1).
 It starts `antigravity_tools --headless` on `127.0.0.1:8045` when needed,
 starts `9router` on `127.0.0.1:20128` when needed, and ensures the reusable
-`agm/*` chat route plus the experimental `agr/*` responses route exist.
+`agm/*` chat route plus the experimental `agr/*` responses route exist. It also
+removes stale duplicate 9router nodes and connections for those managed route
+prefixes when they drift over time.
+
+For a Perplexity runtime-manager path on the same local router, use
+[scripts/ensure-9router-perplexity-stack.ps1](C:/Users/khoa%20phan/Documents/CLI-Anything-main/codex-head/scripts/ensure-9router-perplexity-stack.ps1).
+That helper starts Perplexity with `--remote-debugging-port=9233` when needed,
+starts the local runtime manager on `127.0.0.1:20129`, and ensures the reusable
+`pplxapp/*` chat route exists inside `9router`. It also removes stale
+duplicate nodes and connections for the managed `pplxapp/*` route. Its live
+probes also normalize trailing citation markers such as `[1]` and wait for the
+runtime manager plus CDP target to settle after a restart before returning.
+The runtime manager now persists session state in
+`codex-head/runtime/perplexity-manager-sessions.json`, reuses one `chat`
+session for `app-chat`, and keeps probes in a separate `health` session via
+`app-health` so health checks stop spawning a new thread every time. It also
+exposes `GET /sessions` and `POST /session/reset`. Older Perplexity History
+entries created before this change remain visible in the app, but new manager
+traffic should settle into one reusable `chat` thread plus one reusable
+`health` thread instead of creating a fresh thread on every request.
+
+For a BLACKBOXAI no-UI account-manager path on the same local router, use
+[scripts/ensure-9router-blackbox-stack.ps1](C:/Users/khoa%20phan/Documents/CLI-Anything-main/codex-head/scripts/ensure-9router-blackbox-stack.ps1).
+That helper starts a local account-manager on `127.0.0.1:8083`, reads the
+BLACKBOXAI identity from `state.vscdb`, proxies requests to the discovered
+backend path, ensures the reusable
+`bbxapp/*` chat route exists inside `9router`.
+It also removes stale duplicate nodes and connections for the managed
+`bbxapp/*` route.
+
+If you want to bring the whole local provider stack up in one command, use
+[scripts/ensure-9router-full-stack.ps1](C:/Users/khoa%20phan/Documents/CLI-Anything-main/codex-head/scripts/ensure-9router-full-stack.ps1).
+It chains the Antigravity, Perplexity, and BLACKBOX helpers, keeps `9router`
+warm, and returns one compact readiness summary for `agm`, `pplxapp`, and
+`bbxapp`. Because it delegates to the individual helpers, it also cleans up
+stale duplicate route entries for those managed prefixes.
 
 When you do enable GitHub, `github.execution_preference` controls whether
 GitHub-shaped tasks must execute remotely or can still prefer local workers
@@ -90,7 +125,7 @@ currently local-ready and exposes the matching cooldown reason.
 - SQLite-backed task lifecycle and retry state
 - CLI support for `health`, `run-goal`, `configure-github-repo`, `plan`, `enqueue`,
   `review`, `status`, `doctor`, `dispatch`, `dispatch-next`, `dispatch-and-wait`, `publish-github-mirror`,
-  `run-github-payload`,
+  `run-github-payload`, `review-workflow-status`,
   `sync-github-callback`, `wait-github-callback`, `clear-penalties`, `sweep-tasks`,
   `reconcile-github-running`, `recover-running`, and `complete-from-file`
 - Local artifact generation and GitHub dispatch payload generation
@@ -135,6 +170,56 @@ currently local-ready and exposes the matching cooldown reason.
   - `REVIEW_API_URL` to `http://127.0.0.1:20128/v1`
   - `REVIEW_API_KEY` to any non-empty local token such as `local-9router`
   - `REVIEW_MODEL` to `agm/gpt-4o-mini`
+- GitHub review now carries a planner-selected `review_profile` so each local
+  app/provider is used closer to its strength:
+  - `standard` defaults to `agm/gpt-4o-mini` for balanced repo review and
+    triage through Antigravity
+  - `research` defaults to `pplxapp/app-chat` for fact-heavy review that needs
+    current docs, citations, releases, or dependency context through Perplexity
+  - `code_assist` defaults to `bbxapp/app-agent` for code-centric suggestions,
+    snippets, and implementation-oriented feedback through BLACKBOXAI
+- Override those defaults with GitHub Secrets if needed:
+  `REVIEW_MODEL_STANDARD`, `REVIEW_MODEL_RESEARCH`, and
+  `REVIEW_MODEL_CODE_ASSIST`. A single generic `REVIEW_MODEL` now acts as a
+  fallback, not as the first choice, so profile-based routing can still use the
+  right local provider by default.
+- Practical strength map for the current stack:
+  - `codex-cli`: primary local worker for repo execution, patches, and stable
+    artifact-producing runs
+  - `gemini-cli`: review-oriented worker and fast fallback reviewer when the
+    GitHub path is active
+  - `Antigravity-Manager`: balanced OpenAI-compatible review backend and local
+    router anchor for self-hosted workflows
+  - `Perplexity runtime manager`: best for current docs, citations, release
+    notes, dependency context, and fact-heavy review
+  - `BLACKBOXAI account manager`: best for code-assist style review, snippets,
+    API usage ideas, and implementation-oriented feedback
+- `doctor` now checks the remote review workflow shape too. If the GitHub
+  default branch still has an older `codex-head-gemini-review.yml` without the
+  `review_profile` workflow input, `doctor` reports that drift and live review
+  dispatch automatically falls back to legacy standard routing instead of
+  failing with `HTTP 422`.
+- `review-workflow-status --brief` now gives the focused local-vs-remote view
+  for that same drift: the local workflow path, current git branch, branch
+  tracking state vs `origin/main`, whether the local workflow file is only dirty
+  in the working tree or already differs from `origin/main`, whether each side
+  supports `review_profile`, the exact `gh workflow view` inspect command, and
+  the sync action plus concrete git commands needed to restore live profile
+  routing.
+- The same `9router` can now front a Perplexity runtime manager through
+  `pplxapp/app-chat`. That path is chat-completions only today, runs one
+  request at a time, and executes authenticated runtime `SSE ask` calls inside
+  the Perplexity app session rather than typing or clicking through the UI.
+- The Perplexity path now reuses a stable thread per session key instead of
+  creating a new Perplexity thread for every request. Use `app-chat` for the
+  main session and `app-health` for isolated readiness probes. Older thread
+  spam in the Perplexity History view is expected to remain as historical data
+  from earlier builds; the current manager should only keep one long-lived
+  thread per session key.
+- The same `9router` can also front a BLACKBOXAI no-UI account-manager through
+  `bbxapp/app-agent`. That path is chat-completions only today, but it no
+  longer depends on the BLACKBOXAI UI or a CDP-controlled webview; it reads
+  local identity from `state.vscdb` and talks directly to the BLACKBOX backend.
 - `9router` is already useful for GitHub review and chat-completions clients,
   but the Antigravity-backed `/v1/responses` reply shape is still not a
   native OpenAI Responses object. Keep direct Responses-compatible routing for
@@ -174,6 +259,15 @@ currently local-ready and exposes the matching cooldown reason.
   `9router -> Antigravity-Manager` path, reports whether the `agm` chat route
   is active, and flags that the experimental `agr` responses route is still not
   suitable for `codex-cli` local execution.
+- when detected, that same snapshot also reports the optional Perplexity
+  runtime-manager path: CDP reachability, manager health, and whether a
+  `pplxapp/*` route is active in `9router`.
+- when detected, the snapshot also reports the optional BLACKBOXAI account-
+  manager path: manager health, state-db identity readiness, and whether a
+  `bbxapp/*` route is active in `9router`.
+- the same snapshot now also exposes both the Antigravity-only helper command
+  and the full-stack helper command, so operators can bootstrap either the
+  review path alone or the whole local provider stack straight from `health`.
   It also shows whether stale-runner auto-recycle is enabled and whether the
   recycle script is present on disk.
 - `status` now also surfaces operator-only queue artifacts directly in JSON

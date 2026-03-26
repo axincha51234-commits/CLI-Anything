@@ -32,6 +32,14 @@ export type OutputKind = (typeof OUTPUT_KINDS)[number];
 export const OUTPUT_FORMATS = ["json", "markdown", "patch", "text"] as const;
 export type OutputFormat = (typeof OUTPUT_FORMATS)[number];
 
+export const REVIEW_PROVIDER_PROFILES = [
+  "standard",
+  "research",
+  "code_assist"
+] as const;
+
+export type ReviewProviderProfile = (typeof REVIEW_PROVIDER_PROFILES)[number];
+
 export const WORKER_RESULT_STATUSES = [
   "running",
   "awaiting_review",
@@ -91,6 +99,7 @@ export interface TaskSpec {
   allowed_tools: string[];
   input_artifacts: string[];
   expected_output: ExpectedOutput;
+  review_profile?: ReviewProviderProfile | null;
   budget: BudgetSpec;
   timeout_sec: number;
   review_policy: ReviewPolicy;

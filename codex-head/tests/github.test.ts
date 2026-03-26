@@ -147,7 +147,7 @@ test("GitHubControlPlane reports when no open pull request is available", () => 
   assert.match(status.detail, /No open pull request is available in example\/repo/i);
 });
 
-test("GitHubControlPlane inspects targeted self-hosted runners from repository metadata", () => {
+test("GitHubControlPlane inspects targeted self-hosted runners from repository metadata", { concurrency: false }, () => {
   const root = createTempDir("codex-head-github-runtime-");
   const config = createTestConfig(root);
   config.github.repository = "example/repo";
@@ -220,6 +220,24 @@ test("GitHubControlPlane inspects targeted self-hosted runners from repository m
             timedOut: false
           };
         }
+        if (args[0] === "workflow" && args[1] === "view" && args[2] === "codex-head-gemini-review.yml") {
+          return {
+            ok: true,
+            exitCode: 0,
+            stdout: [
+              "on:",
+              "  workflow_dispatch:",
+              "    inputs:",
+              "      task_id:",
+              "        required: true",
+              "      review_profile:",
+              "        required: true"
+            ].join("\n"),
+            stderr: "",
+            durationMs: 1,
+            timedOut: false
+          };
+        }
         throw new Error(`Unexpected gh args: ${args.join(" ")}`);
       }
     });
@@ -235,6 +253,9 @@ test("GitHubControlPlane inspects targeted self-hosted runners from repository m
     assert.equal(runtime.matching_runners.length, 1);
     assert.equal(runtime.matching_runners[0]?.name, "DESKTOP-F7V83BO-codex-head");
     assert.equal(runtime.matching_runners[0]?.status, "online");
+    assert.equal(runtime.review_workflow_supports_review_profile, true);
+    assert.deepEqual(runtime.review_workflow_declared_inputs, ["task_id", "review_profile"]);
+    assert.deepEqual(runtime.review_workflow_missing_dispatch_inputs, []);
   } finally {
     if (previousMachineConfig === undefined) {
       delete process.env.CODEX_HEAD_MACHINE_CONFIG;
@@ -278,16 +299,16 @@ test("GitHubControlPlane can dispatch the generic worker workflow through gh cli
   });
 
   const task = createTaskSpec({
-    goal: "Review this PR in GitHub",
+    goal: "Summarize the current workflow state in GitHub",
     repo: root,
-    worker_target: "gemini-cli",
+    worker_target: "codex-cli",
     expected_output: { kind: "analysis", format: "markdown", code_change: false },
     requires_github: true
   });
 
-  const dispatch = github.prepareDispatch(task, routing("gemini-cli", "github"));
-  const receipt = github.dispatchWorkflow(task, routing("gemini-cli", "github"), dispatch);
-  const workflowCall = calls.find((entry) => entry.args[0] === "workflow");
+  const dispatch = github.prepareDispatch(task, routing("codex-cli", "github"));
+  const receipt = github.dispatchWorkflow(task, routing("codex-cli", "github"), dispatch);
+  const workflowCall = calls.find((entry) => entry.args[0] === "workflow" && entry.args[1] === "run");
   assert.ok(workflowCall);
   assert.equal(workflowCall?.args[2], "codex-head-worker.yml");
   assert.deepEqual(JSON.parse(workflowCall?.input ?? "{}"), {
@@ -296,7 +317,7 @@ test("GitHubControlPlane can dispatch the generic worker workflow through gh cli
       repository: config.github.repository,
       workflow: "codex-head-worker.yml",
       task,
-      routing: routing("gemini-cli", "github")
+      routing: routing("codex-cli", "github")
     })
   });
   assert.equal(receipt.workflow_name, "codex-head-worker.yml");
@@ -326,7 +347,27 @@ test("GitHubControlPlane picks review_workflow inputs for review tasks", () => {
           timedOut: false
         };
       }
-      workflowInput = JSON.parse(options?.input ?? "{}") as Record<string, string>;
+      if (args[0] === "workflow" && args[1] === "view" && args[2] === "codex-head-gemini-review.yml") {
+        return {
+          ok: true,
+          exitCode: 0,
+          stdout: [
+            "on:",
+            "  workflow_dispatch:",
+            "    inputs:",
+            "      task_id:",
+            "        required: true",
+            "      review_profile:",
+            "        required: true"
+          ].join("\n"),
+          stderr: "",
+          durationMs: 1,
+          timedOut: false
+        };
+      }
+      if (args[0] === "workflow" && args[1] === "run") {
+        workflowInput = JSON.parse(options?.input ?? "{}") as Record<string, string>;
+      }
       return {
         ok: true,
         exitCode: 0,
@@ -343,6 +384,7 @@ test("GitHubControlPlane picks review_workflow inputs for review tasks", () => {
     repo: root,
     worker_target: "gemini-cli",
     expected_output: { kind: "review", format: "markdown", code_change: false },
+    review_profile: "research",
     review_policy: { required_reviewers: ["codex-cli"], require_all: true },
     requires_github: true
   });
@@ -353,10 +395,96 @@ test("GitHubControlPlane picks review_workflow inputs for review tasks", () => {
   assert.equal(storedInputs.target_repository, "example/repo");
   assert.equal(storedInputs.base_branch, "main");
   assert.equal(storedInputs.execution_target, "gemini-cli");
+  assert.equal(storedInputs.review_profile, "research");
   assert.equal(storedInputs.prior_result_status, "awaiting_review");
 
-  github.dispatchWorkflow(task, routing("gemini-cli", "github"), dispatch);
+  const receipt = github.dispatchWorkflow(task, routing("gemini-cli", "github"), dispatch);
   assert.deepEqual(workflowInput, storedInputs);
+  assert.equal(receipt.requested_review_profile, "research");
+  assert.equal(receipt.dispatched_review_profile, "research");
+  assert.equal(receipt.review_profile_dispatch_mode, "native");
+});
+
+test("GitHubControlPlane retries review workflow dispatch without review_profile when the remote workflow is legacy", () => {
+  const root = createTempDir("codex-head-github-review-legacy-dispatch-");
+  const config = createTestConfig(root);
+  config.github.dispatch_mode = "gh_cli";
+  config.github.repository = "example/repo";
+
+  const workflowInputs: Record<string, string>[] = [];
+  const artifactStore = new FileArtifactStore(config.artifacts_dir);
+  const github = new GitHubControlPlane(config, artifactStore, {
+    findBinary: () => "C:/Program Files/GitHub CLI/gh.exe",
+    runCli: (args, options) => {
+      if (args[0] === "auth") {
+        return {
+          ok: true,
+          exitCode: 0,
+          stdout: "Logged in to github.com",
+          stderr: "",
+          durationMs: 1,
+          timedOut: false
+        };
+      }
+      if (args[0] === "workflow" && args[1] === "view" && args[2] === "codex-head-gemini-review.yml") {
+        return {
+          ok: false,
+          exitCode: 1,
+          stdout: "",
+          stderr: "Unable to inspect remote workflow",
+          durationMs: 1,
+          timedOut: false
+        };
+      }
+
+      if (args[0] === "workflow" && args[1] === "run") {
+        workflowInputs.push(JSON.parse(options?.input ?? "{}") as Record<string, string>);
+      }
+      if (args[0] === "workflow" && args[1] === "run" && workflowInputs.length === 1) {
+        return {
+          ok: false,
+          exitCode: 1,
+          stdout: "",
+          stderr: "HTTP 422: Unexpected inputs provided: [\"review_profile\"]",
+          durationMs: 1,
+          timedOut: false
+        };
+      }
+
+      return {
+        ok: true,
+        exitCode: 0,
+        stdout: "https://github.com/example/repo/actions/runs/654",
+        stderr: "",
+        durationMs: 1,
+        timedOut: false
+      };
+    }
+  });
+
+  const task = createTaskSpec({
+    goal: "Review the generated patch in GitHub",
+    repo: root,
+    worker_target: "gemini-cli",
+    expected_output: { kind: "review", format: "markdown", code_change: false },
+    review_profile: "code_assist",
+    requires_github: true
+  });
+
+  const dispatch = github.prepareDispatch(task, routing("gemini-cli", "github"));
+  const receipt = github.dispatchWorkflow(task, routing("gemini-cli", "github"), dispatch);
+  assert.equal(workflowInputs.length, 2);
+  assert.equal(workflowInputs[0]?.review_profile, "code_assist");
+  assert.equal("review_profile" in (workflowInputs[1] ?? {}), false);
+  assert.equal(receipt.requested_review_profile, "code_assist");
+  assert.equal(receipt.dispatched_review_profile, null);
+  assert.equal(receipt.review_profile_dispatch_mode, "legacy_without_input");
+  assert.equal(receipt.run?.run_id, 654);
+
+  const storedInputs = JSON.parse(
+    readFileSync(resolve(config.artifacts_dir, task.task_id, "github-workflow-inputs.json"), "utf8")
+  ) as Record<string, string>;
+  assert.equal("review_profile" in storedInputs, false);
 });
 
 test("GitHubControlPlane can download a callback artifact for a task id", () => {
@@ -425,7 +553,7 @@ test("GitHubControlPlane can download a callback artifact for a task id", () => 
   );
 });
 
-test("GitHubControlPlane enriches callback download failures with queued self-hosted diagnosis", () => {
+test("GitHubControlPlane enriches callback download failures with queued self-hosted diagnosis", { concurrency: false }, () => {
   const root = createTempDir("codex-head-github-download-queued-");
   const config = createTestConfig(root);
   config.github.repository = "example/repo";
@@ -688,7 +816,7 @@ test("GitHubControlPlane resolves and waits for a workflow run by task id", asyn
   assert.equal(completed.conclusion, "success");
 });
 
-test("GitHubControlPlane diagnoses a queued self-hosted stall with a concrete message", async () => {
+test("GitHubControlPlane diagnoses a queued self-hosted stall with a concrete message", { concurrency: false }, async () => {
   const root = createTempDir("codex-head-github-queued-stall-");
   const config = createTestConfig(root);
   config.github.repository = "example/repo";
@@ -802,7 +930,7 @@ test("GitHubControlPlane diagnoses a queued self-hosted stall with a concrete me
   }
 });
 
-test("GitHubControlPlane can auto-recycle a stale self-hosted queued stall when enabled", async () => {
+test("GitHubControlPlane can auto-recycle a stale self-hosted queued stall when enabled", { concurrency: false }, async () => {
   const root = createTempDir("codex-head-github-auto-recycle-");
   const config = createTestConfig(root);
   config.github.repository = "example/repo";
@@ -943,7 +1071,7 @@ test("GitHubControlPlane can auto-recycle a stale self-hosted queued stall when 
   }
 });
 
-test("GitHubControlPlane escalates clearly when a run stays queued after auto-recycle", async () => {
+test("GitHubControlPlane escalates clearly when a run stays queued after auto-recycle", { concurrency: false }, async () => {
   const root = createTempDir("codex-head-github-auto-recycle-escalate-");
   const config = createTestConfig(root);
   config.github.repository = "example/repo";
@@ -1076,7 +1204,7 @@ test("GitHubControlPlane escalates clearly when a run stays queued after auto-re
   }
 });
 
-test("GitHubControlPlane carries manual-intervention guidance into callback sync after auto-recycle", () => {
+test("GitHubControlPlane carries manual-intervention guidance into callback sync after auto-recycle", { concurrency: false }, () => {
   const root = createTempDir("codex-head-github-download-escalate-");
   const config = createTestConfig(root);
   config.github.repository = "example/repo";

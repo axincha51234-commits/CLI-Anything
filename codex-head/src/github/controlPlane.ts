@@ -13,6 +13,7 @@ import type {
   TaskSpec,
   WorkerResult
 } from "../contracts";
+import { extractWorkflowDispatchInputs, inspectLocalReviewWorkflowDrift } from "./reviewWorkflowDrift";
 
 export interface GitHubDispatchInfo {
   workflow_name: string;
@@ -60,6 +61,19 @@ export interface GitHubRuntimeStatus {
     matches_target_labels: boolean;
   }>;
   runner_lookup_detail: string | null;
+  review_workflow_supports_review_profile?: boolean | null;
+  review_workflow_input_check_detail?: string | null;
+  review_workflow_declared_inputs?: string[] | null;
+  review_workflow_missing_dispatch_inputs?: string[] | null;
+  review_workflow_local_path?: string | null;
+  review_workflow_local_supports_review_profile?: boolean | null;
+  review_workflow_local_declared_inputs?: string[] | null;
+  review_workflow_git_branch?: string | null;
+  review_workflow_git_tracking_status?: string | null;
+  review_workflow_local_git_file_status?: string | null;
+  review_workflow_local_vs_origin_status?: string | null;
+  review_workflow_sync_action?: string | null;
+  review_workflow_sync_commands?: string[] | null;
 }
 
 export interface GitHubDispatchReceipt {
@@ -68,6 +82,9 @@ export interface GitHubDispatchReceipt {
   dispatched_at: string;
   command: string[];
   input_keys: string[];
+  requested_review_profile?: TaskSpec["review_profile"] | null;
+  dispatched_review_profile?: TaskSpec["review_profile"] | null;
+  review_profile_dispatch_mode?: "native" | "legacy_without_input" | null;
   gh_cli_path: string | null;
   gh_authenticated: boolean;
   gh_exit_code: number | null;
@@ -224,6 +241,15 @@ function parseRunsOnLabels(rawValue: string | null): string[] {
   return [];
 }
 
+function omitReviewProfileInput(workflowInputs: Record<string, string>): Record<string, string> {
+  const { review_profile: _ignored, ...rest } = workflowInputs;
+  return rest;
+}
+
+function isUnexpectedReviewProfileInputError(detail: string): boolean {
+  return /Unexpected inputs provided:\s*\[[^\]]*review_profile[^\]]*\]/i.test(detail);
+}
+
 function parseJsonOrNull<T>(raw: string): T | null {
   try {
     return JSON.parse(raw) as T;
@@ -349,6 +375,10 @@ export class GitHubControlPlane {
     let runsOnLabels: string[] = [];
     let matchingRunners: GitHubRuntimeStatus["matching_runners"] = [];
     let runnerLookupDetail: string | null = null;
+    let reviewWorkflowSupportsReviewProfile: boolean | null = null;
+    let reviewWorkflowInputCheckDetail: string | null = null;
+    let reviewWorkflowDeclaredInputs: string[] | null = null;
+    let reviewWorkflowMissingDispatchInputs: string[] | null = null;
 
     if (
       this.config.github.enabled
@@ -417,7 +447,45 @@ export class GitHubControlPlane {
           runnerLookupDetail = error instanceof Error ? error.message : String(error);
         }
       }
+
+      if (this.config.github.review_workflow) {
+        try {
+          const workflowViewResult = this.runCli([
+            "workflow",
+            "view",
+            this.config.github.review_workflow,
+            "-R",
+            this.config.github.repository,
+            "--yaml"
+          ]);
+
+          if (workflowViewResult.ok) {
+            const workflowYaml = workflowViewResult.stdout || "";
+            reviewWorkflowDeclaredInputs = extractWorkflowDispatchInputs(workflowYaml);
+            reviewWorkflowSupportsReviewProfile = reviewWorkflowDeclaredInputs.includes("review_profile");
+            if (!reviewWorkflowSupportsReviewProfile) {
+              reviewWorkflowMissingDispatchInputs = ["review_profile"];
+              reviewWorkflowInputCheckDetail =
+                `Remote review workflow ${this.config.github.review_workflow} does not declare workflow_dispatch input review_profile.`;
+            } else {
+              reviewWorkflowMissingDispatchInputs = [];
+            }
+          } else {
+            reviewWorkflowInputCheckDetail = workflowViewResult.stderr.trim()
+              || workflowViewResult.stdout.trim()
+              || `Unable to inspect remote workflow ${this.config.github.review_workflow}.`;
+          }
+        } catch (error) {
+          reviewWorkflowInputCheckDetail = error instanceof Error ? error.message : String(error);
+        }
+      }
     }
+
+    const localReviewWorkflowDrift = inspectLocalReviewWorkflowDrift(
+      this.config.app_root,
+      this.config.github.review_workflow,
+      reviewWorkflowDeclaredInputs ?? []
+    );
 
     return {
       enabled: this.config.github.enabled,
@@ -439,7 +507,20 @@ export class GitHubControlPlane {
       recycle_script_path: recycleScriptPath,
       recycle_script_available: existsSync(recycleScriptPath),
       matching_runners: matchingRunners,
-      runner_lookup_detail: runnerLookupDetail
+      runner_lookup_detail: runnerLookupDetail,
+      review_workflow_supports_review_profile: reviewWorkflowSupportsReviewProfile,
+      review_workflow_input_check_detail: reviewWorkflowInputCheckDetail,
+      review_workflow_declared_inputs: reviewWorkflowDeclaredInputs,
+      review_workflow_missing_dispatch_inputs: reviewWorkflowMissingDispatchInputs,
+      review_workflow_local_path: localReviewWorkflowDrift.local_workflow_path,
+      review_workflow_local_supports_review_profile: localReviewWorkflowDrift.local_supports_review_profile,
+      review_workflow_local_declared_inputs: localReviewWorkflowDrift.local_declared_inputs,
+      review_workflow_git_branch: localReviewWorkflowDrift.git_branch,
+      review_workflow_git_tracking_status: localReviewWorkflowDrift.git_tracking_status,
+      review_workflow_local_git_file_status: localReviewWorkflowDrift.local_git_file_status,
+      review_workflow_local_vs_origin_status: localReviewWorkflowDrift.local_vs_origin_status,
+      review_workflow_sync_action: localReviewWorkflowDrift.sync_action,
+      review_workflow_sync_commands: localReviewWorkflowDrift.sync_commands
     };
   }
 
@@ -840,7 +921,23 @@ export class GitHubControlPlane {
       task,
       routing
     };
-    const workflowInputs = this.buildWorkflowInputs(task, routing, dispatch.workflow_name, payload);
+    const requestedReviewProfile = task.review_profile ?? "standard";
+    let workflowInputs = this.buildWorkflowInputs(task, routing, dispatch.workflow_name, payload);
+    let reviewProfileDispatchMode: GitHubDispatchReceipt["review_profile_dispatch_mode"] =
+      dispatch.workflow_name === this.config.github.review_workflow && workflowInputs.review_profile
+        ? "native"
+        : null;
+
+    if (
+      dispatch.workflow_name === this.config.github.review_workflow
+      && runtime.review_workflow_supports_review_profile === false
+      && workflowInputs.review_profile
+    ) {
+      workflowInputs = omitReviewProfileInput(workflowInputs);
+      reviewProfileDispatchMode = "legacy_without_input";
+      this.artifactStore.writeJson(task.task_id, "github-workflow-inputs.json", workflowInputs);
+    }
+
     const args = [
       "workflow",
       "run",
@@ -851,9 +948,24 @@ export class GitHubControlPlane {
       task.base_branch,
       "--json"
     ];
-    const result = this.runCli(args, {
+    let result = this.runCli(args, {
       input: JSON.stringify(workflowInputs)
     });
+
+    const initialDispatchDetail = `${result.stderr.trim()} ${result.stdout.trim()}`.trim();
+    if (
+      !result.ok
+      && dispatch.workflow_name === this.config.github.review_workflow
+      && workflowInputs.review_profile
+      && isUnexpectedReviewProfileInputError(initialDispatchDetail)
+    ) {
+      workflowInputs = omitReviewProfileInput(workflowInputs);
+      reviewProfileDispatchMode = "legacy_without_input";
+      this.artifactStore.writeJson(task.task_id, "github-workflow-inputs.json", workflowInputs);
+      result = this.runCli(args, {
+        input: JSON.stringify(workflowInputs)
+      });
+    }
 
     const receipt: GitHubDispatchReceipt = {
       workflow_name: dispatch.workflow_name,
@@ -861,6 +973,13 @@ export class GitHubControlPlane {
       dispatched_at: new Date().toISOString(),
       command: [this.config.github.cli_binary, ...args],
       input_keys: Object.keys(workflowInputs),
+      requested_review_profile: dispatch.workflow_name === this.config.github.review_workflow
+        ? requestedReviewProfile
+        : null,
+      dispatched_review_profile: dispatch.workflow_name === this.config.github.review_workflow
+        ? ((workflowInputs.review_profile as TaskSpec["review_profile"] | undefined) ?? null)
+        : null,
+      review_profile_dispatch_mode: reviewProfileDispatchMode,
       gh_cli_path: runtime.gh_cli_path,
       gh_authenticated: runtime.gh_authenticated,
       gh_exit_code: result.exitCode,
@@ -1038,7 +1157,7 @@ export class GitHubControlPlane {
       throw new Error("GitHub run wait requires github.repository to be configured");
     }
 
-    const deadline = Date.now() + Math.max(1, timeoutMs);
+    let deadline = Date.now() + Math.max(1, timeoutMs);
     let monitoredSince = Date.now();
     let recycleAttempted = false;
     let recycleSucceeded = false;
@@ -1056,6 +1175,11 @@ export class GitHubControlPlane {
             if (recycleReceipt.ok) {
               recycleSucceeded = true;
               monitoredSince = Date.now();
+              const recycleGraceMs = Math.min(
+                30_000,
+                Math.max(intervalMs * 4, queueDiagnosisThresholdMs * 2, 1_000)
+              );
+              deadline = Math.max(deadline, monitoredSince + recycleGraceMs);
               lastQueueDiagnosis = null;
               continue;
             }
@@ -1416,6 +1540,7 @@ export class GitHubControlPlane {
         base_branch: task.base_branch,
         work_branch: task.work_branch,
         execution_target: routing.fallback_from ?? task.worker_target,
+        review_profile: task.review_profile ?? "standard",
         review_policy: JSON.stringify(task.review_policy),
         expected_output: JSON.stringify(task.expected_output),
         prior_result_status: "awaiting_review"

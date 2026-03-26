@@ -197,10 +197,37 @@ test("CodexHeadPlanner keeps GitHub-shaped goals local when GitHub is disabled",
   assert.equal(reviewPlan.tasks[0]?.worker_target, "gemini-cli");
   assert.equal(reviewPlan.tasks[0]?.requires_github, false);
   assert.equal(reviewPlan.tasks[0]?.expected_output.kind, "review");
+  assert.equal(reviewPlan.tasks[0]?.review_profile, "standard");
   assert.equal(reviewPlan.tasks[0]?.timeout_sec, 60);
   assert.equal(patchPlan.tasks[0]?.artifact_policy.mode, "patch_artifact");
   assert.deepEqual(patchPlan.tasks[0]?.review_policy.required_reviewers, ["gemini-cli", "codex-cli"]);
   assert.equal(patchPlan.tasks[0]?.review_policy.require_all, false);
+});
+
+test("CodexHeadPlanner marks research-heavy review goals for Perplexity-style providers", () => {
+  const root = createTempDir("codex-head-planner-review-research-");
+  const planner = new CodexHeadPlanner([], {
+    github_enabled: true,
+    antigravity_enabled: false,
+    local_reviewers: ["gemini-cli", "codex-cli"]
+  });
+  const plan = planner.planGoal("Review the latest dependency changes and verify current release notes in GitHub", root);
+
+  assert.equal(plan.tasks[0]?.expected_output.kind, "review");
+  assert.equal(plan.tasks[0]?.review_profile, "research");
+});
+
+test("CodexHeadPlanner marks code-assist review goals for Blackbox-style providers", () => {
+  const root = createTempDir("codex-head-planner-review-code-assist-");
+  const planner = new CodexHeadPlanner([], {
+    github_enabled: true,
+    antigravity_enabled: false,
+    local_reviewers: ["gemini-cli", "codex-cli"]
+  });
+  const plan = planner.planGoal("Review the latest PR and suggest API usage examples plus refactor snippets", root);
+
+  assert.equal(plan.tasks[0]?.expected_output.kind, "review");
+  assert.equal(plan.tasks[0]?.review_profile, "code_assist");
 });
 
 test("CodexHeadPlanner keeps research tasks off antigravity when the feature flag is disabled", () => {

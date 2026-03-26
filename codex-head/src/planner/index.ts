@@ -1,4 +1,4 @@
-import type { HeadPlan, TaskSpec, WorkerTarget } from "../contracts";
+import type { HeadPlan, ReviewProviderProfile, TaskSpec, WorkerTarget } from "../contracts";
 import { createTaskSpec } from "../schema";
 
 interface PlannerOptions {
@@ -36,6 +36,26 @@ function inferExpectedOutput(goal: string, workerTarget: WorkerTarget): TaskSpec
   }
 
   return { kind: "analysis", format: "markdown", code_change: false };
+}
+
+function inferReviewProfile(goal: string, expectedOutput: TaskSpec["expected_output"]): ReviewProviderProfile | null {
+  if (expectedOutput.kind !== "review") {
+    return null;
+  }
+
+  const normalized = goal.toLowerCase();
+  if (/(snippet|sample|example|boilerplate|prototype|scaffold|api usage|implementation idea|refactor suggestion|explain code|code assist|code assistant)/.test(normalized)) {
+    return "code_assist";
+  }
+
+  if (
+    /(research|investigate|fact-?check|citation|source|docs|documentation|changelog|release notes|dependency changes)/.test(normalized)
+    || /verify .*?(release|doc|documentation|dependency|version|source|citation|news)/.test(normalized)
+  ) {
+    return "research";
+  }
+
+  return "standard";
 }
 
 function inferTimeoutSec(workerTarget: WorkerTarget, expectsCodeChange: boolean, requiresGitHub: boolean): number {
@@ -78,6 +98,7 @@ export class CodexHeadPlanner {
     const githubShapedGoal = /(issue|pr|pull request|github|workflow|triage)/.test(normalized);
     const workerTarget = inferWorkerTarget(goal, this.options);
     const expectedOutput = inferExpectedOutput(goal, workerTarget);
+    const reviewProfile = inferReviewProfile(goal, expectedOutput);
     const expectsCodeChange = expectedOutput.code_change;
     const requiresGithub = githubShapedGoal && this.options.github_enabled;
     const task: TaskSpec = createTaskSpec({
@@ -85,6 +106,7 @@ export class CodexHeadPlanner {
       repo,
       worker_target: workerTarget,
       expected_output: expectedOutput,
+      review_profile: reviewProfile,
       review_policy: expectsCodeChange
         ? (requiresGithub
           ? {
