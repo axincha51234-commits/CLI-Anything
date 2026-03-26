@@ -121,6 +121,10 @@ export class TaskRouter {
     const delayedTargets: WorkerTarget[] = [];
     const preferLocalExecution = task.requires_github
       && this.config.github.execution_preference === "local_preferred";
+    const preferProfileAlignedGitHub = preferLocalExecution
+      && task.expected_output.kind === "review"
+      && task.review_profile !== null
+      && task.review_profile !== "standard";
     const requiredModeOverride = options.required_mode;
 
     const candidateTargets = [
@@ -160,6 +164,47 @@ export class TaskRouter {
     }
 
     if (preferLocalExecution) {
+      if (preferProfileAlignedGitHub) {
+        const primaryLocalDecision = await this.resolveForMode(
+          task,
+          [task.worker_target],
+          "local",
+          deprioritized,
+          fallbackFrom
+        );
+        if (primaryLocalDecision) {
+          return primaryLocalDecision;
+        }
+
+        const githubDecision = await this.resolveForMode(
+          task,
+          orderedCandidates,
+          "github",
+          deprioritized,
+          fallbackFrom
+        );
+        if (githubDecision) {
+          return githubDecision;
+        }
+
+        const localFallbackDecision = await this.resolveForMode(
+          task,
+          orderedCandidates.filter((candidate) => candidate !== task.worker_target),
+          "local",
+          deprioritized,
+          fallbackFrom
+        );
+        if (localFallbackDecision) {
+          return localFallbackDecision;
+        }
+
+        throw new Error(
+          this.config.github.enabled
+            ? `No local or GitHub-capable adapter is available for ${task.task_id}`
+            : `No local adapter is healthy for ${task.task_id}`
+        );
+      }
+
       const localDecision = await this.resolveForMode(
         task,
         orderedCandidates,

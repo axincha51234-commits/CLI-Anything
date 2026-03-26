@@ -50,13 +50,25 @@ function stripFlag(args: string[], flag: string): {
 function parseRunGoalArgs(args: string[]): {
   goal: string;
   repository?: string;
+  baseBranch?: string;
+  workBranch?: string;
   dispatchMode?: "artifacts_only" | "gh_cli";
   timeoutSec?: number;
   intervalSec?: number;
   publishMirror: boolean;
 } {
+  const readFlagValue = (flag: string, index: number): string => {
+    const next = args[index + 1];
+    if (!next || next.startsWith("--")) {
+      throw new Error(`${flag} requires a value`);
+    }
+    return next;
+  };
+
   const goalParts: string[] = [];
   let repository: string | undefined;
+  let baseBranch: string | undefined;
+  let workBranch: string | undefined;
   let dispatchMode: "artifacts_only" | "gh_cli" | undefined;
   let timeoutSec: number | undefined;
   let intervalSec: number | undefined;
@@ -65,29 +77,53 @@ function parseRunGoalArgs(args: string[]): {
   for (let index = 0; index < args.length; index += 1) {
     const current = args[index];
     if (current === "--repo") {
-      repository = args[index + 1];
+      repository = readFlagValue("--repo", index);
+      index += 1;
+      continue;
+    }
+    if (current === "--base-branch") {
+      baseBranch = readFlagValue("--base-branch", index);
+      index += 1;
+      continue;
+    }
+    if (current === "--work-branch") {
+      workBranch = readFlagValue("--work-branch", index);
       index += 1;
       continue;
     }
     if (current === "--dispatch-mode") {
-      const next = args[index + 1];
-      dispatchMode = next === "artifacts_only" ? "artifacts_only" : "gh_cli";
+      const next = readFlagValue("--dispatch-mode", index);
+      if (next !== "artifacts_only" && next !== "gh_cli") {
+        throw new Error("--dispatch-mode must be gh_cli or artifacts_only");
+      }
+      dispatchMode = next;
       index += 1;
       continue;
     }
     if (current === "--timeout-sec") {
-      timeoutSec = Number(args[index + 1]);
+      timeoutSec = Number(readFlagValue("--timeout-sec", index));
+      if (!Number.isFinite(timeoutSec) || timeoutSec <= 0) {
+        throw new Error("--timeout-sec must be a positive number");
+      }
       index += 1;
       continue;
     }
     if (current === "--interval-sec") {
-      intervalSec = Number(args[index + 1]);
+      intervalSec = Number(readFlagValue("--interval-sec", index));
+      if (!Number.isFinite(intervalSec) || intervalSec <= 0) {
+        throw new Error("--interval-sec must be a positive number");
+      }
       index += 1;
       continue;
     }
     if (current === "--no-mirror") {
       publishMirror = false;
       continue;
+    }
+    if (current.startsWith("--")) {
+      throw new Error(
+        "run-goal only accepts --repo, --base-branch, --work-branch, --dispatch-mode, --timeout-sec, --interval-sec, and --no-mirror"
+      );
     }
     goalParts.push(current);
   }
@@ -100,10 +136,29 @@ function parseRunGoalArgs(args: string[]): {
   return {
     goal,
     repository,
+    baseBranch,
+    workBranch,
     dispatchMode,
     timeoutSec,
     intervalSec,
     publishMirror
+  };
+}
+
+export { parseRunGoalArgs };
+
+type RunGoalGitHubOverride = {
+  repository: string;
+  dispatch_mode: "artifacts_only" | "gh_cli";
+};
+
+export function buildRunGoalGitHubOverride(
+  repository: string,
+  dispatchMode?: "artifacts_only" | "gh_cli"
+): RunGoalGitHubOverride {
+  return {
+    repository,
+    dispatch_mode: dispatchMode ?? "gh_cli"
   };
 }
 
@@ -630,7 +685,7 @@ function usage(): void {
     [
       "Usage:",
       `  ${CLI_USAGE_PREFIX} health`,
-      `  ${CLI_USAGE_PREFIX} run-goal [--repo OWNER/REPO] [--dispatch-mode gh_cli|artifacts_only] [--timeout-sec N] [--interval-sec N] [--no-mirror] <goal>`,
+      `  ${CLI_USAGE_PREFIX} run-goal [--repo OWNER/REPO] [--base-branch NAME] [--work-branch NAME] [--dispatch-mode gh_cli|artifacts_only] [--timeout-sec N] [--interval-sec N] [--no-mirror] <goal>`,
       `  ${CLI_USAGE_PREFIX} plan <goal>`,
       `  ${CLI_USAGE_PREFIX} configure-github-repo <owner/repo> [dispatch-mode]`,
       `  ${CLI_USAGE_PREFIX} enqueue <task-id>`,
@@ -660,7 +715,7 @@ function usage(): void {
   );
 }
 
-async function main(): Promise<void> {
+export async function main(): Promise<void> {
   const [command, ...rest] = process.argv.slice(2);
   const orchestrator = new CodexHeadOrchestrator();
 
@@ -724,12 +779,14 @@ async function main(): Promise<void> {
       if (!status.accessible) {
         throw new Error(`GitHub repository validation failed: ${status.detail}`);
       }
-      updateGitHubConfig(orchestrator.config.app_root, {
-        enabled: true,
-        repository: status.repository,
-        dispatch_mode: parsed.dispatchMode ?? "gh_cli"
+      workingOrchestrator = new CodexHeadOrchestrator({
+        ...orchestrator.config,
+        github: {
+          ...orchestrator.config.github,
+          enabled: true,
+          ...buildRunGoalGitHubOverride(status.repository, parsed.dispatchMode)
+        }
       });
-      workingOrchestrator = new CodexHeadOrchestrator();
     }
 
     const previewPlan = workingOrchestrator.planGoal(parsed.goal);
@@ -769,6 +826,8 @@ async function main(): Promise<void> {
     }
 
     printJson(await workingOrchestrator.runGoal(parsed.goal, {
+      base_branch: parsed.baseBranch,
+      work_branch: parsed.workBranch,
       publish_github_mirror: parsed.publishMirror,
       timeout_sec: parsed.timeoutSec,
       interval_sec: parsed.intervalSec
@@ -1083,8 +1142,10 @@ async function main(): Promise<void> {
   process.exitCode = 1;
 }
 
-main().catch((error: unknown) => {
-  const message = error instanceof Error ? error.message : String(error);
-  process.stderr.write(`${message}\n`);
-  process.exitCode = 1;
-});
+if (require.main === module) {
+  main().catch((error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`${message}\n`);
+    process.exitCode = 1;
+  });
+}

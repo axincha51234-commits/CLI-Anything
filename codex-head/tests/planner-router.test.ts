@@ -139,6 +139,44 @@ test("TaskRouter uses another healthy local worker before GitHub fallback in loc
   assert.equal(decision.fallback_from, "gemini-cli");
 });
 
+test("TaskRouter prefers GitHub review routing over generic local fallback for research profiles in local-preferred mode", async () => {
+  const root = createTempDir("codex-head-router-gh-research-profile-");
+  const config = createTestConfig(root);
+  config.github.execution_preference = "local_preferred";
+  config.command_templates["gemini-cli"].local = undefined;
+  const registry = new AdapterRegistry();
+
+  registry.register(new FakeAdapter(
+    makeCapability("gemini-cli"),
+    createHealthyHealth("gemini-cli"),
+    async () => {
+      throw new Error("should not execute");
+    }
+  ));
+  registry.register(new FakeAdapter(
+    makeCapability("codex-cli", { supports_github: false }),
+    createHealthyHealth("codex-cli"),
+    async () => {
+      throw new Error("should not execute");
+    }
+  ));
+
+  const router = new TaskRouter(registry, config);
+  const task = createTaskSpec({
+    goal: "Review dependency updates and verify release notes in GitHub",
+    repo: root,
+    worker_target: "gemini-cli",
+    expected_output: { kind: "review", format: "markdown", code_change: false },
+    requires_github: true,
+    review_profile: "research"
+  });
+
+  const decision = await router.resolve(task);
+  assert.equal(decision.mode, "github");
+  assert.equal(decision.worker_target, "gemini-cli");
+  assert.equal(decision.fallback_from, null);
+});
+
 test("TaskRouter falls back to GitHub execution when local-preferred mode has no healthy local worker", async () => {
   const root = createTempDir("codex-head-router-gh-remote-fallback-");
   const config = createTestConfig(root);

@@ -484,6 +484,354 @@ test("runGoal fails fast when a latest PR review has no open pull request target
   assert.equal((orchestrator as any).taskStore.listTasks().length, 0);
 });
 
+test("runGoal hydrates latest PR reviews with the live head branch before dispatch", async () => {
+  const root = createTempDir("codex-head-run-goal-pr-head-");
+  const registry = new AdapterRegistry();
+
+  registry.register(new FakeAdapter(
+    makeCapability("gemini-cli"),
+    createHealthyHealth("gemini-cli"),
+    async () => {
+      throw new Error("GitHub review should not run locally");
+    }
+  ));
+
+  registry.register(new FakeAdapter(
+    makeCapability("codex-cli"),
+    createHealthyHealth("codex-cli"),
+    async () => {
+      throw new Error("should not execute");
+    }
+  ));
+
+  registry.register(new FakeAdapter(
+    makeCapability("claude-code"),
+    createHealthyHealth("claude-code"),
+    async () => {
+      throw new Error("should not execute");
+    }
+  ));
+
+  registry.register(new FakeAdapter(
+    makeCapability("antigravity", { supports_local: false, supports_github: false }),
+    createHealthyHealth("antigravity"),
+    async () => {
+      throw new Error("should not execute");
+    }
+  ));
+
+  const config = createTestConfig(root);
+  config.github.dispatch_mode = "gh_cli";
+  config.github.repository = "example/repo";
+  const orchestrator = createAppWithRegistry(root, registry, config);
+
+  let dispatchedWorkBranch = "";
+  let dispatchedBaseBranch = "";
+  (orchestrator as any).github = {
+    shouldDispatchLive: () => true,
+    findLatestPullRequest: () => ({
+      repository: "example/repo",
+      found: true,
+      number: 42,
+      url: "https://github.com/example/repo/pull/42",
+      title: "Latest PR",
+      head_branch: "feature/live-head",
+      base_branch: "main",
+      gh_cli_path: "gh",
+      gh_authenticated: true,
+      detail: "ok"
+    }),
+    findRemoteBranch: (branch: string) => ({
+      repository: "example/repo",
+      branch,
+      found: branch === "feature/live-head",
+      sha: branch === "feature/live-head" ? "abc123" : null,
+      protected: false,
+      gh_cli_path: "gh",
+      gh_authenticated: true,
+      detail: branch === "feature/live-head" ? "ok" : `Remote branch '${branch}' was not found in example/repo`
+    }),
+    prepareDispatch: (task: any) => {
+      dispatchedWorkBranch = task.work_branch;
+      dispatchedBaseBranch = task.base_branch;
+      return {
+        workflow_name: "codex-head-gemini-review.yml",
+        payload_path: `${root}/${task.task_id}-dispatch.json`,
+        workflow_inputs_path: `${root}/${task.task_id}-inputs.json`,
+        issue_path: `${root}/${task.task_id}-issue.md`,
+        pr_path: null
+      };
+    },
+    publishMirror: () => null,
+    dispatchWorkflow: (task: any) => ({
+      workflow_name: "codex-head-gemini-review.yml",
+      repository: "example/repo",
+      dispatched_at: new Date().toISOString(),
+      command: ["gh", "workflow", "run"],
+      input_keys: ["task_id"],
+      gh_cli_path: "gh",
+      gh_authenticated: true,
+      gh_exit_code: 0,
+      gh_stdout: "https://github.com/example/repo/actions/runs/987",
+      gh_stderr: "",
+      run: {
+        run_id: 987,
+        run_url: "https://github.com/example/repo/actions/runs/987",
+        workflow_name: "codex-head-gemini-review.yml",
+        status: "requested",
+        conclusion: null,
+        updated_at: Date.now()
+      },
+      run_lookup: "stdout"
+    }),
+    waitForRunCompletion: async () => ({
+      run_id: 987,
+      run_url: "https://github.com/example/repo/actions/runs/987",
+      workflow_name: "codex-head-gemini-review.yml",
+      status: "completed",
+      conclusion: "success",
+      updated_at: Date.now()
+    }),
+    downloadCallbackArtifact: (taskId: string) => {
+      const callbackPath = orchestrator.artifactStore.writeJson(taskId, "run-goal-callback.json", {
+        task_id: taskId,
+        worker_target: "gemini-cli",
+        status: "completed",
+        review_verdict: "commented",
+        summary: "Automatic run-goal completed",
+        artifacts: [],
+        patch_ref: null,
+        log_ref: null,
+        cost: 0,
+        duration_ms: 0,
+        next_action: "review",
+        review_notes: []
+      });
+      return {
+        task_id: taskId,
+        repository: "example/repo",
+        download_dir: root,
+        callback_path: callbackPath,
+        artifact_name: "codex-head-github-callback",
+        run_id: 987
+      };
+    },
+    resolveTaskRun: () => null
+  };
+
+  const result = await orchestrator.runGoal("Review the latest PR in GitHub", {
+    publish_github_mirror: false,
+    timeout_sec: 1,
+    interval_sec: 1
+  });
+
+  assert.equal(dispatchedBaseBranch, "main");
+  assert.equal(dispatchedWorkBranch, "feature/live-head");
+  assert.equal(result.task.task.work_branch, "feature/live-head");
+});
+
+test("runGoal fails fast when a generic GitHub review only has a placeholder work branch", async () => {
+  const root = createTempDir("codex-head-run-goal-placeholder-branch-");
+  const registry = new AdapterRegistry();
+
+  registry.register(new FakeAdapter(
+    makeCapability("gemini-cli"),
+    createHealthyHealth("gemini-cli"),
+    async () => {
+      throw new Error("should not execute");
+    }
+  ));
+
+  registry.register(new FakeAdapter(
+    makeCapability("codex-cli"),
+    createHealthyHealth("codex-cli"),
+    async () => {
+      throw new Error("should not execute");
+    }
+  ));
+
+  registry.register(new FakeAdapter(
+    makeCapability("claude-code"),
+    createHealthyHealth("claude-code"),
+    async () => {
+      throw new Error("should not execute");
+    }
+  ));
+
+  registry.register(new FakeAdapter(
+    makeCapability("antigravity", { supports_local: false, supports_github: false }),
+    createHealthyHealth("antigravity"),
+    async () => {
+      throw new Error("should not execute");
+    }
+  ));
+
+  const config = createTestConfig(root);
+  config.github.dispatch_mode = "gh_cli";
+  config.github.repository = "example/repo";
+  const orchestrator = createAppWithRegistry(root, registry, config);
+
+  (orchestrator as any).github = {
+    shouldDispatchLive: () => true,
+    findRemoteBranch: (branch: string) => ({
+      repository: "example/repo",
+      branch,
+      found: false,
+      sha: null,
+      protected: null,
+      gh_cli_path: "gh",
+      gh_authenticated: true,
+      detail: `Remote branch '${branch}' was not found in example/repo`
+    })
+  };
+
+  await assert.rejects(
+    orchestrator.runGoal("Review the dependency update and verify release notes in GitHub"),
+    /GitHub review requires a real remote work branch or open pull request[\s\S]*--base-branch NAME --work-branch NAME/i
+  );
+  assert.equal((orchestrator as any).taskStore.listTasks().length, 0);
+});
+
+test("runGoal accepts explicit review branches for generic GitHub review goals", async () => {
+  const root = createTempDir("codex-head-run-goal-explicit-branch-");
+  const registry = new AdapterRegistry();
+
+  registry.register(new FakeAdapter(
+    makeCapability("gemini-cli"),
+    createHealthyHealth("gemini-cli"),
+    async () => {
+      throw new Error("GitHub review should not run locally");
+    }
+  ));
+
+  registry.register(new FakeAdapter(
+    makeCapability("codex-cli"),
+    createHealthyHealth("codex-cli"),
+    async () => {
+      throw new Error("should not execute");
+    }
+  ));
+
+  registry.register(new FakeAdapter(
+    makeCapability("claude-code"),
+    createHealthyHealth("claude-code"),
+    async () => {
+      throw new Error("should not execute");
+    }
+  ));
+
+  registry.register(new FakeAdapter(
+    makeCapability("antigravity", { supports_local: false, supports_github: false }),
+    createHealthyHealth("antigravity"),
+    async () => {
+      throw new Error("should not execute");
+    }
+  ));
+
+  const config = createTestConfig(root);
+  config.github.dispatch_mode = "gh_cli";
+  config.github.repository = "example/repo";
+  const orchestrator = createAppWithRegistry(root, registry, config);
+
+  let dispatchedBaseBranch = "";
+  let dispatchedWorkBranch = "";
+  (orchestrator as any).github = {
+    shouldDispatchLive: () => true,
+    findRemoteBranch: (branch: string) => ({
+      repository: "example/repo",
+      branch,
+      found: branch === "release/dependency-bump",
+      sha: branch === "release/dependency-bump" ? "def456" : null,
+      protected: false,
+      gh_cli_path: "gh",
+      gh_authenticated: true,
+      detail: branch === "release/dependency-bump" ? "ok" : `Remote branch '${branch}' was not found in example/repo`
+    }),
+    prepareDispatch: (task: any) => {
+      dispatchedBaseBranch = task.base_branch;
+      dispatchedWorkBranch = task.work_branch;
+      return {
+        workflow_name: "codex-head-gemini-review.yml",
+        payload_path: `${root}/${task.task_id}-dispatch.json`,
+        workflow_inputs_path: `${root}/${task.task_id}-inputs.json`,
+        issue_path: `${root}/${task.task_id}-issue.md`,
+        pr_path: null
+      };
+    },
+    publishMirror: () => null,
+    dispatchWorkflow: () => ({
+      workflow_name: "codex-head-gemini-review.yml",
+      repository: "example/repo",
+      dispatched_at: new Date().toISOString(),
+      command: ["gh", "workflow", "run"],
+      input_keys: ["task_id"],
+      gh_cli_path: "gh",
+      gh_authenticated: true,
+      gh_exit_code: 0,
+      gh_stdout: "https://github.com/example/repo/actions/runs/654",
+      gh_stderr: "",
+      run: {
+        run_id: 654,
+        run_url: "https://github.com/example/repo/actions/runs/654",
+        workflow_name: "codex-head-gemini-review.yml",
+        status: "requested",
+        conclusion: null,
+        updated_at: Date.now()
+      },
+      run_lookup: "stdout"
+    }),
+    waitForRunCompletion: async () => ({
+      run_id: 654,
+      run_url: "https://github.com/example/repo/actions/runs/654",
+      workflow_name: "codex-head-gemini-review.yml",
+      status: "completed",
+      conclusion: "success",
+      updated_at: Date.now()
+    }),
+    downloadCallbackArtifact: (taskId: string) => {
+      const callbackPath = orchestrator.artifactStore.writeJson(taskId, "run-goal-callback.json", {
+        task_id: taskId,
+        worker_target: "gemini-cli",
+        status: "completed",
+        review_verdict: "commented",
+        summary: "Explicit branch review completed",
+        artifacts: [],
+        patch_ref: null,
+        log_ref: null,
+        cost: 0,
+        duration_ms: 0,
+        next_action: "review",
+        review_notes: []
+      });
+      return {
+        task_id: taskId,
+        repository: "example/repo",
+        download_dir: root,
+        callback_path: callbackPath,
+        artifact_name: "codex-head-github-callback",
+        run_id: 654
+      };
+    },
+    resolveTaskRun: () => null
+  };
+
+  const result = await orchestrator.runGoal(
+    "Review the dependency update and verify release notes in GitHub",
+    {
+      base_branch: "main",
+      work_branch: "release/dependency-bump",
+      publish_github_mirror: false,
+      timeout_sec: 1,
+      interval_sec: 1
+    }
+  );
+
+  assert.equal(dispatchedBaseBranch, "main");
+  assert.equal(dispatchedWorkBranch, "release/dependency-bump");
+  assert.equal(result.task.task.work_branch, "release/dependency-bump");
+  assert.equal(result.outcome.state, "completed");
+});
+
 test("dispatchNext fails a latest PR review task cleanly when no open pull request is available", async () => {
   const root = createTempDir("codex-head-dispatch-no-pr-");
   const registry = new AdapterRegistry();
@@ -535,6 +883,77 @@ test("dispatchNext fails a latest PR review task cleanly when no open pull reque
   const outcome = await orchestrator.dispatchNext();
   assert.equal(outcome?.state, "failed");
   assert.match(outcome?.detail ?? "", /No open pull request is available in example\/repo/i);
+  assert.equal(orchestrator.getTask(task.task.task_id).state, "failed");
+});
+
+test("dispatchNext fails a generic GitHub review task cleanly when work branch is not on origin", async () => {
+  const root = createTempDir("codex-head-dispatch-missing-remote-branch-");
+  const registry = new AdapterRegistry();
+
+  registry.register(new FakeAdapter(
+    makeCapability("gemini-cli"),
+    createHealthyHealth("gemini-cli"),
+    async () => {
+      throw new Error("should not execute");
+    }
+  ));
+
+  registry.register(new FakeAdapter(
+    makeCapability("codex-cli"),
+    createHealthyHealth("codex-cli"),
+    async () => {
+      throw new Error("should not execute");
+    }
+  ));
+
+  registry.register(new FakeAdapter(
+    makeCapability("claude-code"),
+    createHealthyHealth("claude-code"),
+    async () => {
+      throw new Error("should not execute");
+    }
+  ));
+
+  registry.register(new FakeAdapter(
+    makeCapability("antigravity", { supports_local: false, supports_github: false }),
+    createHealthyHealth("antigravity"),
+    async () => {
+      throw new Error("should not execute");
+    }
+  ));
+
+  const config = createTestConfig(root);
+  config.github.dispatch_mode = "gh_cli";
+  config.github.repository = "example/repo";
+  const orchestrator = createAppWithRegistry(root, registry, config);
+
+  (orchestrator as any).github = {
+    shouldDispatchLive: () => true,
+    findRemoteBranch: (branch: string) => ({
+      repository: "example/repo",
+      branch,
+      found: false,
+      sha: null,
+      protected: null,
+      gh_cli_path: "gh",
+      gh_authenticated: true,
+      detail: `Remote branch '${branch}' was not found in example/repo`
+    })
+  };
+
+  const task = orchestrator.submitTask(createTaskSpec({
+    goal: "Review the dependency update and verify release notes in GitHub",
+    repo: root,
+    worker_target: "gemini-cli",
+    expected_output: { kind: "review", format: "markdown", code_change: false },
+    review_profile: "research",
+    requires_github: true
+  }));
+  orchestrator.enqueueTask(task.task.task_id);
+
+  const outcome = await orchestrator.dispatchNext();
+  assert.equal(outcome?.state, "failed");
+  assert.match(outcome?.detail ?? "", /GitHub review requires a real remote work branch or open pull request[\s\S]*--base-branch NAME --work-branch NAME/i);
   assert.equal(orchestrator.getTask(task.task.task_id).state, "failed");
 });
 

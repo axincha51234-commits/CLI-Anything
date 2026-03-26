@@ -156,6 +156,11 @@ currently local-ready and exposes the matching cooldown reason.
 - `github.execution_preference = "local_preferred"` is now the practical
   hybrid mode: keep GitHub as mirror/control plane, but execute locally first
   and only fall through to GitHub execution when the local chain is unusable.
+  Review tasks with specialized `review_profile` values such as `research` and
+  `code_assist` are a deliberate exception: Codex Head still gives the primary
+  local worker one chance, but if that worker is not locally ready it prefers
+  the profile-aligned GitHub review path before generic local fallback workers
+  like `codex-cli`.
 - `run-goal` can auto-upgrade GitHub tasks to live `gh_cli` dispatch for the
   current run, but a real target repo still has to be discoverable or supplied.
 - GitHub issue and PR mirror publishing is now supported, but automatic mirror
@@ -199,6 +204,19 @@ currently local-ready and exposes the matching cooldown reason.
   `review_profile` workflow input, `doctor` reports that drift and live review
   dispatch automatically falls back to legacy standard routing instead of
   failing with `HTTP 422`.
+- GitHub review preflight is now stricter for live review tasks:
+  - `Review the latest PR in GitHub` resolves the latest open PR head branch
+    before dispatch, so the workflow reviews the real remote branch instead of
+    a generated `codex/...` placeholder.
+- Generic GitHub review goals without a real remote work branch now fail fast
+  locally with a clear message instead of dispatching a GitHub run that can
+  only come back as `missing_work_branch`.
+- If you do want a generic GitHub review against a specific remote branch,
+  `run-goal` now accepts `--base-branch NAME --work-branch NAME` so the live
+  review can target a real branch pair without needing a PR lookup phrase.
+- `run-goal --repo OWNER/REPO` is now a per-run override only. It does not
+  rewrite `workers.local.json`; use `configure-github-repo` when you want to
+  persist a different control-plane repository.
 - `review-workflow-status --brief` now gives the focused local-vs-remote view
   for that same drift: the local workflow path, current git branch, branch
   tracking state vs `origin/main`, whether the local workflow file is only dirty
@@ -311,8 +329,11 @@ currently local-ready and exposes the matching cooldown reason.
   most useful artifact refs it can resolve (`worker-result`, `attempts`,
   `output`, `log`), and adds `github-url:` when a persisted workflow run URL is
   known.
+  - completed review tasks now also print `review-runtime: ...` so operators can
+    see the actual provider/model/transport path that produced the callback.
   - retained refs from an older attempt are now labeled as `last-attempt`, and
     retry history is labeled as `history`.
+  - clean completed tasks omit the filler line `operator: no immediate action`.
   - if the task already has an operator receipt, brief mode shows the receipt
     jump as `next-command:` without the filler line `operator: no immediate action`.
 - `doctor --brief` now adds a `task-links:` section only for the visible task

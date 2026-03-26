@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { isAbsolute, resolve as resolvePath } from "node:path";
 
 import type { ReviewProviderProfile, TaskRecord, TaskState } from "./contracts";
 import { FileArtifactStore } from "./artifacts/fileArtifactStore";
@@ -61,11 +62,20 @@ export interface TaskReviewDispatchStatus {
   degraded: boolean;
 }
 
+export interface TaskReviewRuntimeStatus {
+  provider: string | null;
+  credential_source: string | null;
+  transport: string | null;
+  model: string | null;
+  profile: ReviewProviderProfile | null;
+}
+
 export interface TaskStatusSnapshot extends TaskRecord {
   artifact_dir_path: string;
   artifact_refs: TaskArtifactRefs;
   operator: TaskOperatorStatus;
   review_dispatch: TaskReviewDispatchStatus | null;
+  review_runtime: TaskReviewRuntimeStatus | null;
 }
 
 interface DispatchReceiptArtifact {
@@ -76,6 +86,10 @@ interface DispatchReceiptArtifact {
 
 function hasText(value: string | null | undefined): value is string {
   return Boolean(value && value.trim());
+}
+
+function normalizeArtifactPath(value: string): string {
+  return isAbsolute(value) ? value : resolvePath(value);
 }
 
 function collectTaskTexts(record: TaskRecord, extraTexts: string[] = []): string[] {
@@ -122,6 +136,10 @@ function buildOperatorActions(
 
   if (/github\.repository to be configured|does not have a resolved GitHub workflow run yet/i.test(taskTexts)) {
     actions.add("Set github.repository or dispatch the task again so Codex Head can resolve the workflow run.");
+  }
+
+  if (/planned branch 'codex\/[^']+' is only a local placeholder and is not available on origin/i.test(taskTexts)) {
+    actions.add("Re-run the GitHub review with --base-branch NAME --work-branch NAME or target the latest PR explicitly.");
   }
 
   if (/callback download failed:.*artifact not found/i.test(taskTexts)) {
@@ -224,7 +242,7 @@ function resolveExistingArtifactPath(
   name: string
 ): string | null {
   const artifactPath = artifactStore.resolveTaskArtifactPath(taskId, name);
-  return existsSync(artifactPath) ? artifactPath : null;
+  return existsSync(artifactPath) ? normalizeArtifactPath(artifactPath) : null;
 }
 
 function buildTaskArtifactRefs(
@@ -245,13 +263,13 @@ function buildTaskArtifactRefs(
     dispatch_receipt: dispatchReceiptPath ? { path: dispatchReceiptPath, freshness: "history" } : null,
     primary_output: (record.result?.patch_ref ?? record.result?.artifacts[0])
       ? {
-          path: record.result?.patch_ref ?? record.result?.artifacts[0] ?? "",
+          path: normalizeArtifactPath(record.result?.patch_ref ?? record.result?.artifacts[0] ?? ""),
           freshness: resultFreshness
         }
       : null,
     primary_log: record.result?.log_ref
       ? {
-          path: record.result.log_ref,
+          path: normalizeArtifactPath(record.result.log_ref),
           freshness: resultFreshness
         }
       : null
@@ -288,6 +306,48 @@ function buildTaskReviewDispatchStatus(
     dispatched_profile: dispatchedProfile,
     dispatch_mode: dispatchMode,
     degraded: dispatchMode === "legacy_without_input" && requestedProfile !== null
+  };
+}
+
+function extractReviewNoteValue(
+  notes: string[],
+  pattern: RegExp
+): string | null {
+  for (const note of notes) {
+    const match = note.match(pattern);
+    if (match?.[1]) {
+      return match[1].trim();
+    }
+  }
+  return null;
+}
+
+function buildTaskReviewRuntimeStatus(record: TaskRecord): TaskReviewRuntimeStatus | null {
+  const notes = record.result?.review_notes ?? [];
+  if (notes.length === 0) {
+    return null;
+  }
+
+  const provider = extractReviewNoteValue(notes, /^Review provider was (.+)\.$/i);
+  const credentialSource = extractReviewNoteValue(notes, /^Credential source was (.+)\.$/i);
+  const transport = extractReviewNoteValue(notes, /^Review transport was (.+)\.$/i);
+  const model = extractReviewNoteValue(notes, /^Review model was (.+)\.$/i);
+  const profileText = extractReviewNoteValue(notes, /^Review profile was (.+)\.$/i);
+  const profile: ReviewProviderProfile | null =
+    profileText === "standard" || profileText === "research" || profileText === "code_assist"
+      ? profileText
+      : null;
+
+  if (!provider && !credentialSource && !transport && !model && !profile) {
+    return null;
+  }
+
+  return {
+    provider,
+    credential_source: credentialSource,
+    transport,
+    model,
+    profile
   };
 }
 
@@ -342,7 +402,8 @@ export function buildTaskStatusSnapshot(
     artifact_dir_path: artifactStore.resolveTaskDir(record.task.task_id),
     artifact_refs: buildTaskArtifactRefs(record, artifactStore),
     operator: buildTaskOperatorStatus(record, artifactStore),
-    review_dispatch: buildTaskReviewDispatchStatus(record, artifactStore)
+    review_dispatch: buildTaskReviewDispatchStatus(record, artifactStore),
+    review_runtime: buildTaskReviewRuntimeStatus(record)
   };
 }
 

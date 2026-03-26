@@ -17,4 +17,12 @@ process.emitWarning = ((warning: string | Error, ...args: unknown[]) => {
   return (originalEmitWarning as (...innerArgs: unknown[]) => void)(warning, ...args);
 }) as typeof process.emitWarning;
 
-require("./cliMain");
+const { main } = require("./cliMain") as {
+  main: () => Promise<void>;
+};
+
+main().catch((error: unknown) => {
+  const message = error instanceof Error ? error.message : String(error);
+  process.stderr.write(`${message}\n`);
+  process.exitCode = 1;
+});

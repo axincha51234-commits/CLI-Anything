@@ -265,7 +265,12 @@ function renderArtifactRefLines(refs: {
   return lines;
 }
 
-function renderOperatorLines(operator: TaskOperatorStatus | null): string[] {
+function renderOperatorLines(
+  operator: TaskOperatorStatus | null,
+  options: {
+    suppress_idle_summary?: boolean;
+  } = {}
+): string[] {
   if (!operator) {
     return [];
   }
@@ -273,7 +278,7 @@ function renderOperatorLines(operator: TaskOperatorStatus | null): string[] {
   const lines: string[] = [];
   if (operator.summary) {
     lines.push(`operator: ${compactText(operator.summary)}`);
-  } else if (operator.actions.length === 0 && !operator.latest_receipt_path) {
+  } else if (!options.suppress_idle_summary && operator.actions.length === 0 && !operator.latest_receipt_path) {
     lines.push("operator: no immediate action");
   }
 
@@ -299,6 +304,19 @@ function renderStatusBlock(snapshot: TaskStatusSnapshot): string {
     `artifacts: ${snapshot.artifact_dir_path}`
   ];
 
+  if (snapshot.review_runtime) {
+    const reviewRuntimeParts = [
+      snapshot.review_runtime.provider ? `provider=${snapshot.review_runtime.provider}` : null,
+      snapshot.review_runtime.model ? `model=${snapshot.review_runtime.model}` : null,
+      snapshot.review_runtime.transport ? `transport=${snapshot.review_runtime.transport}` : null,
+      snapshot.review_runtime.credential_source ? `credential=${snapshot.review_runtime.credential_source}` : null
+    ].filter((value): value is string => Boolean(value));
+
+    if (reviewRuntimeParts.length > 0) {
+      lines.push(`review-runtime: ${reviewRuntimeParts.join(" :: ")}`);
+    }
+  }
+
   if (snapshot.github_run) {
     const conclusion = snapshot.github_run.conclusion ? `/${snapshot.github_run.conclusion}` : "";
     lines.push(`github: ${snapshot.github_run.status}${conclusion}`);
@@ -316,7 +334,9 @@ function renderStatusBlock(snapshot: TaskStatusSnapshot): string {
   return [
     ...lines,
     ...renderArtifactRefLines(snapshot.artifact_refs),
-    ...renderOperatorLines(snapshot.operator)
+    ...renderOperatorLines(snapshot.operator, {
+      suppress_idle_summary: snapshot.state === "completed"
+    })
   ].join("\n");
 }
 

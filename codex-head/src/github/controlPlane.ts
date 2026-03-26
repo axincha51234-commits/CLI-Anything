@@ -134,6 +134,19 @@ export interface GitHubPullRequestStatus {
   number: number | null;
   url: string | null;
   title: string | null;
+  head_branch: string | null;
+  base_branch: string | null;
+  gh_cli_path: string | null;
+  gh_authenticated: boolean;
+  detail: string;
+}
+
+export interface GitHubBranchStatus {
+  repository: string;
+  branch: string;
+  found: boolean;
+  sha: string | null;
+  protected: boolean | null;
   gh_cli_path: string | null;
   gh_authenticated: boolean;
   detail: string;
@@ -631,6 +644,8 @@ export class GitHubControlPlane {
         number: null,
         url: null,
         title: null,
+        head_branch: null,
+        base_branch: null,
         gh_cli_path: runtime.gh_cli_path,
         gh_authenticated: runtime.gh_authenticated,
         detail: "GitHub control plane is disabled"
@@ -643,6 +658,8 @@ export class GitHubControlPlane {
         number: null,
         url: null,
         title: null,
+        head_branch: null,
+        base_branch: null,
         gh_cli_path: runtime.gh_cli_path,
         gh_authenticated: runtime.gh_authenticated,
         detail: `GitHub pull request lookup requires ${this.config.github.cli_binary} to be installed`
@@ -655,6 +672,8 @@ export class GitHubControlPlane {
         number: null,
         url: null,
         title: null,
+        head_branch: null,
+        base_branch: null,
         gh_cli_path: runtime.gh_cli_path,
         gh_authenticated: runtime.gh_authenticated,
         detail: `GitHub pull request lookup requires ${this.config.github.cli_binary} authentication`
@@ -667,6 +686,8 @@ export class GitHubControlPlane {
         number: null,
         url: null,
         title: null,
+        head_branch: null,
+        base_branch: null,
         gh_cli_path: runtime.gh_cli_path,
         gh_authenticated: runtime.gh_authenticated,
         detail: "GitHub pull request lookup requires a real OWNER/REPO value"
@@ -683,7 +704,7 @@ export class GitHubControlPlane {
       "--limit",
       "1",
       "--json",
-      "number,url,title"
+      "number,url,title,headRefName,baseRefName"
     ];
     const result = this.runCli(args);
     if (!result.ok) {
@@ -694,6 +715,8 @@ export class GitHubControlPlane {
         number: null,
         url: null,
         title: null,
+        head_branch: null,
+        base_branch: null,
         gh_cli_path: runtime.gh_cli_path,
         gh_authenticated: runtime.gh_authenticated,
         detail
@@ -704,6 +727,8 @@ export class GitHubControlPlane {
       number?: number;
       url?: string | null;
       title?: string | null;
+      headRefName?: string | null;
+      baseRefName?: string | null;
     }>>(result.stdout) ?? [];
     const latest = Array.isArray(parsed) ? parsed[0] : null;
     if (!latest) {
@@ -713,6 +738,8 @@ export class GitHubControlPlane {
         number: null,
         url: null,
         title: null,
+        head_branch: null,
+        base_branch: null,
         gh_cli_path: runtime.gh_cli_path,
         gh_authenticated: runtime.gh_authenticated,
         detail: `No open pull request is available in ${repository}`
@@ -725,6 +752,100 @@ export class GitHubControlPlane {
       number: latest.number ?? null,
       url: latest.url ?? null,
       title: latest.title ?? null,
+      head_branch: latest.headRefName ?? null,
+      base_branch: latest.baseRefName ?? null,
+      gh_cli_path: runtime.gh_cli_path,
+      gh_authenticated: runtime.gh_authenticated,
+      detail: "ok"
+    };
+  }
+
+  findRemoteBranch(
+    branch: string,
+    repository = this.config.github.repository
+  ): GitHubBranchStatus {
+    const runtime = this.inspectRuntime();
+    if (!runtime.enabled) {
+      return {
+        repository,
+        branch,
+        found: false,
+        sha: null,
+        protected: null,
+        gh_cli_path: runtime.gh_cli_path,
+        gh_authenticated: runtime.gh_authenticated,
+        detail: "GitHub control plane is disabled"
+      };
+    }
+    if (!runtime.gh_cli_available) {
+      return {
+        repository,
+        branch,
+        found: false,
+        sha: null,
+        protected: null,
+        gh_cli_path: runtime.gh_cli_path,
+        gh_authenticated: runtime.gh_authenticated,
+        detail: `GitHub branch lookup requires ${this.config.github.cli_binary} to be installed`
+      };
+    }
+    if (!runtime.gh_authenticated) {
+      return {
+        repository,
+        branch,
+        found: false,
+        sha: null,
+        protected: null,
+        gh_cli_path: runtime.gh_cli_path,
+        gh_authenticated: runtime.gh_authenticated,
+        detail: `GitHub branch lookup requires ${this.config.github.cli_binary} authentication`
+      };
+    }
+    if (!repository || repository === "OWNER/REPO") {
+      return {
+        repository,
+        branch,
+        found: false,
+        sha: null,
+        protected: null,
+        gh_cli_path: runtime.gh_cli_path,
+        gh_authenticated: runtime.gh_authenticated,
+        detail: "GitHub branch lookup requires a real OWNER/REPO value"
+      };
+    }
+
+    const encodedBranch = encodeURIComponent(branch);
+    const result = this.runCli([
+      "api",
+      `repos/${repository}/branches/${encodedBranch}`
+    ]);
+    if (!result.ok) {
+      const detail = result.stderr.trim() || result.stdout.trim() || `exit code ${String(result.exitCode)}`;
+      return {
+        repository,
+        branch,
+        found: false,
+        sha: null,
+        protected: null,
+        gh_cli_path: runtime.gh_cli_path,
+        gh_authenticated: runtime.gh_authenticated,
+        detail: /404|not found/i.test(detail)
+          ? `Remote branch '${branch}' was not found in ${repository}`
+          : detail
+      };
+    }
+
+    const parsed = parseJsonOrNull<{
+      name?: string;
+      protected?: boolean | null;
+      commit?: { sha?: string | null } | null;
+    }>(result.stdout) ?? {};
+    return {
+      repository,
+      branch: parsed.name ?? branch,
+      found: true,
+      sha: parsed.commit?.sha ?? null,
+      protected: typeof parsed.protected === "boolean" ? parsed.protected : null,
       gh_cli_path: runtime.gh_cli_path,
       gh_authenticated: runtime.gh_authenticated,
       detail: "ok"

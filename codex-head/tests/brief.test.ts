@@ -218,6 +218,13 @@ test("renderStatusBrief summarizes one task with operator guidance", () => {
     },
     github_mirror: null,
     reviews: [],
+    review_runtime: {
+      provider: "openai-compatible",
+      credential_source: "review_api",
+      transport: "chat_completions",
+      model: "pplxapp/app-chat",
+      profile: "research"
+    },
     review_dispatch: {
       receipt_path: "C:/repo/codex-head/runtime/artifacts/task-brief-1/github-dispatch-receipt.json",
       requested_profile: "research",
@@ -244,6 +251,7 @@ test("renderStatusBrief summarizes one task with operator guidance", () => {
   assert.match(rendered, /task task-brief-1 \[failed\] Review the latest PR in GitHub/i);
   assert.match(rendered, /worker: gemini-cli via github :: profile=research/i);
   assert.match(rendered, /artifacts: C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-1/i);
+  assert.match(rendered, /review-runtime: provider=openai-compatible :: model=pplxapp\/app-chat :: transport=chat_completions :: credential=review_api/i);
   assert.match(rendered, /worker-result: C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-1\/worker-result\.json/i);
   assert.match(rendered, /attempts \(history\): C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-1\/execution-attempts\.json/i);
   assert.match(rendered, /dispatch-receipt \(history\): C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-1\/github-dispatch-receipt\.json/i);
@@ -326,6 +334,7 @@ test("renderStatusBrief omits the no-action line when only follow-up actions exi
     github_run: null,
     github_mirror: null,
     reviews: [],
+    review_runtime: null,
     review_dispatch: null,
     operator: {
       queue_diagnosis_path: null,
@@ -385,6 +394,7 @@ test("renderStatusBrief omits the no-action line when a receipt is available", (
     github_run: null,
     github_mirror: null,
     reviews: [],
+    review_runtime: null,
     review_dispatch: null,
     operator: {
       queue_diagnosis_path: null,
@@ -403,6 +413,64 @@ test("renderStatusBrief omits the no-action line when a receipt is available", (
   assert.doesNotMatch(rendered, /operator: no immediate action/i);
   assert.match(rendered, /receipt: operator-actions\/2026-03-23T08-09-05\.877Z-run-doctor-hint\.json \[run-doctor-hint\]/i);
   assert.match(rendered, /next-command: node --disable-warning=ExperimentalWarning dist\/src\/index\.js show-operator-receipt operator-actions\/2026-03-23T08-09-05\.877Z-run-doctor-hint\.json --brief/i);
+});
+
+test("renderStatusBrief omits the no-action line for clean completed tasks", () => {
+  const task = createTaskSpec({
+    task_id: "task-brief-5",
+    goal: "Summarize the current orchestration state",
+    repo: "C:/repo",
+    worker_target: "codex-cli",
+    expected_output: { kind: "analysis", format: "markdown", code_change: false }
+  });
+
+  const rendered = renderStatusBrief({
+    task,
+    artifact_dir_path: "C:/repo/codex-head/runtime/artifacts/task-brief-5",
+    artifact_refs: {
+      worker_result: { path: "C:/repo/codex-head/runtime/artifacts/task-brief-5/worker-result.json", freshness: "current" },
+      execution_attempts: { path: "C:/repo/codex-head/runtime/artifacts/task-brief-5/execution-attempts.json", freshness: "history" },
+      dispatch_receipt: null,
+      primary_output: { path: "C:/repo/codex-head/runtime/artifacts/task-brief-5/worker-output.md", freshness: "current" },
+      primary_log: { path: "C:/repo/codex-head/runtime/artifacts/task-brief-5/codex-cli-local.combined.log", freshness: "current" }
+    },
+    state: "completed",
+    attempts: 1,
+    max_attempts: 3,
+    next_run_at: 0,
+    created_at: 0,
+    updated_at: 0,
+    started_at: 0,
+    finished_at: 0,
+    last_error: null,
+    result: null,
+    routing: {
+      worker_target: "codex-cli",
+      mode: "local",
+      reason: "test",
+      fallback_from: null
+    },
+    github_run: null,
+    github_mirror: null,
+    reviews: [],
+    review_runtime: null,
+    review_dispatch: null,
+    operator: {
+      queue_diagnosis_path: null,
+      queue_diagnosis: null,
+      queue_recycle_path: null,
+      queue_recycle: null,
+      latest_receipt_path: null,
+      latest_receipt_command: null,
+      latest_receipt_created_at: null,
+      manual_intervention_required: false,
+      summary: null,
+      actions: []
+    }
+  } satisfies TaskStatusSnapshot);
+
+  assert.doesNotMatch(rendered, /operator: no immediate action/i);
+  assert.match(rendered, /worker-result: C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-5\/worker-result\.json/i);
 });
 
 test("renderOutcomeBrief handles empty batches", () => {

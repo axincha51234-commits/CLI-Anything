@@ -129,6 +129,7 @@ function createStatusSnapshot(
     github_mirror: null,
     reviews: [],
     review_dispatch: null,
+    review_runtime: null,
     operator: {
       queue_diagnosis_path: null,
       queue_diagnosis: null,

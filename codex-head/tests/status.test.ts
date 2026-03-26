@@ -263,6 +263,50 @@ test("buildTaskStatusSnapshot surfaces canonical artifact refs when present", ()
   assert.equal(snapshot.artifact_refs.primary_log?.freshness, "current");
 });
 
+test("buildTaskStatusSnapshot canonicalizes relative primary artifact paths", () => {
+  const root = createTempDir("codex-head-status-relative-artifacts-");
+  const artifactStore = new FileArtifactStore(resolve(root, "artifacts"));
+  const taskId = "task-relative-output";
+  const record = createRecord({
+    task: createTaskSpec({
+      task_id: taskId,
+      goal: "Review the dependency update and verify release notes in GitHub",
+      repo: "C:/repo",
+      worker_target: "gemini-cli",
+      expected_output: { kind: "review", format: "markdown", code_change: false },
+      requires_github: true
+    }),
+    result: {
+      task_id: taskId,
+      worker_target: "gemini-cli",
+      status: "completed",
+      review_verdict: "approved",
+      summary: "Review completed successfully",
+      artifacts: [
+        `runtime/artifacts/${taskId}/github-callback.json`
+      ],
+      patch_ref: null,
+      log_ref: `runtime/artifacts/${taskId}/gemini-cli-local.combined.log`,
+      cost: 0,
+      duration_ms: 0,
+      next_action: "review",
+      review_notes: []
+    }
+  });
+
+  artifactStore.writeJson(taskId, "worker-result.json", { ok: true });
+
+  const snapshot = buildTaskStatusSnapshot(record, artifactStore);
+  assert.equal(
+    snapshot.artifact_refs.primary_output?.path,
+    resolve(`runtime/artifacts/${taskId}/github-callback.json`)
+  );
+  assert.equal(
+    snapshot.artifact_refs.primary_log?.path,
+    resolve(`runtime/artifacts/${taskId}/gemini-cli-local.combined.log`)
+  );
+});
+
 test("buildTaskStatusSnapshot marks active-task result refs as last_attempt", () => {
   const root = createTempDir("codex-head-status-active-artifact-refs-");
   const artifactStore = new FileArtifactStore(resolve(root, "artifacts"));
@@ -333,6 +377,44 @@ test("buildTaskStatusSnapshot surfaces legacy review dispatch degradation from g
   assert.equal(snapshot.review_dispatch?.degraded, true);
 });
 
+test("buildTaskStatusSnapshot extracts structured review runtime details from review notes", () => {
+  const root = createTempDir("codex-head-status-review-runtime-");
+  const artifactStore = new FileArtifactStore(resolve(root, "artifacts"));
+  const record = createRecord({
+    state: "completed",
+    result: {
+      task_id: "unused",
+      worker_target: "gemini-cli",
+      status: "completed",
+      review_verdict: "approved",
+      summary: "Review completed successfully",
+      artifacts: [],
+      patch_ref: null,
+      log_ref: null,
+      cost: 0,
+      duration_ms: 0,
+      next_action: "review",
+      review_notes: [
+        "Review callback captured from GitHub workflow.",
+        "Review provider was openai-compatible.",
+        "Credential source was review_api.",
+        "Review transport was chat_completions.",
+        "Review model was pplxapp/app-chat.",
+        "Review profile was research."
+      ]
+    }
+  });
+
+  const snapshot = buildTaskStatusSnapshot(record, artifactStore);
+  assert.deepEqual(snapshot.review_runtime, {
+    provider: "openai-compatible",
+    credential_source: "review_api",
+    transport: "chat_completions",
+    model: "pplxapp/app-chat",
+    profile: "research"
+  });
+});
+
 test("buildTaskStatusSnapshot recommends concrete actions for busy runners and gh auth failures", () => {
   const root = createTempDir("codex-head-status-actions-");
   const artifactStore = new FileArtifactStore(resolve(root, "artifacts"));
@@ -370,6 +452,35 @@ test("buildTaskStatusSnapshot recommends concrete actions for busy runners and g
   );
   assert.equal(
     snapshot.operator.actions.some((value) => /gh auth login/i.test(value)),
+    true
+  );
+});
+
+test("buildTaskStatusSnapshot suggests explicit branch overrides for placeholder GitHub review failures", () => {
+  const root = createTempDir("codex-head-status-placeholder-branch-");
+  const artifactStore = new FileArtifactStore(resolve(root, "artifacts"));
+  const record = createRecord({
+    state: "failed",
+    last_error: "GitHub review requires a real remote work branch or open pull request. Planned branch 'codex/review-the-dependency-update-and-2bcb2ece' is only a local placeholder and is not available on origin. Re-run with --base-branch NAME --work-branch NAME or target the latest PR explicitly.",
+    result: {
+      task_id: "unused",
+      worker_target: "gemini-cli",
+      status: "failed",
+      review_verdict: null,
+      summary: "GitHub review requires a real remote work branch or open pull request.",
+      artifacts: [],
+      patch_ref: null,
+      log_ref: null,
+      cost: 0,
+      duration_ms: 0,
+      next_action: "manual",
+      review_notes: []
+    }
+  });
+
+  const snapshot = buildTaskStatusSnapshot(record, artifactStore);
+  assert.equal(
+    snapshot.operator.actions.some((value) => /--base-branch NAME --work-branch NAME/i.test(value)),
     true
   );
 });

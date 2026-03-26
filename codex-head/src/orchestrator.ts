@@ -44,6 +44,18 @@ function toCliPrompt(lines: string[]): string {
     .join(" | ");
 }
 
+function slugifyGoal(goal: string): string {
+  return goal
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 32) || "task";
+}
+
+function defaultGeneratedWorkBranch(task: TaskSpec): string {
+  return `codex/${slugifyGoal(task.goal)}-${task.task_id.slice(0, 8)}`;
+}
+
 function enforceWorkerResultPolicy(
   task: TaskSpec,
   result: WorkerResult,
@@ -422,6 +434,8 @@ export class CodexHeadOrchestrator {
     goal: string,
     options: {
       repo?: string;
+      base_branch?: string;
+      work_branch?: string;
       publish_github_mirror?: boolean;
       timeout_sec?: number;
       interval_sec?: number;
@@ -434,6 +448,13 @@ export class CodexHeadOrchestrator {
   }> {
     const plan = this.planGoal(goal, options.repo ?? this.config.workspace_root);
     for (const task of plan.tasks) {
+      if (options.base_branch) {
+        task.base_branch = options.base_branch.trim();
+      }
+      if (options.work_branch) {
+        task.work_branch = options.work_branch.trim();
+      }
+      validateTaskSpec(task);
       this.assertRunPreconditions(task);
     }
     const records = this.savePlannedTasks(plan);
@@ -541,8 +562,12 @@ export class CodexHeadOrchestrator {
     return /\b(latest|current|the)\s+(pr|pull request)\b/.test(normalized);
   }
 
+  private persistsTask(taskId: string): boolean {
+    return this.taskStore.getTask(taskId) !== null;
+  }
+
   private assertRunPreconditions(task: TaskSpec): void {
-    if (!this.needsOpenPullRequest(task)) {
+    if (!task.requires_github || task.expected_output.kind !== "review") {
       return;
     }
 
@@ -550,19 +575,62 @@ export class CodexHeadOrchestrator {
       findLatestPullRequest?: () => {
         found: boolean;
         detail: string;
+        head_branch?: string | null;
+        base_branch?: string | null;
+      };
+      findRemoteBranch?: (branch: string) => {
+        found: boolean;
+        detail: string;
       };
       shouldDispatchLive?: () => boolean;
     };
-    if (typeof githubLookup.findLatestPullRequest !== "function") {
-      return;
-    }
     if (typeof githubLookup.shouldDispatchLive === "function" && !githubLookup.shouldDispatchLive()) {
       return;
     }
 
-    const latestPullRequest = githubLookup.findLatestPullRequest();
-    if (!latestPullRequest.found) {
-      throw new Error(latestPullRequest.detail);
+    let taskChanged = false;
+    if (this.needsOpenPullRequest(task)) {
+      if (typeof githubLookup.findLatestPullRequest !== "function") {
+        return;
+      }
+      const latestPullRequest = githubLookup.findLatestPullRequest();
+      if (!latestPullRequest.found) {
+        throw new Error(latestPullRequest.detail);
+      }
+      if (!latestPullRequest.head_branch) {
+        throw new Error("Latest pull request lookup did not report a remote head branch");
+      }
+      if (latestPullRequest.base_branch && task.base_branch !== latestPullRequest.base_branch) {
+        task.base_branch = latestPullRequest.base_branch;
+        taskChanged = true;
+      }
+      if (task.work_branch !== latestPullRequest.head_branch) {
+        task.work_branch = latestPullRequest.head_branch;
+        taskChanged = true;
+      }
+    }
+
+    if (typeof githubLookup.findRemoteBranch !== "function") {
+      if (taskChanged && this.persistsTask(task.task_id)) {
+        this.taskStore.saveTask(task);
+      }
+      return;
+    }
+
+    const remoteBranch = githubLookup.findRemoteBranch(task.work_branch);
+    if (!remoteBranch.found) {
+      if (task.work_branch === defaultGeneratedWorkBranch(task)) {
+        throw new Error(
+          `GitHub review requires a real remote work branch or open pull request. `
+          + `Planned branch '${task.work_branch}' is only a local placeholder and is not available on origin. `
+          + `Re-run with --base-branch NAME --work-branch NAME or target the latest PR explicitly.`
+        );
+      }
+      throw new Error(remoteBranch.detail);
+    }
+
+    if (taskChanged && this.persistsTask(task.task_id)) {
+      this.taskStore.saveTask(task);
     }
   }
 

@@ -238,14 +238,17 @@ operator command instead of only describing the problem.
 `status --brief` and `doctor --brief` now surface the newest matching operator
 receipt path for a task when one exists, so operators can jump directly into
 `show-operator-receipt` without listing history first.
-- `status --brief` prints `open-receipt: node dist/src/index.js show-operator-receipt ... --brief`
+- `status --brief` prints `next-command: node dist/src/index.js show-operator-receipt ... --brief`
 - `status --brief` also prints `artifacts: ...` plus canonical refs like
   `worker-result: ...`, `attempts: ...`, `output: ...`, and `log: ...` when
   those paths are known
+- completed review tasks also print `review-runtime: ...` so operators can see
+  the actual provider/model/transport path that produced the callback
 - retained refs from an older attempt are labeled `(... last-attempt ...)`,
   while retry history stays labeled `(... history ...)`
 - `status --brief` prints `github-url: ...` when the task has a persisted
   workflow run URL
+- clean completed tasks omit the filler line `operator: no immediate action`
 - `status --brief` hides `operator: no immediate action` when the task already
   has an operator receipt to open, and surfaces that jump as `next-command:`
 - `doctor --brief` adds a `receipt-commands:` section for task-level receipt jumps
@@ -418,6 +421,20 @@ branch is still serving an older `codex-head-gemini-review.yml` without the
 automatically retries without that input, which keeps review dispatch working
 but falls back to legacy standard routing until the workflow is synced.
 
+Live GitHub review preflight is now stricter too:
+
+- `latest/current/the PR` review goals resolve the latest open PR head branch
+  before dispatch, so the workflow targets the real remote branch.
+- Generic GitHub review goals that still only have a generated placeholder
+  branch like `codex/...` fail fast locally with a clear error instead of
+  launching a GitHub run that will only return `missing_work_branch`.
+- For intentional generic GitHub review against a real branch, use
+  `run-goal --base-branch NAME --work-branch NAME ...` so the live workflow can
+  target the supplied remote branch pair directly.
+- `run-goal --repo OWNER/REPO` only overrides the GitHub target for that one
+  invocation. Persisted repository changes still belong to
+  `configure-github-repo`.
+
 That stack has been verified end-to-end through
 `codex-head-gemini-review.yml` on the self-hosted runner.
 
@@ -544,6 +561,12 @@ In `local_preferred` mode, `run-goal` can still publish GitHub mirrors for a
 GitHub-shaped task, but `dispatch-next` first exhausts the healthy local worker
 chain. If that local chain fails, routing can still fall through into GitHub
 workflow dispatch for the same task.
+
+Specialized review profiles now keep their provider strength in that same
+hybrid mode. For `research` and `code_assist` review tasks, Codex Head still
+tries the primary local review worker first, but if that primary worker is not
+locally ready it prefers the profile-aligned GitHub review workflow before
+falling back to a generic local reviewer such as `codex-cli`.
 
 To validate a repo with `gh` and write the override automatically:
 
