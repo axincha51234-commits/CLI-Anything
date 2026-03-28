@@ -99,6 +99,16 @@ execute:
   let healthy local workers execute first and only fall through to GitHub when
   the local chain is unavailable
 
+`run-goal --execution-preference remote_only|local_preferred ...` is a one-shot
+task-level override for that invocation. It only affects GitHub-shaped work;
+local-only goals still execute locally. The chosen value is persisted onto the
+planned task so redispatch, fallback, and mirror publication keep the same
+routing intent. Passing only `--execution-preference` preserves the current
+`github.dispatch_mode`; it does not auto-upgrade an `artifacts_only` setup to
+`gh_cli`. If you do request `remote_only`, the effective dispatch mode still
+has to be live `gh_cli`, because `artifacts_only` cannot satisfy remote
+execution.
+
 Live dispatch is opt-in and requires:
 
 - `github.dispatch_mode: "gh_cli"`
@@ -160,6 +170,13 @@ the saved `github-queue-recycle.json` receipt.
 
 For `run-goal`, that opt-in can be satisfied automatically for the current run
 when the conditions above are already true.
+
+`review-workflow-status --brief` is the focused drift check for the review
+workflow itself. When `gh workflow view` is unavailable but the local workflow
+still matches tracked `origin/main`, the command infers remote support from
+`origin/main` instead of inventing sync drift from the working tree. If remote
+support is still genuinely unknown, it leaves `missing-on-remote`, `next`, and
+`sync-commands` empty.
 
 `github.repository` now resolves from:
 

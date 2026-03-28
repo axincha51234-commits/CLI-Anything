@@ -81,6 +81,18 @@ warm, and returns one compact readiness summary for `agm`, `pplxapp`, and
 `bbxapp`. Because it delegates to the individual helpers, it also cleans up
 stale duplicate route entries for those managed prefixes.
 
+When `codex-head` itself runs inside a clean environment such as Docker, the
+local stack probe can target the Windows host instead of the container loopback.
+Set `CODEX_HEAD_LOCALSTACK_HOST=host.docker.internal` to redirect all local
+stack probes at once, or set one of the per-service overrides when only one
+endpoint differs:
+
+- `CODEX_HEAD_LOCALSTACK_ANTIGRAVITY_HOST`
+- `CODEX_HEAD_LOCALSTACK_ROUTER_HOST`
+- `CODEX_HEAD_LOCALSTACK_PERPLEXITY_MANAGER_HOST`
+- `CODEX_HEAD_LOCALSTACK_PERPLEXITY_CDP_HOST`
+- `CODEX_HEAD_LOCALSTACK_BLACKBOX_MANAGER_HOST`
+
 When you do enable GitHub, `github.execution_preference` controls whether
 GitHub-shaped tasks must execute remotely or can still prefer local workers
 while keeping GitHub mirrors and workflow artifacts. The conservative default
@@ -163,6 +175,9 @@ currently local-ready and exposes the matching cooldown reason.
   like `codex-cli`.
 - `run-goal` can auto-upgrade GitHub tasks to live `gh_cli` dispatch for the
   current run, but a real target repo still has to be discoverable or supplied.
+- Generic GitHub worker execution now follows worker-readiness semantics
+  strictly: the selected adapter must support local execution on the runner and
+  still have a runnable local template.
 - GitHub issue and PR mirror publishing is now supported, but automatic mirror
   updates and richer sync flows are not fully wired.
 - The GitHub review workflow now supports three remote auth paths in order:
@@ -203,7 +218,8 @@ currently local-ready and exposes the matching cooldown reason.
   default branch still has an older `codex-head-gemini-review.yml` without the
   `review_profile` workflow input, `doctor` reports that drift and live review
   dispatch automatically falls back to legacy standard routing instead of
-  failing with `HTTP 422`.
+  failing with `HTTP 422`. That only degrades specialized `research` and
+  `code_assist` review profiles; `standard` keeps its intended routing.
 - GitHub review preflight is now stricter for live review tasks:
   - `Review the latest PR in GitHub` resolves the latest open PR head branch
     before dispatch, so the workflow reviews the real remote branch instead of
@@ -214,6 +230,22 @@ currently local-ready and exposes the matching cooldown reason.
 - If you do want a generic GitHub review against a specific remote branch,
   `run-goal` now accepts `--base-branch NAME --work-branch NAME` so the live
   review can target a real branch pair without needing a PR lookup phrase.
+- `run-goal` now also accepts `--execution-preference remote_only|local_preferred`
+  as a one-shot override for the current invocation. This is useful when you
+  want to audit or force the live GitHub path without rewriting local config.
+  It only affects GitHub-shaped work; local-only goals still execute locally.
+  The selected preference is now persisted into the planned task, so requeueing
+  or redispatching that task later keeps the same routing intent instead of
+  silently falling back to the current machine default. That same task-level
+  override now also drives GitHub fallback and mirror-routing decisions, so a
+  `remote_only` task does not quietly drift back onto the machine-wide
+  `local_preferred` path during retries or mirror publication. Passing only
+  `--execution-preference` also preserves the current `github.dispatch_mode`;
+  it no longer flips an `artifacts_only` setup to `gh_cli` unless you
+  explicitly override the dispatch path for that run. If you do ask for
+  `--execution-preference remote_only`, the effective dispatch mode still has to
+  be live `gh_cli`; a preserved `artifacts_only` mode is rejected because it
+  cannot satisfy remote execution.
 - `run-goal --repo OWNER/REPO` is now a per-run override only. It does not
   rewrite `workers.local.json`; use `configure-github-repo` when you want to
   persist a different control-plane repository.
@@ -223,7 +255,13 @@ currently local-ready and exposes the matching cooldown reason.
   in the working tree or already differs from `origin/main`, whether each side
   supports `review_profile`, the exact `gh workflow view` inspect command, and
   the sync action plus concrete git commands needed to restore live profile
-  routing.
+  routing. When `gh workflow view` is unavailable but the local workflow file
+  still matches `origin/main` at `HEAD`, the command now infers remote support
+  from the tracked `origin/main` workflow instead of reporting an unhelpful
+  `unknown`, even if the working tree has local edits that have not been
+  committed yet. If remote support is still genuinely unknown, the command now
+  leaves `missing-on-remote`, `next`, and `sync-commands` empty instead of
+  inventing drift from an empty remote input list.
 - The same `9router` can now front a Perplexity runtime manager through
   `pplxapp/app-chat`. That path is chat-completions only today, runs one
   request at a time, and executes authenticated runtime `SSE ask` calls inside
@@ -301,11 +339,12 @@ currently local-ready and exposes the matching cooldown reason.
   task/operator snapshots into one read-only operator report, with an optional
   `--brief` summary when you only need the short triage version.
 - By default, `doctor` now emphasizes active work plus recent failures and
-  suppresses older failed backlog into summary counts. Use `doctor --all-tasks`
+  suppresses older task findings into summary counts. Use `doctor --all-tasks`
   or `doctor --task-window-hours N` when you want broader history.
 - `doctor` now also emits structured dry-run sweep hints for queued backlog and
-  suppressed failed backlog, so operators can jump straight into a safe
-  `sweep-tasks ... --dry-run --brief` command.
+  suppressed older failed task findings. Other older task findings still stay in
+  the summary counts, but only failed rows get a bulk cancel hint so operators
+  are not pointed at a misleading `sweep-tasks` command.
 - `run-doctor-hint` now lets operators execute one of those structured hints
   directly. It stays in dry-run mode by default and only mutates state when
   `--apply` is passed explicitly.
@@ -329,6 +368,9 @@ currently local-ready and exposes the matching cooldown reason.
   most useful artifact refs it can resolve (`worker-result`, `attempts`,
   `output`, `log`), and adds `github-url:` when a persisted workflow run URL is
   known.
+  - the `worker:` line now prefers the actual routed worker, and when a task
+    was rerouted it adds `planned=...` so fallback execution does not look like
+    the original worker ran successfully.
   - completed review tasks now also print `review-runtime: ...` so operators can
     see the actual provider/model/transport path that produced the callback.
   - retained refs from an older attempt are now labeled as `last-attempt`, and

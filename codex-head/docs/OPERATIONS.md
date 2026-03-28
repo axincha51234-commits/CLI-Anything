@@ -183,15 +183,22 @@ GitHub drift case: it compares the local
 visible through `gh workflow view ... --yaml`, tells you whether each side
 supports `review_profile`, shows the current branch plus how that workflow file
 relates to `origin/main`, and prints the exact inspect/sync guidance plus any
-safe git commands for that workflow.
+safe git commands for that workflow. If `gh workflow view` is unavailable but
+the local workflow still matches `origin/main` at `HEAD`, it now infers remote
+support from the tracked `origin/main` workflow instead of leaving the remote
+state as `unknown`, even when the working tree has uncommitted local edits. If
+remote support is still genuinely unknown, the command leaves
+`missing-on-remote`, `next`, and `sync-commands` empty instead of inventing
+drift from an empty remote input list.
 
 By default, `doctor` highlights active tasks plus recent failures and suppresses
-older failed backlog into summary counts so the operator view stays current.
+older task findings into summary counts so the operator view stays current.
 Use `--all-tasks` to include the full backlog, or `--task-window-hours N` to
-change the recency window used for failed-task triage.
+change the recency window used for task-finding triage.
 It now also emits dry-run `sweep-tasks` command hints for queued backlog and
-suppressed failed backlog, so the report can point straight at the next safe
-operator command instead of only describing the problem.
+suppressed older failed task findings. Other older task findings still stay in
+the summary counts, but only failed rows get a bulk cancel hint so the report
+does not point at a misleading `sweep-tasks` command.
 
 `run-doctor-hint` is the safest way to follow those suggestions:
 
@@ -242,6 +249,9 @@ receipt path for a task when one exists, so operators can jump directly into
 - `status --brief` also prints `artifacts: ...` plus canonical refs like
   `worker-result: ...`, `attempts: ...`, `output: ...`, and `log: ...` when
   those paths are known
+- the `worker:` line now prefers the actual routed worker, and adds
+  `planned=...` when fallback routing used a different worker than the task's
+  original target
 - completed review tasks also print `review-runtime: ...` so operators can see
   the actual provider/model/transport path that produced the callback
 - retained refs from an older attempt are labeled `(... last-attempt ...)`,
@@ -403,7 +413,12 @@ If you need different aliases, set these GitHub Secrets on the control repo:
 
 A single generic `REVIEW_MODEL` is still supported, but it now behaves as a
 fallback so the profile-specific routing above can keep using the right local
-provider by default.
+provider path by default.
+
+Generic GitHub worker execution follows worker-readiness semantics, not review
+readiness semantics. A worker only qualifies for `codex-head-worker.yml` when
+its adapter supports local execution on the runner and a local command template
+is configured for that worker.
 
 Operationally, the current stack is intended to be used like this:
 
@@ -419,7 +434,9 @@ Operationally, the current stack is intended to be used like this:
 branch is still serving an older `codex-head-gemini-review.yml` without the
 `review_profile` input, `doctor` raises a GitHub warning and live dispatch
 automatically retries without that input, which keeps review dispatch working
-but falls back to legacy standard routing until the workflow is synced.
+but falls back to legacy standard routing until the workflow is synced. That
+only degrades specialized `research` and `code_assist` review profiles;
+`standard` keeps its intended routing.
 
 Live GitHub review preflight is now stricter too:
 
@@ -431,6 +448,22 @@ Live GitHub review preflight is now stricter too:
 - For intentional generic GitHub review against a real branch, use
   `run-goal --base-branch NAME --work-branch NAME ...` so the live workflow can
   target the supplied remote branch pair directly.
+- `run-goal --execution-preference remote_only|local_preferred ...` now
+  overrides the routing preference for that one invocation only. Use it when
+  you need to force live GitHub execution for audit or comparison without
+  mutating the machine config.
+  It only applies to GitHub-shaped tasks; local-only analysis goals still run
+  locally.
+  The chosen preference is also persisted into the planned task so requeueing
+  or redispatching it later keeps the same routing intent. That task-level
+  value is also used for fallback and mirror routing, so retries and mirror
+  publication do not slip back to the machine default behind the operator's
+  back. Passing only `--execution-preference` also preserves the current
+  `github.dispatch_mode`; it no longer flips an `artifacts_only` setup to
+  `gh_cli` unless you explicitly override the dispatch path for that run. If
+  you do request `remote_only`, the effective dispatch mode still has to be
+  live `gh_cli`; a preserved `artifacts_only` mode is rejected because it
+  cannot actually execute the task remotely.
 - `run-goal --repo OWNER/REPO` only overrides the GitHub target for that one
   invocation. Persisted repository changes still belong to
   `configure-github-repo`.
@@ -515,6 +548,18 @@ of the Windows host. In that case, use the Windows-side WSL vEthernet address
 that is reachable from Linux, for example `172.31.64.1`, and make sure Windows
 Firewall allows inbound TCP `8045` for the running `antigravity_tools.exe`
 process from the WSL subnet.
+
+For containerized or other clean-environment operator checks, `codex-head`
+also accepts host overrides for the local stack probe. Set
+`CODEX_HEAD_LOCALSTACK_HOST=host.docker.internal` to redirect all local stack
+URLs away from container loopback, or set one of the per-service overrides if
+only one host differs:
+
+- `CODEX_HEAD_LOCALSTACK_ANTIGRAVITY_HOST`
+- `CODEX_HEAD_LOCALSTACK_ROUTER_HOST`
+- `CODEX_HEAD_LOCALSTACK_PERPLEXITY_MANAGER_HOST`
+- `CODEX_HEAD_LOCALSTACK_PERPLEXITY_CDP_HOST`
+- `CODEX_HEAD_LOCALSTACK_BLACKBOX_MANAGER_HOST`
 
 The config loader expects snake_case keys:
 
