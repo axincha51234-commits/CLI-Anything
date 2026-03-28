@@ -1,6 +1,7 @@
 const { randomUUID } = require("node:crypto");
 
 import {
+  GITHUB_EXECUTION_PREFERENCES,
   NEXT_ACTIONS,
   OUTPUT_FORMATS,
   OUTPUT_KINDS,
@@ -91,6 +92,7 @@ export function createTaskSpec(input: PartialTaskSpec): TaskSpec {
     base_branch: input.base_branch ?? "main",
     work_branch: input.work_branch ?? `codex/${slugifyGoal(goal)}-${taskId.slice(0, 8)}`,
     worker_target: workerTarget,
+    execution_preference: input.execution_preference ?? null,
     allowed_tools: input.allowed_tools ?? ["read", "write", "test"],
     input_artifacts: input.input_artifacts ?? [],
     expected_output: {
@@ -140,6 +142,9 @@ export function validateTaskSpec(input: unknown): TaskSpec {
     base_branch: ensureString(task.base_branch, "base_branch"),
     work_branch: ensureString(task.work_branch, "work_branch"),
     worker_target: workerTarget as TaskSpec["worker_target"],
+    execution_preference: task.execution_preference === null || task.execution_preference === undefined
+      ? null
+      : ensureString(task.execution_preference, "execution_preference") as TaskSpec["execution_preference"],
     allowed_tools: ensureStringArray(task.allowed_tools, "allowed_tools"),
     input_artifacts: ensureStringArray(task.input_artifacts, "input_artifacts"),
     expected_output: {
@@ -177,6 +182,10 @@ export function validateTaskSpec(input: unknown): TaskSpec {
 
   if (taskSpec.review_profile && !REVIEW_PROVIDER_PROFILES.includes(taskSpec.review_profile)) {
     throw new TaskValidationError("review_profile is invalid");
+  }
+
+  if (taskSpec.execution_preference && !GITHUB_EXECUTION_PREFERENCES.includes(taskSpec.execution_preference)) {
+    throw new TaskValidationError("execution_preference is invalid");
   }
 
   return taskSpec;

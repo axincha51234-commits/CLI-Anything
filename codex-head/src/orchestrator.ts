@@ -436,6 +436,7 @@ export class CodexHeadOrchestrator {
       repo?: string;
       base_branch?: string;
       work_branch?: string;
+      execution_preference?: "remote_only" | "local_preferred";
       publish_github_mirror?: boolean;
       timeout_sec?: number;
       interval_sec?: number;
@@ -453,6 +454,9 @@ export class CodexHeadOrchestrator {
       }
       if (options.work_branch) {
         task.work_branch = options.work_branch.trim();
+      }
+      if (options.execution_preference) {
+        task.execution_preference = options.execution_preference;
       }
       validateTaskSpec(task);
       this.assertRunPreconditions(task);
@@ -638,6 +642,7 @@ export class CodexHeadOrchestrator {
     task: TaskSpec,
     attemptedTargets: WorkerTarget[]
   ): Promise<RoutingDecision | null> {
+    const effectiveExecutionPreference = task.execution_preference ?? this.config.github.execution_preference;
     const deprioritizedTargets = this.getRecentWorkerPenalties()
       .map((penalty) => penalty.worker_target)
       .filter((target) => !attemptedTargets.includes(target));
@@ -650,7 +655,7 @@ export class CodexHeadOrchestrator {
       });
     } catch {}
 
-    if (!task.requires_github || this.config.github.execution_preference !== "local_preferred") {
+    if (!task.requires_github || effectiveExecutionPreference !== "local_preferred") {
       return null;
     }
 
@@ -664,9 +669,10 @@ export class CodexHeadOrchestrator {
   }
 
   private defaultMirrorRouting(task: TaskSpec): RoutingDecision {
+    const effectiveExecutionPreference = task.execution_preference ?? this.config.github.execution_preference;
     return {
       worker_target: task.worker_target,
-      mode: task.requires_github && this.config.github.execution_preference !== "local_preferred"
+      mode: task.requires_github && effectiveExecutionPreference !== "local_preferred"
         ? "github"
         : "local",
       reason: "mirror publish",

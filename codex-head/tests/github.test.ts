@@ -1,10 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { FileArtifactStore } from "../src/artifacts/fileArtifactStore";
 import { GitHubControlPlane } from "../src/github/controlPlane";
+import { inspectLocalReviewWorkflowDrift } from "../src/github/reviewWorkflowDrift";
 import { createTaskSpec } from "../src/schema";
 import { createTempDir, createTestConfig, routing } from "./helpers";
 
@@ -263,6 +265,67 @@ test("GitHubControlPlane inspects targeted self-hosted runners from repository m
       process.env.CODEX_HEAD_MACHINE_CONFIG = previousMachineConfig;
     }
   }
+});
+
+test("GitHubControlPlane infers remote review workflow inputs from origin/main when gh workflow inspection is unavailable", () => {
+  const repoRoot = createTempDir("codex-head-github-origin-workflow-");
+  const appRoot = resolve(repoRoot, "codex-head");
+  mkdirSync(appRoot, { recursive: true });
+  const workflowDir = resolve(repoRoot, ".github", "workflows");
+  mkdirSync(workflowDir, { recursive: true });
+  writeFileSync(
+    resolve(workflowDir, "codex-head-gemini-review.yml"),
+    [
+      "on:",
+      "  workflow_dispatch:",
+      "    inputs:",
+      "      task_id:",
+      "        required: true",
+      "      review_profile:",
+      "        required: true"
+    ].join("\n"),
+    "utf8"
+  );
+
+  const runGit = (...args: string[]) => {
+    const result = spawnSync("git", ["-C", repoRoot, ...args], {
+      encoding: "utf8"
+    });
+    assert.equal(result.status, 0, `git ${args.join(" ")} failed: ${String(result.stderr ?? "")}`);
+  };
+
+  runGit("init", "-b", "main");
+  runGit("config", "user.email", "codex@example.com");
+  runGit("config", "user.name", "Codex Test");
+  runGit("add", ".");
+  runGit("commit", "-m", "seed workflow");
+  runGit("update-ref", "refs/remotes/origin/main", "HEAD");
+
+  const config = createTestConfig(appRoot);
+  config.github.repository = "example/repo";
+  const artifactStore = new FileArtifactStore(config.artifacts_dir);
+  const github = new GitHubControlPlane(config, artifactStore, {
+    findBinary: () => "C:/Program Files/GitHub CLI/gh.exe",
+    runCli: (args) => {
+      if (args[0] === "auth") {
+        return {
+          ok: false,
+          exitCode: 1,
+          stdout: "",
+          stderr: "not logged in",
+          durationMs: 1,
+          timedOut: false
+        };
+      }
+      throw new Error(`Unexpected gh args: ${args.join(" ")}`);
+    }
+  });
+
+  const runtime = github.inspectRuntime();
+  assert.equal(runtime.review_workflow_supports_review_profile, true);
+  assert.deepEqual(runtime.review_workflow_declared_inputs, ["task_id", "review_profile"]);
+  assert.deepEqual(runtime.review_workflow_missing_dispatch_inputs, []);
+  assert.match(runtime.review_workflow_input_check_detail ?? "", /inferred from origin\/main/i);
 });
 
 test("GitHubControlPlane can dispatch the generic worker workflow through gh cli", () => {
@@ -667,6 +730,234 @@ test("GitHubControlPlane enriches callback download failures with queued self-ho
       process.env.CODEX_HEAD_MACHINE_CONFIG = previousMachineConfig;
     }
   }
+});
+
+test("GitHubControlPlane still infers remote review workflow inputs from origin/main when the local workflow file is dirty", () => {
+  const repoRoot = createTempDir("codex-head-github-origin-workflow-dirty-");
+  const appRoot = resolve(repoRoot, "codex-head");
+  mkdirSync(appRoot, { recursive: true });
+  const workflowDir = resolve(repoRoot, ".github", "workflows");
+  mkdirSync(workflowDir, { recursive: true });
+  const workflowPath = resolve(workflowDir, "codex-head-gemini-review.yml");
+  writeFileSync(
+    workflowPath,
+    [
+      "on:",
+      "  workflow_dispatch:",
+      "    inputs:",
+      "      task_id:",
+      "        required: true",
+      "      review_profile:",
+      "        required: true"
+    ].join("\n"),
+    "utf8"
+  );
+
+  const runGit = (...args: string[]) => {
+    const result = spawnSync("git", ["-C", repoRoot, ...args], {
+      encoding: "utf8"
+    });
+    assert.equal(result.status, 0, `git ${args.join(" ")} failed: ${String(result.stderr ?? "")}`);
+  };
+
+  runGit("init", "-b", "main");
+  runGit("config", "user.email", "codex@example.com");
+  runGit("config", "user.name", "Codex Test");
+  runGit("add", ".");
+  runGit("commit", "-m", "seed workflow");
+  runGit("update-ref", "refs/remotes/origin/main", "HEAD");
+
+  writeFileSync(
+    workflowPath,
+    [
+      "on:",
+      "  workflow_dispatch:",
+      "    inputs:",
+      "      task_id:",
+      "        required: true",
+      "      review_profile:",
+      "        required: true",
+      "",
+      "jobs: {}"
+    ].join("\n"),
+    "utf8"
+  );
+
+  const config = createTestConfig(appRoot);
+  config.github.repository = "example/repo";
+  const artifactStore = new FileArtifactStore(config.artifacts_dir);
+  const github = new GitHubControlPlane(config, artifactStore, {
+    findBinary: () => "C:/Program Files/GitHub CLI/gh.exe",
+    runCli: (args) => {
+      if (args[0] === "auth") {
+        return {
+          ok: true,
+          exitCode: 0,
+          stdout: "Logged in to github.com",
+          stderr: "",
+          durationMs: 1,
+          timedOut: false
+        };
+      }
+      if (args[0] === "workflow" && args[1] === "view") {
+        return {
+          ok: false,
+          exitCode: 1,
+          stdout: "",
+          stderr: "workflow view unavailable",
+          durationMs: 1,
+          timedOut: false
+        };
+      }
+      return {
+        ok: false,
+        exitCode: 1,
+        stdout: "",
+        stderr: `Unexpected gh args: ${args.join(" ")}`,
+        durationMs: 1,
+        timedOut: false
+      };
+    }
+  });
+
+  const runtime = github.inspectRuntime();
+  assert.equal(runtime.review_workflow_supports_review_profile, true);
+  assert.equal(runtime.review_workflow_local_supports_review_profile, true);
+  assert.equal(runtime.review_workflow_local_git_file_status, "modified");
+  assert.equal(runtime.review_workflow_local_vs_origin_status, "uncommitted local changes only; HEAD still matches origin/main");
+  assert.deepEqual(runtime.review_workflow_declared_inputs, ["task_id", "review_profile"]);
+  assert.deepEqual(runtime.review_workflow_local_declared_inputs, ["task_id", "review_profile"]);
+  assert.deepEqual(runtime.review_workflow_missing_dispatch_inputs, []);
+  assert.equal(runtime.review_workflow_sync_action, null);
+});
+
+test("GitHubControlPlane infers remote review workflow inputs from origin/main instead of dirty local inputs", () => {
+  const repoRoot = createTempDir("codex-head-github-origin-workflow-input-drift-");
+  const appRoot = resolve(repoRoot, "codex-head");
+  mkdirSync(appRoot, { recursive: true });
+  const workflowDir = resolve(repoRoot, ".github", "workflows");
+  mkdirSync(workflowDir, { recursive: true });
+  const workflowPath = resolve(workflowDir, "codex-head-gemini-review.yml");
+  writeFileSync(
+    workflowPath,
+    [
+      "on:",
+      "  workflow_dispatch:",
+      "    inputs:",
+      "      task_id:",
+      "        required: true",
+      "      review_profile:",
+      "        required: true"
+    ].join("\n"),
+    "utf8"
+  );
+
+  const runGit = (...args: string[]) => {
+    const result = spawnSync("git", ["-C", repoRoot, ...args], {
+      encoding: "utf8"
+    });
+    assert.equal(result.status, 0, `git ${args.join(" ")} failed: ${String(result.stderr ?? "")}`);
+  };
+
+  runGit("init", "-b", "main");
+  runGit("config", "user.email", "codex@example.com");
+  runGit("config", "user.name", "Codex Test");
+  runGit("add", ".");
+  runGit("commit", "-m", "seed workflow");
+  runGit("update-ref", "refs/remotes/origin/main", "HEAD");
+
+  writeFileSync(
+    workflowPath,
+    [
+      "on:",
+      "  workflow_dispatch:",
+      "    inputs:",
+      "      task_id:",
+      "        required: true",
+      "      execution_target:",
+      "        required: false",
+      "",
+      "jobs: {}"
+    ].join("\n"),
+    "utf8"
+  );
+
+  const config = createTestConfig(appRoot);
+  config.github.repository = "example/repo";
+  const artifactStore = new FileArtifactStore(config.artifacts_dir);
+  const github = new GitHubControlPlane(config, artifactStore, {
+    findBinary: () => "C:/Program Files/GitHub CLI/gh.exe",
+    runCli: (args) => {
+      if (args[0] === "auth") {
+        return {
+          ok: true,
+          exitCode: 0,
+          stdout: "Logged in to github.com",
+          stderr: "",
+          durationMs: 1,
+          timedOut: false
+        };
+      }
+      if (args[0] === "workflow" && args[1] === "view") {
+        return {
+          ok: false,
+          exitCode: 1,
+          stdout: "",
+          stderr: "workflow view unavailable",
+          durationMs: 1,
+          timedOut: false
+        };
+      }
+      return {
+        ok: false,
+        exitCode: 1,
+        stdout: "",
+        stderr: `Unexpected gh args: ${args.join(" ")}`,
+        durationMs: 1,
+        timedOut: false
+      };
+    }
+  });
+
+  const runtime = github.inspectRuntime();
+  assert.equal(runtime.review_workflow_supports_review_profile, true);
+  assert.equal(runtime.review_workflow_local_supports_review_profile, false);
+  assert.deepEqual(runtime.review_workflow_declared_inputs, ["task_id", "review_profile"]);
+  assert.deepEqual(runtime.review_workflow_local_declared_inputs, ["task_id", "execution_target"]);
+  assert.deepEqual(runtime.review_workflow_missing_dispatch_inputs, []);
+  assert.match(runtime.review_workflow_sync_action ?? "", /workflow_dispatch inputs stay in sync with the current branch \(execution_target\)/i);
+});
+
+test("inspectLocalReviewWorkflowDrift does not claim remote input drift when remote workflow support is unknown", () => {
+  const repoRoot = createTempDir("codex-head-github-workflow-unknown-");
+  const appRoot = resolve(repoRoot, "codex-head");
+  mkdirSync(appRoot, { recursive: true });
+  const workflowDir = resolve(repoRoot, ".github", "workflows");
+  mkdirSync(workflowDir, { recursive: true });
+  writeFileSync(
+    resolve(workflowDir, "codex-head-gemini-review.yml"),
+    [
+      "on:",
+      "  workflow_dispatch:",
+      "    inputs:",
+      "      task_id:",
+      "        required: true",
+      "      review_profile:",
+      "        required: true"
+    ].join("\n"),
+    "utf8"
+  );
+
+  const drift = inspectLocalReviewWorkflowDrift(
+    appRoot,
+    "codex-head-gemini-review.yml",
+    [],
+    false
+  );
+
+  assert.deepEqual(drift.missing_on_remote, []);
+  assert.equal(drift.sync_action, null);
+  assert.deepEqual(drift.sync_commands, []);
 });
 
 test("GitHubControlPlane can publish issue and PR mirrors through gh cli", () => {

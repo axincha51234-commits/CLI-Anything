@@ -346,6 +346,54 @@ test("buildTaskStatusSnapshot marks active-task result refs as last_attempt", ()
   assert.equal(snapshot.artifact_refs.primary_log?.freshness, "last_attempt");
 });
 
+test("buildTaskStatusSnapshot marks stale GitHub runs as history after a local retry completes", () => {
+  const root = createTempDir("codex-head-status-github-run-history-");
+  const artifactStore = new FileArtifactStore(resolve(root, "artifacts"));
+  const taskId = "task-github-run-history";
+  const record = createRecord({
+    task: createTaskSpec({
+      task_id: taskId,
+      goal: "Summarize the current repository orchestration state via GitHub worker",
+      repo: "C:/repo",
+      worker_target: "codex-cli",
+      expected_output: { kind: "analysis", format: "markdown", code_change: false },
+      requires_github: true
+    }),
+    state: "completed",
+    routing: {
+      worker_target: "codex-cli",
+      mode: "local",
+      reason: "primary adapter is available for local execution",
+      fallback_from: null
+    },
+    github_run: {
+      run_id: 123,
+      run_url: "https://github.com/example/repo/actions/runs/123",
+      workflow_name: "codex-head-worker.yml",
+      status: "completed",
+      conclusion: "failure",
+      updated_at: 0
+    },
+    result: {
+      task_id: taskId,
+      worker_target: "codex-cli",
+      status: "completed",
+      review_verdict: null,
+      summary: "Local retry completed successfully",
+      artifacts: [],
+      patch_ref: null,
+      log_ref: null,
+      cost: 0,
+      duration_ms: 0,
+      next_action: "none",
+      review_notes: []
+    }
+  });
+
+  const snapshot = buildTaskStatusSnapshot(record, artifactStore);
+  assert.equal(snapshot.github_run_freshness, "history");
+});
+
 test("buildTaskStatusSnapshot surfaces legacy review dispatch degradation from github-dispatch-receipt", () => {
   const root = createTempDir("codex-head-status-dispatch-receipt-");
   const artifactStore = new FileArtifactStore(resolve(root, "artifacts"));
@@ -375,6 +423,34 @@ test("buildTaskStatusSnapshot surfaces legacy review dispatch degradation from g
   assert.equal(snapshot.review_dispatch?.dispatched_profile, null);
   assert.equal(snapshot.review_dispatch?.dispatch_mode, "legacy_without_input");
   assert.equal(snapshot.review_dispatch?.degraded, true);
+});
+
+test("buildTaskStatusSnapshot does not treat legacy standard routing as degraded", () => {
+  const root = createTempDir("codex-head-status-dispatch-standard-");
+  const artifactStore = new FileArtifactStore(resolve(root, "artifacts"));
+  const record = createRecord({
+    task: createTaskSpec({
+      task_id: "task-dispatch-legacy-standard",
+      goal: "Review the latest PR in GitHub",
+      repo: "C:/repo",
+      worker_target: "gemini-cli",
+      expected_output: { kind: "review", format: "markdown", code_change: false },
+      review_profile: "standard",
+      requires_github: true
+    }),
+    state: "running"
+  });
+
+  artifactStore.writeJson(record.task.task_id, "github-dispatch-receipt.json", {
+    requested_review_profile: "standard",
+    dispatched_review_profile: null,
+    review_profile_dispatch_mode: "legacy_without_input"
+  });
+
+  const snapshot = buildTaskStatusSnapshot(record, artifactStore);
+  assert.equal(snapshot.review_dispatch?.requested_profile, "standard");
+  assert.equal(snapshot.review_dispatch?.dispatch_mode, "legacy_without_input");
+  assert.equal(snapshot.review_dispatch?.degraded, false);
 });
 
 test("buildTaskStatusSnapshot extracts structured review runtime details from review notes", () => {

@@ -15,6 +15,8 @@ test("parseRunGoalArgs accepts explicit branch overrides", () => {
     "feature/demo",
     "--dispatch-mode",
     "gh_cli",
+    "--execution-preference",
+    "remote_only",
     "--timeout-sec",
     "120",
     "--interval-sec",
@@ -28,6 +30,7 @@ test("parseRunGoalArgs accepts explicit branch overrides", () => {
   assert.equal(parsed.baseBranch, "main");
   assert.equal(parsed.workBranch, "feature/demo");
   assert.equal(parsed.dispatchMode, "gh_cli");
+  assert.equal(parsed.executionPreference, "remote_only");
   assert.equal(parsed.timeoutSec, 120);
   assert.equal(parsed.intervalSec, 5);
   assert.equal(parsed.goal, "Review the router");
@@ -49,6 +52,11 @@ test("parseRunGoalArgs rejects invalid numeric and enum flag values", () => {
   assert.throws(
     () => parseRunGoalArgs(["--dispatch-mode", "cloud", "Review"]),
     /--dispatch-mode must be gh_cli or artifacts_only/i
+  );
+
+  assert.throws(
+    () => parseRunGoalArgs(["--execution-preference", "cloud_only", "Review"]),
+    /--execution-preference must be remote_only or local_preferred/i
   );
 
   assert.throws(
@@ -83,6 +91,24 @@ test("buildRunGoalGitHubOverride defaults run-goal repo overrides to gh_cli with
     {
       repository: "owner/repo",
       dispatch_mode: "artifacts_only"
+    }
+  );
+
+  assert.deepEqual(
+    buildRunGoalGitHubOverride("owner/repo", "gh_cli", "remote_only"),
+    {
+      repository: "owner/repo",
+      dispatch_mode: "gh_cli",
+      execution_preference: "remote_only"
+    }
+  );
+
+  assert.deepEqual(
+    buildRunGoalGitHubOverride("owner/repo", undefined, "local_preferred", "artifacts_only"),
+    {
+      repository: "owner/repo",
+      dispatch_mode: "artifacts_only",
+      execution_preference: "local_preferred"
     }
   );
 });

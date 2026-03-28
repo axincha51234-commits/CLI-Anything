@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 
 import { AdapterRegistry } from "../src/adapter-registry";
 import { GitHubControlPlane } from "../src/github/controlPlane";
@@ -436,6 +437,120 @@ test("runGoal can keep GitHub mirrors while executing a GitHub-shaped task local
   assert.equal(result.task.github_mirror?.issue?.number, 456);
   assert.equal(mirrorRoutingMode, "local");
   assert.equal(dispatchCalled, false);
+});
+
+test("task-level remote_only execution preference survives queue dispatch under local-preferred config", async () => {
+  const root = createTempDir("codex-head-task-level-remote-only-");
+  const registry = new AdapterRegistry();
+
+  registry.register(new FakeAdapter(
+    makeCapability("codex-cli", { supports_github: false }),
+    createHealthyHealth("codex-cli"),
+    async () => {
+      throw new Error("should not execute locally");
+    }
+  ));
+
+  const config = createTestConfig(root);
+  config.github.repository = "example/repo";
+  config.github.execution_preference = "local_preferred";
+  const orchestrator = createAppWithRegistry(root, registry, config);
+
+  (orchestrator as any).github = {
+    prepareDispatch: () => ({
+      workflow_name: "codex-head-worker.yml",
+      payload_path: `${root}/dispatch.json`,
+      workflow_inputs_path: `${root}/inputs.json`,
+      issue_path: `${root}/issue.md`,
+      pr_path: null
+    }),
+    shouldDispatchLive: () => false
+  };
+
+  const task = orchestrator.submitTask(createTaskSpec({
+    task_id: "task-remote-only-persisted",
+    goal: "Summarize the current repository orchestration state via GitHub worker",
+    repo: root,
+    worker_target: "codex-cli",
+    execution_preference: "remote_only",
+    expected_output: { kind: "analysis", format: "markdown", code_change: false },
+    requires_github: true
+  }));
+
+  orchestrator.enqueueTask(task.task.task_id);
+  const outcome = await orchestrator.dispatchNext();
+
+  assert.equal(outcome?.state, "running");
+  assert.equal(outcome?.routing.mode, "github");
+  assert.equal(orchestrator.getTask(task.task.task_id).task.execution_preference, "remote_only");
+});
+
+test("task-level remote_only execution preference drives GitHub mirror routing under local-preferred config", async () => {
+  const root = createTempDir("codex-head-task-level-remote-only-mirror-");
+  const registry = new AdapterRegistry();
+
+  registry.register(new FakeAdapter(
+    makeCapability("codex-cli", { supports_github: false }),
+    createHealthyHealth("codex-cli"),
+    async () => {
+      throw new Error("should not execute locally");
+    }
+  ));
+
+  const config = createTestConfig(root);
+  config.github.repository = "example/repo";
+  config.github.execution_preference = "local_preferred";
+  const orchestrator = createAppWithRegistry(root, registry, config);
+
+  let mirrorRoutingMode = "";
+  (orchestrator as any).github = {
+    prepareDispatch: (_task: any, routingInput: any) => {
+      mirrorRoutingMode = routingInput.mode;
+      return {
+        workflow_name: "codex-head-worker.yml",
+        payload_path: `${root}/dispatch.json`,
+        workflow_inputs_path: `${root}/inputs.json`,
+        issue_path: `${root}/issue.md`,
+        pr_path: null
+      };
+    },
+    publishMirror: (task: any) => ({
+      repository: "example/repo",
+      issue_command: ["gh", "issue", "create"],
+      issue_stdout: "https://github.com/example/repo/issues/789",
+      issue_stderr: "",
+      issue_created: true,
+      pr_command: null,
+      pr_stdout: "",
+      pr_stderr: "",
+      pr_created: false,
+      mirror: {
+        issue: {
+          number: 789,
+          url: "https://github.com/example/repo/issues/789",
+          title: `Codex Head task ${task.task_id}: ${task.goal}`
+        },
+        pull_request: null,
+        issue_error: null,
+        pull_request_error: null,
+        updated_at: Date.now()
+      }
+    })
+  };
+
+  const task = orchestrator.submitTask(createTaskSpec({
+    task_id: "task-remote-only-mirror",
+    goal: "Summarize the current repository orchestration state via GitHub worker",
+    repo: root,
+    worker_target: "codex-cli",
+    execution_preference: "remote_only",
+    expected_output: { kind: "analysis", format: "markdown", code_change: false },
+    requires_github: true
+  }));
+
+  const outcome = orchestrator.publishGitHubMirror(task.task.task_id);
+  assert.equal(outcome.routing.mode, "github");
+  assert.equal(mirrorRoutingMode, "github");
 });
 
 test("runGoal fails fast when a latest PR review has no open pull request target", async () => {
@@ -1467,7 +1582,7 @@ test("recoverRunningTasks resolves a GitHub run through the real control plane b
         const downloadDir = args[args.indexOf("--dir") + 1]!;
         mkdirSync(downloadDir, { recursive: true });
         writeFileSync(
-          `${downloadDir}\\github-callback.json`,
+          join(downloadDir, "github-callback.json"),
           JSON.stringify({
             task_id: task.task.task_id,
             worker_target: "gemini-cli",

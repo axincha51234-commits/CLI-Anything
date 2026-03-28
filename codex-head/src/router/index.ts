@@ -54,7 +54,7 @@ export class TaskRouter {
     return health.healthy;
   }
 
-  private canUseGitHub(target: WorkerTarget): boolean {
+  private async canUseGitHub(task: TaskSpec, target: WorkerTarget): Promise<boolean> {
     if (!this.registry.has(target)) {
       return false;
     }
@@ -62,7 +62,21 @@ export class TaskRouter {
     if (!this.isFeatureEnabled(adapter.capability.feature_flag)) {
       return false;
     }
-    return adapter.capability.supports_github && this.config.github.enabled;
+    if (!this.config.github.enabled) {
+      return false;
+    }
+
+    const health = await adapter.healthCheck();
+    if (!health.healthy) {
+      return false;
+    }
+
+    if (task.expected_output.kind === "review") {
+      return adapter.capability.supports_github;
+    }
+
+    return adapter.capability.supports_local
+      && Boolean(this.config.command_templates[target].local);
   }
 
   private fallbackOrder(kind: OutputKind, preferLocal = false): WorkerTarget[] {
@@ -84,7 +98,7 @@ export class TaskRouter {
     for (const candidate of candidates) {
       const available = mode === "local"
         ? await this.canUseLocal(candidate)
-        : this.canUseGitHub(candidate);
+        : await this.canUseGitHub(task, candidate);
       if (!available) {
         continue;
       }
@@ -119,8 +133,9 @@ export class TaskRouter {
     const fallbackFrom = options.exclude_targets?.at(-1) ?? task.worker_target;
     const preferredTargets: WorkerTarget[] = [];
     const delayedTargets: WorkerTarget[] = [];
+    const effectiveExecutionPreference = task.execution_preference ?? this.config.github.execution_preference;
     const preferLocalExecution = task.requires_github
-      && this.config.github.execution_preference === "local_preferred";
+      && effectiveExecutionPreference === "local_preferred";
     const preferProfileAlignedGitHub = preferLocalExecution
       && task.expected_output.kind === "review"
       && task.review_profile !== null

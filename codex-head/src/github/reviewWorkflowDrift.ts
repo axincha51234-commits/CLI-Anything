@@ -10,6 +10,8 @@ export interface LocalReviewWorkflowDrift {
   local_vs_origin_status: string | null;
   local_declared_inputs: string[];
   local_supports_review_profile: boolean | null;
+  origin_declared_inputs: string[];
+  origin_supports_review_profile: boolean | null;
   missing_on_remote: string[];
   sync_action: string | null;
   sync_commands: string[];
@@ -193,22 +195,27 @@ function buildWorkflowSyncAction(options: {
     return null;
   }
 
+  const syncGoal = remoteMissingInputs.includes("review_profile")
+    ? "review_profile is accepted during workflow_dispatch and research/code-assist routing works live"
+    : `the remote workflow_dispatch inputs stay in sync with the current branch (${remoteMissingInputs.join(", ")})`;
+
   if (localVsOriginStatus && localVsOriginStatus !== "matches origin/main") {
     if (localVsOriginStatus === "uncommitted local changes only; HEAD still matches origin/main") {
-      return `Commit and push .github/workflows/${workflow} from ${gitBranch ?? "the current branch"} so review_profile is accepted during workflow_dispatch and research/code-assist routing works live.`;
+      return `Commit and push .github/workflows/${workflow} from ${gitBranch ?? "the current branch"} so ${syncGoal}.`;
     }
     if (localVsOriginStatus.startsWith("committed changes differ from origin/main")) {
-      return `Push .github/workflows/${workflow} from ${gitBranch ?? "the current branch"} so review_profile is accepted during workflow_dispatch and research/code-assist routing works live.`;
+      return `Push .github/workflows/${workflow} from ${gitBranch ?? "the current branch"} so ${syncGoal}.`;
     }
   }
 
-  return `Push or sync .github/workflows/${workflow} to the GitHub default branch so review_profile is accepted during workflow_dispatch and research/code-assist routing works live.`;
+  return `Push or sync .github/workflows/${workflow} to the GitHub default branch so ${syncGoal}.`;
 }
 
 export function inspectLocalReviewWorkflowDrift(
   appRoot: string,
   workflow: string | null,
-  remoteDeclaredInputs: string[] = []
+  remoteDeclaredInputs: string[] = [],
+  remoteInspected = remoteDeclaredInputs.length > 0
 ): LocalReviewWorkflowDrift {
   if (!workflow) {
     return {
@@ -219,6 +226,8 @@ export function inspectLocalReviewWorkflowDrift(
       local_vs_origin_status: null,
       local_declared_inputs: [],
       local_supports_review_profile: null,
+      origin_declared_inputs: [],
+      origin_supports_review_profile: null,
       missing_on_remote: [],
       sync_action: null,
       sync_commands: []
@@ -233,6 +242,13 @@ export function inspectLocalReviewWorkflowDrift(
   const localDeclaredInputs = localWorkflowYaml
     ? extractWorkflowDispatchInputs(localWorkflowYaml)
     : [];
+  const gitWorkflowPath = relativeWorkflowPathToGit(repoRoot, localWorkflowPath);
+  const originWorkflowResult = existsSync(localWorkflowPath)
+    ? runGit(repoRoot, ["show", `origin/main:${gitWorkflowPath}`])
+    : { ok: false, stdout: "" };
+  const originDeclaredInputs = originWorkflowResult.ok
+    ? extractWorkflowDispatchInputs(originWorkflowResult.stdout)
+    : [];
 
   const gitBranchResult = runGit(repoRoot, ["rev-parse", "--abbrev-ref", "HEAD"]);
   const gitBranch = gitBranchResult.ok ? gitBranchResult.stdout : null;
@@ -241,21 +257,20 @@ export function inspectLocalReviewWorkflowDrift(
     ? describeGitTrackingStatus(trackingResult.stdout)
     : null;
 
-  const relativeWorkflowPath = relative(repoRoot, localWorkflowPath);
   const gitStatusResult = existsSync(localWorkflowPath)
-    ? runGit(repoRoot, ["status", "--short", "--", relativeWorkflowPath])
+    ? runGit(repoRoot, ["status", "--short", "--", gitWorkflowPath])
     : { ok: false, stdout: "" };
   const localGitFileStatus = existsSync(localWorkflowPath)
     ? mapGitFileStatus(gitStatusResult.ok && gitStatusResult.stdout ? gitStatusResult.stdout.slice(0, 2) : null)
     : null;
 
   const headDiffResult = existsSync(localWorkflowPath)
-    ? spawnSync("git", ["-C", repoRoot, "diff", "--quiet", "HEAD", "--", relativeWorkflowPath], {
+    ? spawnSync("git", ["-C", repoRoot, "diff", "--quiet", "HEAD", "--", gitWorkflowPath], {
       encoding: "utf8"
     })
     : null;
   const originCommittedDiffResult = existsSync(localWorkflowPath)
-    ? spawnSync("git", ["-C", repoRoot, "diff", "--quiet", "origin/main..HEAD", "--", relativeWorkflowPath], {
+    ? spawnSync("git", ["-C", repoRoot, "diff", "--quiet", "origin/main..HEAD", "--", gitWorkflowPath], {
       encoding: "utf8"
     })
     : null;
@@ -266,7 +281,9 @@ export function inspectLocalReviewWorkflowDrift(
     })
     : null;
 
-  const missingOnRemote = localDeclaredInputs.filter((input) => !remoteDeclaredInputs.includes(input));
+  const missingOnRemote = remoteInspected
+    ? localDeclaredInputs.filter((input) => !remoteDeclaredInputs.includes(input))
+    : [];
   const syncCommands = buildWorkflowSyncCommands({
     workflow,
     gitBranch,
@@ -288,8 +305,14 @@ export function inspectLocalReviewWorkflowDrift(
     local_vs_origin_status: localVsOriginStatus,
     local_declared_inputs: localDeclaredInputs,
     local_supports_review_profile: localWorkflowYaml ? localDeclaredInputs.includes("review_profile") : null,
+    origin_declared_inputs: originDeclaredInputs,
+    origin_supports_review_profile: originWorkflowResult.ok ? originDeclaredInputs.includes("review_profile") : null,
     missing_on_remote: missingOnRemote,
     sync_action: syncAction,
     sync_commands: syncCommands
   };
+}
+
+function relativeWorkflowPathToGit(repoRoot: string, localWorkflowPath: string): string {
+  return relative(repoRoot, localWorkflowPath).replace(/\\/g, "/");
 }

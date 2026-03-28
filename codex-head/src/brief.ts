@@ -298,9 +298,13 @@ function renderOperatorLines(
 }
 
 function renderStatusBlock(snapshot: TaskStatusSnapshot): string {
+  const actualWorker = snapshot.routing?.worker_target ?? snapshot.task.worker_target;
+  const plannedWorkerSuffix = snapshot.routing && snapshot.routing.worker_target !== snapshot.task.worker_target
+    ? ` :: planned=${snapshot.task.worker_target}`
+    : "";
   const lines = [
     `task ${snapshot.task.task_id} [${snapshot.state}] ${snapshot.task.goal}`,
-    `worker: ${snapshot.task.worker_target}${snapshot.routing ? ` via ${snapshot.routing.mode}` : ""}${snapshot.task.review_profile ? ` :: profile=${snapshot.task.review_profile}` : ""}`,
+    `worker: ${actualWorker}${snapshot.routing ? ` via ${snapshot.routing.mode}` : ""}${snapshot.task.review_profile ? ` :: profile=${snapshot.task.review_profile}` : ""}${plannedWorkerSuffix}`,
     `artifacts: ${snapshot.artifact_dir_path}`
   ];
 
@@ -319,9 +323,15 @@ function renderStatusBlock(snapshot: TaskStatusSnapshot): string {
 
   if (snapshot.github_run) {
     const conclusion = snapshot.github_run.conclusion ? `/${snapshot.github_run.conclusion}` : "";
-    lines.push(`github: ${snapshot.github_run.status}${conclusion}`);
+    const githubLabel = snapshot.github_run_freshness && snapshot.github_run_freshness !== "current"
+      ? `github (${snapshot.github_run_freshness.replace(/_/g, "-")})`
+      : "github";
+    const githubUrlLabel = snapshot.github_run_freshness && snapshot.github_run_freshness !== "current"
+      ? `github-url (${snapshot.github_run_freshness.replace(/_/g, "-")})`
+      : "github-url";
+    lines.push(`${githubLabel}: ${snapshot.github_run.status}${conclusion}`);
     if (snapshot.github_run.run_url) {
-      lines.push(`github-url: ${snapshot.github_run.run_url}`);
+      lines.push(`${githubUrlLabel}: ${snapshot.github_run.run_url}`);
     }
   }
 

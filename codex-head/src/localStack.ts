@@ -110,15 +110,33 @@ export interface LocalReviewStackSnapshot {
 interface InspectLocalReviewStackOptions {
   fetch_impl?: typeof fetch;
   gui_config_path?: string;
+  antigravity_host?: string;
   antigravity_port?: number;
+  router_host?: string;
   router_port?: number;
+  perplexity_manager_host?: string;
   perplexity_manager_port?: number;
   perplexity_bridge_port?: number;
+  perplexity_cdp_host?: string;
   perplexity_cdp_port?: number;
+  blackbox_manager_host?: string;
   blackbox_manager_port?: number;
   blackbox_bridge_port?: number;
   exists_sync?: (path: string) => boolean;
   read_file_sync?: (path: string, encoding: BufferEncoding) => string;
+}
+
+function readLocalStackHostOverride(
+  explicitHost: string | undefined,
+  serviceOverrideEnv: string,
+  defaultHostEnv: string
+): string {
+  const resolved = explicitHost
+    ?? process.env[serviceOverrideEnv]
+    ?? process.env[defaultHostEnv]
+    ?? "127.0.0.1";
+  const trimmed = resolved.trim();
+  return trimmed.length > 0 ? trimmed : "127.0.0.1";
 }
 
 function safeJsonParse<T>(value: string): T | null {
@@ -230,11 +248,37 @@ export async function inspectLocalReviewStack(
   const perplexityManagerPort = options.perplexity_manager_port ?? options.perplexity_bridge_port ?? 20129;
   const perplexityCdpPort = options.perplexity_cdp_port ?? 9233;
   const blackboxManagerPort = options.blackbox_manager_port ?? options.blackbox_bridge_port ?? 8083;
-  const antigravityBaseUrl = `http://127.0.0.1:${antigravityPort}`;
-  const routerBaseUrl = `http://127.0.0.1:${routerPort}`;
-  const perplexityManagerBaseUrl = `http://127.0.0.1:${perplexityManagerPort}`;
-  const perplexityCdpBaseUrl = `http://127.0.0.1:${perplexityCdpPort}`;
-  const blackboxManagerBaseUrl = `http://127.0.0.1:${blackboxManagerPort}`;
+  const defaultHostEnv = "CODEX_HEAD_LOCALSTACK_HOST";
+  const antigravityHost = readLocalStackHostOverride(
+    options.antigravity_host,
+    "CODEX_HEAD_LOCALSTACK_ANTIGRAVITY_HOST",
+    defaultHostEnv
+  );
+  const routerHost = readLocalStackHostOverride(
+    options.router_host,
+    "CODEX_HEAD_LOCALSTACK_ROUTER_HOST",
+    defaultHostEnv
+  );
+  const perplexityManagerHost = readLocalStackHostOverride(
+    options.perplexity_manager_host,
+    "CODEX_HEAD_LOCALSTACK_PERPLEXITY_MANAGER_HOST",
+    defaultHostEnv
+  );
+  const perplexityCdpHost = readLocalStackHostOverride(
+    options.perplexity_cdp_host,
+    "CODEX_HEAD_LOCALSTACK_PERPLEXITY_CDP_HOST",
+    defaultHostEnv
+  );
+  const blackboxManagerHost = readLocalStackHostOverride(
+    options.blackbox_manager_host,
+    "CODEX_HEAD_LOCALSTACK_BLACKBOX_MANAGER_HOST",
+    defaultHostEnv
+  );
+  const antigravityBaseUrl = `http://${antigravityHost}:${antigravityPort}`;
+  const routerBaseUrl = `http://${routerHost}:${routerPort}`;
+  const perplexityManagerBaseUrl = `http://${perplexityManagerHost}:${perplexityManagerPort}`;
+  const perplexityCdpBaseUrl = `http://${perplexityCdpHost}:${perplexityCdpPort}`;
+  const blackboxManagerBaseUrl = `http://${blackboxManagerHost}:${blackboxManagerPort}`;
   const helperScriptAvailable = existsSyncFn(helperScriptPath);
   const fullStackHelperScriptAvailable = existsSyncFn(fullStackHelperScriptPath);
   const helperBootstrapCommand = helperScriptAvailable

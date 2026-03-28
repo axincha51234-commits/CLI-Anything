@@ -40,6 +40,13 @@ export const REVIEW_PROVIDER_PROFILES = [
 
 export type ReviewProviderProfile = (typeof REVIEW_PROVIDER_PROFILES)[number];
 
+export const GITHUB_EXECUTION_PREFERENCES = [
+  "remote_only",
+  "local_preferred"
+] as const;
+
+export type GitHubExecutionPreference = (typeof GITHUB_EXECUTION_PREFERENCES)[number];
+
 export const WORKER_RESULT_STATUSES = [
   "running",
   "awaiting_review",
@@ -96,6 +103,7 @@ export interface TaskSpec {
   base_branch: string;
   work_branch: string;
   worker_target: WorkerTarget;
+  execution_preference?: GitHubExecutionPreference | null;
   allowed_tools: string[];
   input_artifacts: string[];
   expected_output: ExpectedOutput;

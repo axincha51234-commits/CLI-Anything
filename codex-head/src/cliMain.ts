@@ -53,6 +53,7 @@ function parseRunGoalArgs(args: string[]): {
   baseBranch?: string;
   workBranch?: string;
   dispatchMode?: "artifacts_only" | "gh_cli";
+  executionPreference?: "remote_only" | "local_preferred";
   timeoutSec?: number;
   intervalSec?: number;
   publishMirror: boolean;
@@ -70,6 +71,7 @@ function parseRunGoalArgs(args: string[]): {
   let baseBranch: string | undefined;
   let workBranch: string | undefined;
   let dispatchMode: "artifacts_only" | "gh_cli" | undefined;
+  let executionPreference: "remote_only" | "local_preferred" | undefined;
   let timeoutSec: number | undefined;
   let intervalSec: number | undefined;
   let publishMirror = true;
@@ -100,6 +102,15 @@ function parseRunGoalArgs(args: string[]): {
       index += 1;
       continue;
     }
+    if (current === "--execution-preference") {
+      const next = readFlagValue("--execution-preference", index);
+      if (next !== "remote_only" && next !== "local_preferred") {
+        throw new Error("--execution-preference must be remote_only or local_preferred");
+      }
+      executionPreference = next;
+      index += 1;
+      continue;
+    }
     if (current === "--timeout-sec") {
       timeoutSec = Number(readFlagValue("--timeout-sec", index));
       if (!Number.isFinite(timeoutSec) || timeoutSec <= 0) {
@@ -122,7 +133,7 @@ function parseRunGoalArgs(args: string[]): {
     }
     if (current.startsWith("--")) {
       throw new Error(
-        "run-goal only accepts --repo, --base-branch, --work-branch, --dispatch-mode, --timeout-sec, --interval-sec, and --no-mirror"
+        "run-goal only accepts --repo, --base-branch, --work-branch, --dispatch-mode, --execution-preference, --timeout-sec, --interval-sec, and --no-mirror"
       );
     }
     goalParts.push(current);
@@ -139,6 +150,7 @@ function parseRunGoalArgs(args: string[]): {
     baseBranch,
     workBranch,
     dispatchMode,
+    executionPreference,
     timeoutSec,
     intervalSec,
     publishMirror
@@ -150,15 +162,19 @@ export { parseRunGoalArgs };
 type RunGoalGitHubOverride = {
   repository: string;
   dispatch_mode: "artifacts_only" | "gh_cli";
+  execution_preference?: "remote_only" | "local_preferred";
 };
 
 export function buildRunGoalGitHubOverride(
   repository: string,
-  dispatchMode?: "artifacts_only" | "gh_cli"
+  dispatchMode?: "artifacts_only" | "gh_cli",
+  executionPreference?: "remote_only" | "local_preferred",
+  defaultDispatchMode: "artifacts_only" | "gh_cli" = "gh_cli"
 ): RunGoalGitHubOverride {
   return {
     repository,
-    dispatch_mode: dispatchMode ?? "gh_cli"
+    dispatch_mode: dispatchMode ?? defaultDispatchMode,
+    ...(executionPreference ? { execution_preference: executionPreference } : {})
   };
 }
 
@@ -685,7 +701,7 @@ function usage(): void {
     [
       "Usage:",
       `  ${CLI_USAGE_PREFIX} health`,
-      `  ${CLI_USAGE_PREFIX} run-goal [--repo OWNER/REPO] [--base-branch NAME] [--work-branch NAME] [--dispatch-mode gh_cli|artifacts_only] [--timeout-sec N] [--interval-sec N] [--no-mirror] <goal>`,
+      `  ${CLI_USAGE_PREFIX} run-goal [--repo OWNER/REPO] [--base-branch NAME] [--work-branch NAME] [--dispatch-mode gh_cli|artifacts_only] [--execution-preference remote_only|local_preferred] [--timeout-sec N] [--interval-sec N] [--no-mirror] <goal>`,
       `  ${CLI_USAGE_PREFIX} plan <goal>`,
       `  ${CLI_USAGE_PREFIX} configure-github-repo <owner/repo> [dispatch-mode]`,
       `  ${CLI_USAGE_PREFIX} enqueue <task-id>`,
@@ -737,7 +753,9 @@ export async function main(): Promise<void> {
     const localDrift = inspectLocalReviewWorkflowDrift(
       orchestrator.config.app_root,
       workflow,
-      health.github.review_workflow_declared_inputs ?? []
+      health.github.review_workflow_declared_inputs ?? [],
+      health.github.review_workflow_supports_review_profile != null
+        || (health.github.review_workflow_declared_inputs?.length ?? 0) > 0
     );
     const inspectCommand = workflow ? `gh workflow view ${workflow} --yaml` : null;
     const remoteDeclaredInputs = health.github.review_workflow_declared_inputs ?? [];
@@ -770,21 +788,39 @@ export async function main(): Promise<void> {
   if (command === "run-goal") {
     const parsed = parseRunGoalArgs(rest);
     let workingOrchestrator = orchestrator;
-    if (parsed.repository) {
-      const normalizedRepository = normalizeGitHubRepository(parsed.repository);
-      if (!normalizedRepository) {
-        throw new Error("repository must be a valid GitHub OWNER/REPO or GitHub URL");
+    if (parsed.repository || parsed.executionPreference) {
+      const repositoryOverride = parsed.repository
+        ? (() => {
+          const normalizedRepository = normalizeGitHubRepository(parsed.repository!);
+          if (!normalizedRepository) {
+            throw new Error("repository must be a valid GitHub OWNER/REPO or GitHub URL");
+          }
+          const status = orchestrator.github.verifyRepositoryAccess(normalizedRepository);
+          if (!status.accessible) {
+            throw new Error(`GitHub repository validation failed: ${status.detail}`);
+          }
+          return status.repository;
+        })()
+        : orchestrator.config.github.repository;
+
+      if (
+        parsed.executionPreference === "remote_only"
+        && (parsed.dispatchMode ?? orchestrator.config.github.dispatch_mode) !== "gh_cli"
+      ) {
+        throw new Error("run-goal --execution-preference remote_only requires --dispatch-mode gh_cli");
       }
-      const status = orchestrator.github.verifyRepositoryAccess(normalizedRepository);
-      if (!status.accessible) {
-        throw new Error(`GitHub repository validation failed: ${status.detail}`);
-      }
+
       workingOrchestrator = new CodexHeadOrchestrator({
         ...orchestrator.config,
         github: {
           ...orchestrator.config.github,
           enabled: true,
-          ...buildRunGoalGitHubOverride(status.repository, parsed.dispatchMode)
+          ...buildRunGoalGitHubOverride(
+            repositoryOverride,
+            parsed.dispatchMode,
+            parsed.executionPreference,
+            parsed.repository ? "gh_cli" : orchestrator.config.github.dispatch_mode
+          )
         }
       });
     }
@@ -819,7 +855,8 @@ export async function main(): Promise<void> {
           github: {
             ...workingOrchestrator.config.github,
             repository: status.repository,
-            dispatch_mode: effectiveDispatchMode
+            dispatch_mode: effectiveDispatchMode,
+            execution_preference: parsed.executionPreference ?? workingOrchestrator.config.github.execution_preference
           }
         });
       }
@@ -828,6 +865,7 @@ export async function main(): Promise<void> {
     printJson(await workingOrchestrator.runGoal(parsed.goal, {
       base_branch: parsed.baseBranch,
       work_branch: parsed.workBranch,
+      execution_preference: parsed.executionPreference,
       publish_github_mirror: parsed.publishMirror,
       timeout_sec: parsed.timeoutSec,
       interval_sec: parsed.intervalSec

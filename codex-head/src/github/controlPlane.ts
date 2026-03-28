@@ -286,6 +286,11 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function canInferReviewWorkflowFromOrigin(localVsOriginStatus: string | null): boolean {
+  return localVsOriginStatus === "matches origin/main"
+    || localVsOriginStatus === "uncommitted local changes only; HEAD still matches origin/main";
+}
+
 function parseRunRefFromStdout(stdout: string, workflowName: string): GitHubRunState | null {
   const trimmed = stdout.trim();
   const match = trimmed.match(/actions\/runs\/(\d+)/i);
@@ -494,11 +499,32 @@ export class GitHubControlPlane {
       }
     }
 
-    const localReviewWorkflowDrift = inspectLocalReviewWorkflowDrift(
+    let localReviewWorkflowDrift = inspectLocalReviewWorkflowDrift(
       this.config.app_root,
       this.config.github.review_workflow,
-      reviewWorkflowDeclaredInputs ?? []
+      reviewWorkflowDeclaredInputs ?? [],
+      reviewWorkflowSupportsReviewProfile != null || (reviewWorkflowDeclaredInputs?.length ?? 0) > 0
     );
+
+    if (
+      this.config.github.review_workflow
+      && reviewWorkflowSupportsReviewProfile == null
+      && canInferReviewWorkflowFromOrigin(localReviewWorkflowDrift.local_vs_origin_status)
+      && localReviewWorkflowDrift.origin_supports_review_profile != null
+      && localReviewWorkflowDrift.local_workflow_path
+    ) {
+      reviewWorkflowDeclaredInputs = localReviewWorkflowDrift.origin_declared_inputs;
+      reviewWorkflowSupportsReviewProfile = Boolean(localReviewWorkflowDrift.origin_supports_review_profile);
+      reviewWorkflowMissingDispatchInputs = reviewWorkflowSupportsReviewProfile ? [] : ["review_profile"];
+      reviewWorkflowInputCheckDetail =
+        `Remote review workflow ${this.config.github.review_workflow} was inferred from origin/main because gh workflow inspection was unavailable.`;
+      localReviewWorkflowDrift = inspectLocalReviewWorkflowDrift(
+        this.config.app_root,
+        this.config.github.review_workflow,
+        reviewWorkflowDeclaredInputs ?? [],
+        true
+      );
+    }
 
     return {
       enabled: this.config.github.enabled,

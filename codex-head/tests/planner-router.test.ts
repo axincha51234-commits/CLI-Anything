@@ -206,6 +206,108 @@ test("TaskRouter falls back to GitHub execution when local-preferred mode has no
   assert.equal(decision.worker_target, "gemini-cli");
 });
 
+test("TaskRouter keeps generic GitHub worker execution on codex-cli when a local template is available", async () => {
+  const root = createTempDir("codex-head-router-gh-generic-worker-");
+  const config = createTestConfig(root);
+  config.github.execution_preference = "remote_only";
+  config.command_templates["gemini-cli"].local = undefined;
+  const registry = new AdapterRegistry();
+
+  registry.register(new FakeAdapter(
+    makeCapability("codex-cli", { supports_github: false }),
+    createHealthyHealth("codex-cli"),
+    async () => {
+      throw new Error("should not execute");
+    }
+  ));
+  registry.register(new FakeAdapter(
+    makeCapability("gemini-cli"),
+    createHealthyHealth("gemini-cli"),
+    async () => {
+      throw new Error("should not execute");
+    }
+  ));
+
+  const router = new TaskRouter(registry, config);
+  const task = createTaskSpec({
+    goal: "Summarize the current repository orchestration state via GitHub worker",
+    repo: root,
+    worker_target: "codex-cli",
+    expected_output: { kind: "analysis", format: "markdown", code_change: false },
+    requires_github: true
+  });
+
+  const decision = await router.resolve(task);
+  assert.equal(decision.mode, "github");
+  assert.equal(decision.worker_target, "codex-cli");
+  assert.equal(decision.fallback_from, null);
+});
+
+test("TaskRouter skips generic GitHub worker targets that do not support local execution", async () => {
+  const root = createTempDir("codex-head-router-gh-generic-worker-local-support-");
+  const config = createTestConfig(root);
+  config.github.execution_preference = "remote_only";
+  const registry = new AdapterRegistry();
+
+  registry.register(new FakeAdapter(
+    makeCapability("codex-cli", { supports_local: false, supports_github: false }),
+    createHealthyHealth("codex-cli"),
+    async () => {
+      throw new Error("should not execute");
+    }
+  ));
+  registry.register(new FakeAdapter(
+    makeCapability("gemini-cli"),
+    createHealthyHealth("gemini-cli"),
+    async () => {
+      throw new Error("should not execute");
+    }
+  ));
+
+  const router = new TaskRouter(registry, config);
+  const task = createTaskSpec({
+    goal: "Summarize the current repository orchestration state via GitHub worker",
+    repo: root,
+    worker_target: "codex-cli",
+    expected_output: { kind: "analysis", format: "markdown", code_change: false },
+    requires_github: true
+  });
+
+  const decision = await router.resolve(task);
+  assert.equal(decision.mode, "github");
+  assert.equal(decision.worker_target, "gemini-cli");
+  assert.equal(decision.fallback_from, "codex-cli");
+});
+
+test("TaskRouter honors a task-level remote_only execution preference over local_preferred config", async () => {
+  const root = createTempDir("codex-head-router-task-remote-only-");
+  const config = createTestConfig(root);
+  config.github.execution_preference = "local_preferred";
+  const registry = new AdapterRegistry();
+
+  registry.register(new FakeAdapter(
+    makeCapability("codex-cli", { supports_github: false }),
+    createHealthyHealth("codex-cli"),
+    async () => {
+      throw new Error("should not execute");
+    }
+  ));
+
+  const router = new TaskRouter(registry, config);
+  const task = createTaskSpec({
+    goal: "Summarize the current repository orchestration state via GitHub worker",
+    repo: root,
+    worker_target: "codex-cli",
+    execution_preference: "remote_only",
+    expected_output: { kind: "analysis", format: "markdown", code_change: false },
+    requires_github: true
+  });
+
+  const decision = await router.resolve(task);
+  assert.equal(decision.mode, "github");
+  assert.equal(decision.worker_target, "codex-cli");
+});
+
 test("CodexHeadPlanner applies operator-friendly timeout defaults", () => {
   const root = createTempDir("codex-head-planner-timeout-");
   const planner = new CodexHeadPlanner([], {

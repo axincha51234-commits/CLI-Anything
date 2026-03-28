@@ -218,6 +218,7 @@ test("renderStatusBrief summarizes one task with operator guidance", () => {
     },
     github_mirror: null,
     reviews: [],
+    github_run_freshness: "current",
     review_runtime: {
       provider: "openai-compatible",
       credential_source: "review_api",
@@ -334,6 +335,7 @@ test("renderStatusBrief omits the no-action line when only follow-up actions exi
     github_run: null,
     github_mirror: null,
     reviews: [],
+    github_run_freshness: null,
     review_runtime: null,
     review_dispatch: null,
     operator: {
@@ -394,6 +396,7 @@ test("renderStatusBrief omits the no-action line when a receipt is available", (
     github_run: null,
     github_mirror: null,
     reviews: [],
+    github_run_freshness: null,
     review_runtime: null,
     review_dispatch: null,
     operator: {
@@ -453,6 +456,7 @@ test("renderStatusBrief omits the no-action line for clean completed tasks", () 
     github_run: null,
     github_mirror: null,
     reviews: [],
+    github_run_freshness: null,
     review_runtime: null,
     review_dispatch: null,
     operator: {
@@ -473,8 +477,133 @@ test("renderStatusBrief omits the no-action line for clean completed tasks", () 
   assert.match(rendered, /worker-result: C:\/repo\/codex-head\/runtime\/artifacts\/task-brief-5\/worker-result\.json/i);
 });
 
+test("renderStatusBrief marks stale GitHub runs as history after a local retry", () => {
+  const task = createTaskSpec({
+    task_id: "task-brief-6",
+    goal: "Summarize the current repository orchestration state via GitHub worker",
+    repo: "C:/repo",
+    worker_target: "codex-cli",
+    expected_output: { kind: "analysis", format: "markdown", code_change: false },
+    requires_github: true
+  });
+
+  const rendered = renderStatusBrief({
+    task,
+    artifact_dir_path: "C:/repo/codex-head/runtime/artifacts/task-brief-6",
+    artifact_refs: {
+      worker_result: { path: "C:/repo/codex-head/runtime/artifacts/task-brief-6/worker-result.json", freshness: "current" },
+      execution_attempts: { path: "C:/repo/codex-head/runtime/artifacts/task-brief-6/execution-attempts.json", freshness: "history" },
+      dispatch_receipt: { path: "C:/repo/codex-head/runtime/artifacts/task-brief-6/github-dispatch-receipt.json", freshness: "history" },
+      primary_output: { path: "C:/repo/codex-head/runtime/artifacts/task-brief-6/worker-output.md", freshness: "current" },
+      primary_log: { path: "C:/repo/codex-head/runtime/artifacts/task-brief-6/codex-cli-local.combined.log", freshness: "current" }
+    },
+    state: "completed",
+    attempts: 2,
+    max_attempts: 3,
+    next_run_at: 0,
+    created_at: 0,
+    updated_at: 0,
+    started_at: 0,
+    finished_at: 0,
+    last_error: null,
+    result: null,
+    routing: {
+      worker_target: "codex-cli",
+      mode: "local",
+      reason: "primary adapter is available for local execution",
+      fallback_from: null
+    },
+    github_run: {
+      run_id: 654,
+      run_url: "https://github.com/example/repo/actions/runs/654",
+      workflow_name: "codex-head-worker.yml",
+      status: "completed",
+      conclusion: "failure",
+      updated_at: 0
+    },
+    github_mirror: null,
+    reviews: [],
+    github_run_freshness: "history",
+    review_runtime: null,
+    review_dispatch: null,
+    operator: {
+      queue_diagnosis_path: null,
+      queue_diagnosis: null,
+      queue_recycle_path: null,
+      queue_recycle: null,
+      latest_receipt_path: null,
+      latest_receipt_command: null,
+      latest_receipt_created_at: null,
+      manual_intervention_required: false,
+      summary: null,
+      actions: []
+    }
+  } satisfies TaskStatusSnapshot);
+
+  assert.match(rendered, /worker: codex-cli via local/i);
+  assert.match(rendered, /github \(history\): completed\/failure/i);
+  assert.match(rendered, /github-url \(history\): https:\/\/github\.com\/example\/repo\/actions\/runs\/654/i);
+});
+
 test("renderOutcomeBrief handles empty batches", () => {
   assert.equal(renderOutcomeBrief([], "No reconcile targets."), "No reconcile targets.");
+});
+
+test("renderStatusBrief shows the actual routed worker and preserves the planned worker when they differ", () => {
+  const rendered = renderStatusBrief({
+    task: createTaskSpec({
+      task_id: "task-brief-routed-worker",
+      goal: "Summarize the current repository orchestration state via GitHub worker",
+      repo: "C:/repo",
+      worker_target: "codex-cli",
+      expected_output: { kind: "analysis", format: "markdown", code_change: false },
+      requires_github: true
+    }),
+    artifact_dir_path: "C:/repo/codex-head/runtime/artifacts/task-brief-routed-worker",
+    artifact_refs: {
+      worker_result: null,
+      execution_attempts: null,
+      dispatch_receipt: null,
+      primary_output: null,
+      primary_log: null
+    },
+    state: "running",
+    attempts: 1,
+    max_attempts: 3,
+    next_run_at: 0,
+    created_at: 0,
+    updated_at: 0,
+    started_at: 0,
+    finished_at: 0,
+    last_error: null,
+    result: null,
+    routing: {
+      worker_target: "gemini-cli",
+      mode: "github",
+      reason: "fallback adapter is available for github execution",
+      fallback_from: "codex-cli"
+    },
+    github_run: null,
+    github_mirror: null,
+    reviews: [],
+    github_run_freshness: null,
+    review_runtime: null,
+    review_dispatch: null,
+    operator: {
+      queue_diagnosis_path: null,
+      queue_diagnosis: null,
+      queue_recycle_path: null,
+      queue_recycle: null,
+      latest_receipt_path: null,
+      latest_receipt_command: null,
+      latest_receipt_created_at: null,
+      manual_intervention_required: false,
+      summary: null,
+      actions: []
+    }
+  } satisfies TaskStatusSnapshot);
+
+  assert.match(rendered, /worker: gemini-cli via github :: planned=codex-cli/i);
 });
 
 test("renderDoctorBrief summarizes operator findings and next actions", () => {
@@ -849,7 +978,7 @@ test("renderDoctorBrief prioritizes review workflow inspection when live profile
       github: [
         {
           severity: "warning",
-          summary: "Remote review workflow codex-head-gemini-review.yml is missing the review_profile workflow_dispatch input, so live review dispatch will fall back to legacy standard routing.",
+          summary: "Remote review workflow codex-head-gemini-review.yml is missing the review_profile workflow_dispatch input, so specialized live review profiles will fall back to legacy standard routing.",
           actions: [
             "Push or sync .github/workflows/codex-head-gemini-review.yml to the GitHub default branch so review_profile is accepted during workflow_dispatch and research/code-assist routing works live."
           ]
@@ -1026,6 +1155,32 @@ test("renderReviewWorkflowStatusBrief summarizes local and remote workflow drift
   assert.match(rendered, /- git add \.github\/workflows\/codex-head-gemini-review\.yml/i);
   assert.match(rendered, /- git commit --only \.github\/workflows\/codex-head-gemini-review\.yml -m "Update codex-head-gemini-review\.yml workflow_dispatch inputs"/i);
   assert.match(rendered, /- git push origin main/i);
+});
+
+test("renderReviewWorkflowStatusBrief does not invent sync drift when remote support is unknown", () => {
+  const rendered = renderReviewWorkflowStatusBrief({
+    repository: "example/repo",
+    workflow: "codex-head-gemini-review.yml",
+    local_workflow_path: "C:/repo/.github/workflows/codex-head-gemini-review.yml",
+    git_branch: "main",
+    git_tracking_status: "in sync with origin/main",
+    local_git_file_status: "clean",
+    local_vs_origin_status: "matches origin/main",
+    local_supports_review_profile: true,
+    local_declared_inputs: ["task_id", "review_profile"],
+    remote_supports_review_profile: null,
+    remote_declared_inputs: [],
+    missing_on_remote: [],
+    remote_check_detail: "Unable to inspect remote workflow codex-head-gemini-review.yml.",
+    inspect_command: "gh workflow view codex-head-gemini-review.yml --yaml",
+    sync_action: null,
+    sync_commands: []
+  });
+
+  assert.match(rendered, /^remote: support for review_profile is unknown/im);
+  assert.doesNotMatch(rendered, /^missing-on-remote:/im);
+  assert.doesNotMatch(rendered, /^next:/im);
+  assert.doesNotMatch(rendered, /^sync-commands:/im);
 });
 
 test("renderSweepBrief summarizes bulk task actions", () => {

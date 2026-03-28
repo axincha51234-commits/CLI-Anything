@@ -128,6 +128,7 @@ function createStatusSnapshot(
     github_run: null,
     github_mirror: null,
     reviews: [],
+    github_run_freshness: null,
     review_dispatch: null,
     review_runtime: null,
     operator: {
@@ -327,6 +328,56 @@ test("buildDoctorReport aggregates worker, GitHub, and task findings", () => {
     report.attention.tasks[0]?.operator_receipt_path,
     "operator-actions/2026-03-23T08-09-05.877Z-run-doctor-hint.json"
   );
+});
+
+test("buildDoctorReport summary counts blocking and warning findings independently", () => {
+  const localStack = createLocalStack({
+    recommended_review_path_ready: false
+  });
+  localStack.antigravity.active_accounts = 0;
+
+  const health: DoctorHealthSnapshot = {
+    adapters: [
+      { worker_target: "claude-code", healthy: false, reason: "Timed out while checking auth", detected_binary: "claude.exe" },
+      { worker_target: "codex-cli", healthy: true, reason: "ok", detected_binary: "codex.exe" }
+    ],
+    readiness: [
+      {
+        worker_target: "claude-code",
+        healthy: false,
+        feature_enabled: true,
+        supports_local: true,
+        supports_github: false,
+        has_local_template: true,
+        local_ready: false,
+        github_ready: false,
+        cooldown_until: null,
+        cooldown_reason: null
+      },
+      {
+        worker_target: "codex-cli",
+        healthy: true,
+        feature_enabled: true,
+        supports_local: true,
+        supports_github: false,
+        has_local_template: true,
+        local_ready: true,
+        github_ready: false,
+        cooldown_until: null,
+        cooldown_reason: null
+      }
+    ],
+    recent_penalties: [],
+    github: createGitHubRuntime(),
+    local_stack: localStack,
+    database_path: "C:/repo/codex-head/runtime/codex-head.sqlite",
+    artifacts_dir: "C:/repo/codex-head/runtime/artifacts"
+  };
+
+  const report = buildDoctorReport(health, []);
+  assert.equal(report.counts.blocking_findings, 1);
+  assert.equal(report.counts.warning_findings, 1);
+  assert.match(report.summary, /1 blocking item and 1 attention item/i);
 });
 
 test("buildDoctorReport warns when the remote review workflow is missing review_profile input", () => {
@@ -594,7 +645,7 @@ test("buildDoctorReport accepts GitHub-only workers without local templates", ()
   assert.deepEqual(report.attention.workers, []);
 });
 
-test("buildDoctorReport hides older failed backlog by default but can include all history", () => {
+test("buildDoctorReport hides older task findings by default but can include all history", () => {
   const health: DoctorHealthSnapshot = {
     adapters: [
       { worker_target: "codex-cli", healthy: true, reason: "ok", detected_binary: "codex.exe" }
@@ -689,6 +740,92 @@ test("buildDoctorReport hides older failed backlog by default but can include al
   assert.equal(allTasks.task_filter.suppressed_task_findings, 0);
   assert.equal(allTasks.task_filter.task_window_hours, null);
   assert.equal(allTasks.command_hints.some((entry) => entry.kind === "suppressed_failed_backlog"), false);
+});
+
+test("buildDoctorReport includes older passive task findings when all history is requested", () => {
+  const health: DoctorHealthSnapshot = {
+    adapters: [
+      { worker_target: "gemini-cli", healthy: true, reason: "ok", detected_binary: "gemini.exe" }
+    ],
+    readiness: [
+      {
+        worker_target: "gemini-cli",
+        healthy: true,
+        feature_enabled: true,
+        supports_local: true,
+        supports_github: true,
+        has_local_template: false,
+        local_ready: false,
+        github_ready: true,
+        github_worker_ready: false,
+        github_review_ready: true,
+        cooldown_until: null,
+        cooldown_reason: null
+      }
+    ],
+    recent_penalties: [],
+    github: createGitHubRuntime(),
+    local_stack: createLocalStack(),
+    database_path: "C:/repo/codex-head/runtime/codex-head.sqlite",
+    artifacts_dir: "C:/repo/codex-head/runtime/artifacts"
+  };
+
+  const olderCanceledTask = createStatusSnapshot({
+    task: createTaskSpec({
+      task_id: "task-doctor-canceled-operator",
+      goal: "Review the latest PR in GitHub",
+      repo: "C:/repo",
+      worker_target: "gemini-cli",
+      expected_output: { kind: "review", format: "markdown", code_change: false },
+      requires_github: true
+    }),
+    state: "canceled",
+    updated_at: Date.UTC(2026, 2, 20, 1, 0, 0),
+    routing: {
+      worker_target: "gemini-cli",
+      mode: "github",
+      reason: "test",
+      fallback_from: null
+    },
+    operator: {
+      queue_diagnosis_path: null,
+      queue_diagnosis: null,
+      queue_recycle_path: null,
+      queue_recycle: null,
+      latest_receipt_path: "operator-actions/2026-03-23T08-09-05.877Z-run-doctor-hint.json",
+      latest_receipt_command: "run-doctor-hint",
+      latest_receipt_created_at: "2026-03-23T08:09:05.877Z",
+      manual_intervention_required: false,
+      summary: null,
+      actions: [
+        "Inspect the canceled task receipt before rerunning the GitHub review."
+      ]
+    }
+  });
+
+  const filtered = buildDoctorReport(
+    health,
+    [olderCanceledTask],
+    {
+      now: Date.UTC(2026, 2, 23, 6, 0, 0),
+      task_window_hours: 6
+    }
+  );
+  assert.equal(filtered.attention.tasks.length, 0);
+  assert.equal(filtered.task_filter.suppressed_task_findings, 1);
+  assert.equal(filtered.command_hints.some((entry) => entry.kind === "suppressed_failed_backlog"), false);
+
+  const allTasks = buildDoctorReport(
+    health,
+    [olderCanceledTask],
+    {
+      now: Date.UTC(2026, 2, 23, 6, 0, 0),
+      include_all_task_history: true
+    }
+  );
+  assert.equal(allTasks.attention.tasks.length, 1);
+  assert.equal(allTasks.attention.tasks[0]?.task_id, "task-doctor-canceled-operator");
+  assert.equal(allTasks.task_filter.suppressed_task_findings, 0);
 });
 
 test("buildDoctorReport carries GitHub run URLs for running GitHub tasks", () => {
@@ -879,4 +1016,153 @@ test("buildDoctorReport only emits supported command hint kinds", () => {
     [...new Set(report.command_hints.map((entry) => entry.kind))].sort(),
     [...DOCTOR_COMMAND_HINT_KINDS].sort()
   );
+});
+
+test("buildDoctorReport suppresses resolved legacy review routing in the default window", () => {
+  const health: DoctorHealthSnapshot = {
+    adapters: [
+      { worker_target: "gemini-cli", healthy: true, reason: "ok", detected_binary: "gemini.exe" }
+    ],
+    readiness: [
+      {
+        worker_target: "gemini-cli",
+        healthy: true,
+        feature_enabled: true,
+        supports_local: true,
+        supports_github: true,
+        has_local_template: false,
+        local_ready: false,
+        github_ready: true,
+        cooldown_until: null,
+        cooldown_reason: null
+      }
+    ],
+    recent_penalties: [],
+    github: createGitHubRuntime({
+      review_workflow_supports_review_profile: true,
+      review_workflow_missing_dispatch_inputs: [],
+      review_workflow_declared_inputs: [
+        "task_id",
+        "target_repository",
+        "base_branch",
+        "work_branch",
+        "execution_target",
+        "review_profile",
+        "review_policy",
+        "expected_output",
+        "prior_result_status"
+      ]
+    }),
+    local_stack: createLocalStack(),
+    database_path: "C:/repo/codex-head/runtime/codex-head.sqlite",
+    artifacts_dir: "C:/repo/codex-head/runtime/artifacts"
+  };
+
+  const degradedCompletedTask = createStatusSnapshot({
+    task: createTaskSpec({
+      task_id: "task-doctor-degraded-routing",
+      goal: "Review the dependency update and verify release notes in GitHub",
+      repo: "C:/repo",
+      worker_target: "gemini-cli",
+      review_profile: "research",
+      expected_output: { kind: "review", format: "markdown", code_change: false },
+      requires_github: true
+    }),
+    state: "completed",
+    updated_at: Date.UTC(2026, 2, 26, 5, 0, 0),
+    review_dispatch: {
+      requested_profile: "research",
+      dispatched_profile: null,
+      dispatch_mode: "legacy_without_input",
+      degraded: true,
+      receipt_path: "C:/repo/codex-head/runtime/artifacts/task-doctor-degraded-routing/github-dispatch-receipt.json"
+    },
+    routing: {
+      worker_target: "gemini-cli",
+      mode: "github",
+      reason: "review",
+      fallback_from: null
+    }
+  });
+
+  const defaultReport = buildDoctorReport(health, [degradedCompletedTask], {
+    now: Date.UTC(2026, 2, 26, 6, 0, 0),
+    task_window_hours: 6
+  });
+  assert.equal(defaultReport.ok, true);
+  assert.equal(defaultReport.attention.tasks.length, 0);
+
+  const allHistoryReport = buildDoctorReport(health, [degradedCompletedTask], {
+    include_all_task_history: true
+  });
+  assert.equal(allHistoryReport.ok, false);
+  assert.equal(allHistoryReport.attention.tasks.length, 1);
+  assert.match(allHistoryReport.summary, /attention item/i);
+  assert.equal(allHistoryReport.counts.blocking_findings, 0);
+  assert.equal(allHistoryReport.counts.warning_findings, 1);
+});
+
+test("buildDoctorReport ignores legacy standard review routing because no provider-strength route was lost", () => {
+  const health: DoctorHealthSnapshot = {
+    adapters: [
+      { worker_target: "gemini-cli", healthy: true, reason: "ok", detected_binary: "gemini.exe" }
+    ],
+    readiness: [
+      {
+        worker_target: "gemini-cli",
+        healthy: true,
+        feature_enabled: true,
+        supports_local: true,
+        supports_github: true,
+        has_local_template: true,
+        local_ready: true,
+        github_ready: true,
+        github_worker_ready: false,
+        github_review_ready: true,
+        cooldown_until: null,
+        cooldown_reason: null
+      }
+    ],
+    recent_penalties: [],
+    github: createGitHubRuntime({
+      review_workflow_supports_review_profile: false,
+      review_workflow_declared_inputs: ["task_id"],
+      review_workflow_local_declared_inputs: ["task_id", "review_profile"]
+    }),
+    local_stack: createLocalStack(),
+    database_path: "C:/repo/codex-head/runtime/codex-head.sqlite",
+    artifacts_dir: "C:/repo/codex-head/runtime/artifacts"
+  };
+
+  const standardCompletedTask = createStatusSnapshot({
+    task: createTaskSpec({
+      task_id: "task-doctor-standard-routing",
+      goal: "Review the latest PR in GitHub",
+      repo: "C:/repo",
+      worker_target: "gemini-cli",
+      review_profile: "standard",
+      expected_output: { kind: "review", format: "markdown", code_change: false },
+      requires_github: true
+    }),
+    state: "completed",
+    updated_at: Date.UTC(2026, 2, 26, 5, 0, 0),
+    review_dispatch: {
+      requested_profile: "standard",
+      dispatched_profile: null,
+      dispatch_mode: "legacy_without_input",
+      degraded: false,
+      receipt_path: "C:/repo/codex-head/runtime/artifacts/task-doctor-standard-routing/github-dispatch-receipt.json"
+    },
+    routing: {
+      worker_target: "gemini-cli",
+      mode: "github",
+      reason: "review",
+      fallback_from: null
+    }
+  });
+
+  const report = buildDoctorReport(health, [standardCompletedTask], {
+    include_all_task_history: true
+  });
+  assert.equal(report.attention.tasks.length, 0);
 });

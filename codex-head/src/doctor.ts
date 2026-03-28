@@ -109,6 +109,7 @@ export interface DoctorReport {
     tasks_needing_attention: number;
     suppressed_task_findings: number;
     blocking_findings: number;
+    warning_findings?: number;
     informational_findings: number;
   };
   health: DoctorHealthSnapshot;
@@ -321,7 +322,7 @@ function buildGitHubFindings(runtime: GitHubRuntimeStatus): DoctorGitHubFinding[
       : "";
     findings.push({
       severity: "warning",
-      summary: `Remote review workflow ${runtime.review_workflow} is missing the review_profile workflow_dispatch input, so live review dispatch will fall back to legacy standard routing.${localDriftDetail}`,
+      summary: `Remote review workflow ${runtime.review_workflow} is missing the review_profile workflow_dispatch input, so specialized live review profiles will fall back to legacy standard routing.${localDriftDetail}`,
       actions: dedupe([
         syncAction,
         ...syncCommands
@@ -489,12 +490,12 @@ function buildIntegrationFindings(health: DoctorHealthSnapshot): DoctorIntegrati
   return findings.sort((left, right) => severityRank(left.severity) - severityRank(right.severity));
 }
 
-function deriveTaskSummary(task: TaskStatusSnapshot): string {
+function deriveTaskSummary(task: TaskStatusSnapshot, reviewDispatchNeedsAttention: boolean): string {
   if (task.operator.summary) {
     return task.operator.summary;
   }
-  if (task.review_dispatch?.degraded) {
-    return "Review dispatch used legacy standard routing because the remote workflow did not accept review_profile.";
+  if (reviewDispatchNeedsAttention) {
+    return "Specialized review dispatch used legacy standard routing because the remote workflow did not accept review_profile.";
   }
   if (task.state === "failed") {
     return task.last_error ?? task.result?.summary ?? "Task failed and needs attention.";
@@ -515,10 +516,10 @@ function deriveTaskSummary(task: TaskStatusSnapshot): string {
   return task.result?.summary ?? "Task needs operator attention.";
 }
 
-function deriveTaskActions(task: TaskStatusSnapshot): string[] {
+function deriveTaskActions(task: TaskStatusSnapshot, reviewDispatchNeedsAttention: boolean): string[] {
   const actions = new Set(task.operator.actions);
 
-  if (task.review_dispatch?.degraded) {
+  if (reviewDispatchNeedsAttention) {
     actions.add("Sync the remote review workflow on the default branch if this task should use research/code-assist routing live.");
   }
 
@@ -560,14 +561,21 @@ function shouldIncludeTaskFinding(
   includeAllTaskHistory: boolean,
   cutoffTimestamp: number | null
 ): boolean {
+  const needsAttention = task.operator.manual_intervention_required
+    || task.operator.actions.length > 0
+    || (task.review_dispatch?.degraded ?? false)
+    || task.state === "failed"
+    || isActiveTask(task);
+
+  if (!needsAttention) {
+    return false;
+  }
+
   if (isActiveTask(task)) {
     return true;
   }
   if (task.operator.manual_intervention_required) {
     return true;
-  }
-  if (task.state !== "failed") {
-    return false;
   }
   if (includeAllTaskHistory || cutoffTimestamp === null) {
     return true;
@@ -578,12 +586,17 @@ function shouldIncludeTaskFinding(
 function summarizeTaskFinding(
   task: TaskStatusSnapshot,
   includeAllTaskHistory: boolean,
-  cutoffTimestamp: number | null
+  cutoffTimestamp: number | null,
+  runtimeReviewProfileRoutingHealthy: boolean
 ): DoctorTaskFinding | null {
+  const reviewDispatchNeedsAttention = Boolean(
+    task.review_dispatch?.degraded
+    && (includeAllTaskHistory || !runtimeReviewProfileRoutingHealthy)
+  );
   const activeState = task.state === "running" || task.state === "queued" || task.state === "awaiting_review";
   const needsAttention = task.operator.manual_intervention_required
     || task.operator.actions.length > 0
-    || (task.review_dispatch?.degraded ?? false)
+    || reviewDispatchNeedsAttention
     || task.state === "failed"
     || activeState;
 
@@ -596,7 +609,7 @@ function summarizeTaskFinding(
     severity = "error";
   } else if (
     task.operator.actions.length > 0
-    || (task.review_dispatch?.degraded ?? false)
+    || reviewDispatchNeedsAttention
     || task.state === "queued"
     || task.state === "awaiting_review"
   ) {
@@ -615,8 +628,8 @@ function summarizeTaskFinding(
     artifact_refs: task.artifact_refs,
     github_run_url: task.github_run?.run_url ?? null,
     severity,
-    summary: deriveTaskSummary(task),
-    actions: deriveTaskActions(task),
+    summary: deriveTaskSummary(task, reviewDispatchNeedsAttention),
+    actions: deriveTaskActions(task, reviewDispatchNeedsAttention),
     has_operator_actions: task.operator.actions.length > 0,
     operator_receipt_path: task.operator.latest_receipt_path,
     operator_receipt_command: task.operator.latest_receipt_command,
@@ -628,13 +641,20 @@ function summarizeTaskFinding(
 function buildTaskFindings(
   tasks: TaskStatusSnapshot[],
   includeAllTaskHistory: boolean,
-  cutoffTimestamp: number | null
+  cutoffTimestamp: number | null,
+  runtimeReviewProfileRoutingHealthy: boolean
 ): {
   findings: DoctorTaskFinding[];
   suppressedCount: number;
+  suppressedFailedCount: number;
 } {
   const findings = tasks
-    .map((task) => summarizeTaskFinding(task, includeAllTaskHistory, cutoffTimestamp))
+    .map((task) => summarizeTaskFinding(
+      task,
+      includeAllTaskHistory,
+      cutoffTimestamp,
+      runtimeReviewProfileRoutingHealthy
+    ))
     .filter((entry): entry is DoctorTaskFinding => Boolean(entry))
     .sort((left, right) => {
       const severityDelta = severityRank(left.severity) - severityRank(right.severity);
@@ -644,17 +664,25 @@ function buildTaskFindings(
       return left.task_id.localeCompare(right.task_id);
     });
 
-  const suppressedCount = tasks.filter((task) => {
+  const suppressedTasks = tasks.filter((task) => {
+    const reviewDispatchNeedsAttention = Boolean(
+      task.review_dispatch?.degraded
+      && (includeAllTaskHistory || !runtimeReviewProfileRoutingHealthy)
+    );
     const needsAttention = task.operator.manual_intervention_required
       || task.operator.actions.length > 0
+      || reviewDispatchNeedsAttention
       || task.state === "failed"
       || isActiveTask(task);
     return needsAttention && !shouldIncludeTaskFinding(task, includeAllTaskHistory, cutoffTimestamp);
-  }).length;
+  });
+  const suppressedCount = suppressedTasks.length;
+  const suppressedFailedCount = suppressedTasks.filter((task) => task.state === "failed").length;
 
   return {
     findings,
-    suppressedCount
+    suppressedCount,
+    suppressedFailedCount
   };
 }
 
@@ -662,17 +690,18 @@ function buildSummary(
   enabledWorkers: number,
   tasks: TaskStatusSnapshot[],
   blockingFindings: number,
+  warningFindings: number,
   informationalFindings: number,
   workerFindings: DoctorWorkerFinding[],
   githubFindings: DoctorGitHubFinding[],
   integrationFindings: DoctorIntegrationFinding[],
   taskFindings: DoctorTaskFinding[]
 ): string {
-  if (blockingFindings === 0 && informationalFindings === 0) {
+  if (blockingFindings === 0 && warningFindings === 0 && informationalFindings === 0) {
     return `No blocking issues found across ${tasks.length} task(s) and ${enabledWorkers} enabled worker(s).`;
   }
 
-  if (blockingFindings === 0) {
+  if (blockingFindings === 0 && warningFindings === 0) {
     return `No blocking issues found, but ${informationalFindings} active item(s) still deserve monitoring.`;
   }
 
@@ -685,13 +714,21 @@ function buildSummary(
   ].filter(Boolean);
 
   const joinedSegments = segments.length > 0 ? segments.join(", ") : "runtime";
-  return `Found ${pluralize(blockingFindings, "blocking item")} across ${joinedSegments}.`;
+  const errorFindings = blockingFindings;
+  if (errorFindings === 0 && warningFindings > 0) {
+    return `Found ${pluralize(warningFindings, "attention item")} across ${joinedSegments}.`;
+  }
+  if (warningFindings === 0) {
+    return `Found ${pluralize(errorFindings, "blocking item")} across ${joinedSegments}.`;
+  }
+  return `Found ${pluralize(errorFindings, "blocking item")} and ${pluralize(warningFindings, "attention item")} across ${joinedSegments}.`;
 }
 
 function buildCommandHints(
   taskFindings: DoctorTaskFinding[],
   taskWindowHours: number | null,
-  suppressedTaskFindings: number
+  suppressedTaskFindings: number,
+  suppressedFailedTaskFindings: number
 ): DoctorCommandHint[] {
   const hints: DoctorCommandHint[] = [];
 
@@ -708,7 +745,7 @@ function buildCommandHints(
     });
   }
 
-  if (suppressedTaskFindings > 0 && taskWindowHours !== null) {
+  if (suppressedTaskFindings > 0 && suppressedFailedTaskFindings > 0 && taskWindowHours !== null) {
     hints.push({
       id: "suppressed-failed-backlog",
       kind: "suppressed_failed_backlog",
@@ -738,7 +775,12 @@ export function buildDoctorReport(
   const workerFindings = buildWorkerFindings(health);
   const githubFindings = buildGitHubFindings(health.github);
   const integrationFindings = buildIntegrationFindings(health);
-  const taskFindingSummary = buildTaskFindings(tasks, includeAllTaskHistory, cutoffTimestamp);
+  const taskFindingSummary = buildTaskFindings(
+    tasks,
+    includeAllTaskHistory,
+    cutoffTimestamp,
+    health.github.review_workflow_supports_review_profile === true
+  );
   const taskFindings = taskFindingSummary.findings;
   const findings = [
     ...workerFindings,
@@ -746,17 +788,20 @@ export function buildDoctorReport(
     ...integrationFindings,
     ...taskFindings
   ];
-  const blockingFindings = findings.filter((entry) => entry.severity !== "info").length;
-  const informationalFindings = findings.length - blockingFindings;
+  const blockingFindings = findings.filter((entry) => entry.severity === "error").length;
+  const warningFindings = findings.filter((entry) => entry.severity === "warning").length;
+  const informationalFindings = findings.filter((entry) => entry.severity === "info").length;
   const enabledWorkers = health.readiness.filter((entry) => entry.feature_enabled).length;
+  const actionableFindings = blockingFindings + warningFindings;
 
   return {
-    ok: blockingFindings === 0,
+    ok: actionableFindings === 0,
     generated_at: new Date().toISOString(),
     summary: buildSummary(
       enabledWorkers,
       tasks,
       blockingFindings,
+      warningFindings,
       informationalFindings,
       workerFindings,
       githubFindings,
@@ -779,6 +824,7 @@ export function buildDoctorReport(
       tasks_needing_attention: taskFindings.length,
       suppressed_task_findings: taskFindingSummary.suppressedCount,
       blocking_findings: blockingFindings,
+      warning_findings: warningFindings,
       informational_findings: informationalFindings
     },
     health,
@@ -797,7 +843,8 @@ export function buildDoctorReport(
     command_hints: buildCommandHints(
       taskFindings,
       includeAllTaskHistory ? null : taskWindowHours,
-      taskFindingSummary.suppressedCount
+      taskFindingSummary.suppressedCount,
+      taskFindingSummary.suppressedFailedCount
     )
   };
 }

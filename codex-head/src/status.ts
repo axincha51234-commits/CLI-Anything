@@ -76,6 +76,7 @@ export interface TaskStatusSnapshot extends TaskRecord {
   operator: TaskOperatorStatus;
   review_dispatch: TaskReviewDispatchStatus | null;
   review_runtime: TaskReviewRuntimeStatus | null;
+  github_run_freshness: TaskArtifactRefFreshness | null;
 }
 
 interface DispatchReceiptArtifact {
@@ -305,7 +306,9 @@ function buildTaskReviewDispatchStatus(
     requested_profile: requestedProfile,
     dispatched_profile: dispatchedProfile,
     dispatch_mode: dispatchMode,
-    degraded: dispatchMode === "legacy_without_input" && requestedProfile !== null
+    degraded: dispatchMode === "legacy_without_input"
+      && requestedProfile !== null
+      && requestedProfile !== "standard"
   };
 }
 
@@ -397,13 +400,22 @@ export function buildTaskStatusSnapshot(
   record: TaskRecord,
   artifactStore: FileArtifactStore
 ): TaskStatusSnapshot {
+  const githubRunFreshness: TaskArtifactRefFreshness | null = record.github_run
+    ? record.routing?.mode === "github"
+      ? "current"
+      : record.state === "completed" || record.state === "failed" || record.state === "awaiting_review"
+        ? "history"
+        : "last_attempt"
+    : null;
+
   return {
     ...record,
     artifact_dir_path: artifactStore.resolveTaskDir(record.task.task_id),
     artifact_refs: buildTaskArtifactRefs(record, artifactStore),
     operator: buildTaskOperatorStatus(record, artifactStore),
     review_dispatch: buildTaskReviewDispatchStatus(record, artifactStore),
-    review_runtime: buildTaskReviewRuntimeStatus(record)
+    review_runtime: buildTaskReviewRuntimeStatus(record),
+    github_run_freshness: githubRunFreshness
   };
 }
 
